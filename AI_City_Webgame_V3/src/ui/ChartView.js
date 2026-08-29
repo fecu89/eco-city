@@ -60,3 +60,8 @@ export function updateChart() {
     chart.update();
   }
 }
+
+export function requestChartResize() {
+  if (!chart) return;
+  requestAnimationFrame(() => chart.resize());
+}

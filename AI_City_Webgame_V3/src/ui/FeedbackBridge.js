@@ -3,7 +3,11 @@ import { eventBus, Events } from '../core/EventBus.js';
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
   eventBus.on(Events.BADGE_UNLOCKED, ({ badge }) => {
-    eventBus.emit(Events.TOAST_SHOW, { title: '성취 해금', text: `${badge.icon} ${badge.name}` });
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '성취 해금',
+      text: `${badge.icon} ${badge.name}`,
+      priority: true,
+    });
     eventBus.emit(Events.AUDIO_SFX, { name: 'badge' });
   });
 

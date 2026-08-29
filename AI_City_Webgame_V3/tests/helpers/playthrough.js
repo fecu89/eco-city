@@ -5,7 +5,21 @@ export async function clickCell(page, index) {
   await page.evaluate((i) => window.__clickCell(i), index);
 }
 
+export async function openHudPanel(page, target) {
+  const state = await page.evaluate(() => window.__getWorldHudState());
+  if (state.activePanel !== target) {
+    await page.locator(`[data-hud-target="${target}"]`).first().click();
+  }
+  await page.locator(`[data-hud-panel="${target}"]`).waitFor({ state: 'visible' });
+}
+
+export async function clickHudAction(page, target, selector) {
+  await openHudPanel(page, target);
+  await page.locator(selector).click();
+}
+
 export async function buildStarterCity(page, count = 5) {
+  await openHudPanel(page, 'build');
   for (let i = 0; i < count; i++) {
     await clickCell(page, i);
     await page.waitForTimeout(80);
@@ -13,7 +27,7 @@ export async function buildStarterCity(page, count = 5) {
 }
 
 export async function advanceToCrisis(page) {
-  await page.locator('#advanceBtn').click();
+  await clickHudAction(page, 'menu', '#advanceBtn');
   await page.waitForTimeout(400);
   await page.locator('#toLearningBtn').click();
   await page.waitForTimeout(300);
@@ -44,7 +58,7 @@ export async function saveReflectionAndEnterDiagnosis(page, text = '전력과 �
 }
 
 export async function finishDiagnosisAndEnterRedesign(page) {
-  await page.locator('#advanceBtn').click();
+  await clickHudAction(page, 'menu', '#advanceBtn');
   await page.waitForTimeout(600);
 }
 

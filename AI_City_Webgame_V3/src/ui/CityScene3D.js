@@ -1,5 +1,12 @@
 import * as THREE from 'three';
-import { CITY_ASSETS, CITY_CAMERA, CITY_MOTION, LEVEL_VISUALS } from '../core/Constants.js';
+import {
+  CITY_AMBIENT,
+  CITY_ASSETS,
+  CITY_CAMERA,
+  CITY_MOTION,
+  LEVEL_VISUALS,
+  THEME_SCHEMAS,
+} from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import {
   getCityNeutralTexture,
@@ -16,8 +23,20 @@ const TILE_SIZE = 0.88;
 const TILE_BASE_COLOR = 0x0d1f31;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
 const SUPPLEMENT_TYPES = FACILITY_TYPES.filter((type) => CITY_ASSETS[type].supplement);
-const INFRA_TYPES = new Set(['data', 'thermal', 'cooling']);
-const MAX_INFRA_PARTICLES = MAX_CELLS * CITY_MOTION.INFRA_PARTICLES_PER_CELL;
+const ENERGY_SOURCE_TYPES = new Set(CITY_AMBIENT.ENERGY_SOURCES);
+const ENERGY_TARGET_TYPES = new Set(CITY_AMBIENT.ENERGY_TARGETS);
+const RENEWABLE_SOURCE_TYPES = new Set(['solar', 'wind']);
+const MAX_ENERGY_LINKS = MAX_CELLS * CITY_AMBIENT.MAX_NEIGHBORS_PER_CELL;
+const MAX_AMBIENT_AGENTS = (
+  MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
+  + MAX_CELLS * CITY_AMBIENT.BIRDS_PER_GREEN_CELL
+);
+const ORTHOGONAL_DIRECTIONS = [
+  [-1, 0],
+  [1, 0],
+  [0, -1],
+  [0, 1],
+];
 
 const TILE_COLORS = {
   base: new THREE.Color(TILE_BASE_COLOR),
@@ -60,10 +79,15 @@ let pointer;
 let resourceRevision = 0;
 let needsRender = true;
 let renderCount = 0;
-let ambientFrame = 0;
 let ambientInstances = 0;
-let ambientAngle = 0;
-let lastAmbientTime = 0;
+let currentTheme = 'dark';
+let energyLinkCount = 0;
+let energyPacketCount = 0;
+let energyBlinkCount = 0;
+let energyBlinkTimer = null;
+let energyBlinkRestoreTimer = null;
+let residentAgentCount = 0;
+let birdCount = 0;
 
 let groundMesh;
 let tileMesh;
@@ -71,21 +95,46 @@ let pedestalMesh;
 let stateRingMesh;
 let linkMarkerMesh;
 let windRotorMesh;
-let infraParticles;
-let infraParticlePositions;
-let infraParticleColors;
+let energyLines;
+let energyLinePositions;
+let energyLineColors;
+let ambientAgentMesh;
+let energyLineMaterial;
 let facilityMaterial;
 let tileMaterial;
 let pedestalMaterial;
 let stateRingMaterial;
 let linkMarkerMaterial;
 let groundMaterial;
+let hemisphereLight;
+let sunLight;
+let rimLight;
 const facilityMeshes = new Map();
 const supplementMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
+const energyLinks = [];
+const residentialIndices = [];
+const greenIndices = [];
 const activeMotions = new Map();
 const ownedGeometries = new Set();
 const ownedMaterials = new Set();
+
+function applyWorldTheme({ theme, schema } = {}) {
+  currentTheme = THEME_SCHEMAS[theme] ? theme : document.documentElement.dataset.theme || 'dark';
+  const activeSchema = schema || THEME_SCHEMAS[currentTheme] || THEME_SCHEMAS.dark;
+  const world = activeSchema.world;
+  renderer?.setClearColor(world.clear, 1);
+  groundMaterial?.color.setHex(world.ground);
+  TILE_COLORS.base.setHex(world.tile);
+  TILE_COLORS.selected.setHex(world.selectedTile);
+  if (hemisphereLight) {
+    hemisphereLight.color.setHex(world.hemisphereSky);
+    hemisphereLight.groundColor.setHex(world.hemisphereGround);
+  }
+  rimLight?.color.setHex(world.rim);
+  if (tileMesh && currentConfigs.length) updateTileInstances(currentConfigs, currentSize);
+  needsRender = true;
+}
 
 function ownGeometry(geometry) {
   ownedGeometries.add(geometry);
@@ -116,6 +165,14 @@ function setRotatedInstance(mesh, instanceIndex, x, y, z, scale, rotationZ) {
 function setBoxInstance(mesh, instanceIndex, x, y, z, sx, sy, sz) {
   _matrixObject.position.set(x, y, z);
   _matrixObject.quaternion.copy(_identityQuaternion);
+  _matrixObject.scale.set(sx, sy, sz);
+  _matrixObject.updateMatrix();
+  mesh.setMatrixAt(instanceIndex, _matrixObject.matrix);
+}
+
+function setAmbientInstance(mesh, instanceIndex, x, y, z, sx, sy, sz, rotationY = 0) {
+  _matrixObject.position.set(x, y, z);
+  _matrixObject.rotation.set(0, rotationY, 0);
   _matrixObject.scale.set(sx, sy, sz);
   _matrixObject.updateMatrix();
   mesh.setMatrixAt(instanceIndex, _matrixObject.matrix);
@@ -269,24 +326,35 @@ function createSceneLayers() {
   windRotorMesh = makeInstancedMesh(ownGeometry(createRotorGeometry()), rotorMaterial, MAX_CELLS);
   windRotorMesh.name = 'wind-rotors';
 
-  infraParticlePositions = new Float32Array(MAX_INFRA_PARTICLES * 3);
-  infraParticleColors = new Float32Array(MAX_INFRA_PARTICLES * 3);
-  const particleGeometry = ownGeometry(new THREE.BufferGeometry());
-  particleGeometry.setAttribute('position', new THREE.BufferAttribute(infraParticlePositions, 3).setUsage(THREE.DynamicDrawUsage));
-  particleGeometry.setAttribute('color', new THREE.BufferAttribute(infraParticleColors, 3).setUsage(THREE.DynamicDrawUsage));
-  particleGeometry.setDrawRange(0, 0);
-  const particleMaterial = ownMaterial(new THREE.PointsMaterial({
-    size: 0.07,
+  energyLinePositions = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
+  energyLineColors = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
+  const energyLineGeometry = ownGeometry(new THREE.BufferGeometry());
+  energyLineGeometry.setAttribute('position', new THREE.BufferAttribute(energyLinePositions, 3).setUsage(THREE.DynamicDrawUsage));
+  energyLineGeometry.setAttribute('color', new THREE.BufferAttribute(energyLineColors, 3).setUsage(THREE.DynamicDrawUsage));
+  energyLineGeometry.setDrawRange(0, 0);
+  energyLineMaterial = ownMaterial(new THREE.LineBasicMaterial({
     transparent: true,
-    opacity: 0.74,
+    opacity: CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY,
     vertexColors: true,
     depthWrite: false,
-    sizeAttenuation: true,
   }));
-  infraParticles = new THREE.Points(particleGeometry, particleMaterial);
-  infraParticles.frustumCulled = false;
-  infraParticles.name = 'infrastructure-flow';
-  scene.add(infraParticles);
+  energyLines = new THREE.LineSegments(energyLineGeometry, energyLineMaterial);
+  energyLines.frustumCulled = false;
+  energyLines.name = 'energy-links';
+  scene.add(energyLines);
+
+  const ambientAgentMaterial = ownMaterial(new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+  }));
+  ambientAgentMesh = makeInstancedMesh(
+    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    ambientAgentMaterial,
+    MAX_AMBIENT_AGENTS,
+  );
+  ambientAgentMesh.name = 'living-city-agents';
   resourceRevision++;
 }
 
@@ -299,23 +367,27 @@ function prewarmGpuBuffers() {
     stateRingMesh,
     linkMarkerMesh,
     windRotorMesh,
+    ambientAgentMesh,
   ];
   instanceLayers.forEach((mesh) => {
     setInstance(mesh, 0, 100, 100, 100, 0.001);
     mesh.setColorAt(0, _color.setHex(0xffffff));
     finishInstances(mesh, 1);
   });
-  infraParticlePositions[0] = 100;
-  infraParticlePositions[1] = 100;
-  infraParticlePositions[2] = 100;
-  infraParticles.geometry.setDrawRange(0, 1);
-  infraParticles.geometry.attributes.position.needsUpdate = true;
-  infraParticles.geometry.attributes.color.needsUpdate = true;
+  energyLinePositions[0] = 100;
+  energyLinePositions[1] = 100;
+  energyLinePositions[2] = 100;
+  energyLinePositions[3] = 101;
+  energyLinePositions[4] = 100;
+  energyLinePositions[5] = 100;
+  energyLines.geometry.setDrawRange(0, 2);
+  energyLines.geometry.attributes.position.needsUpdate = true;
+  energyLines.geometry.attributes.color.needsUpdate = true;
   camera.position.set(4, 6, 6);
   camera.lookAt(0, 0, 0);
   renderer.render(scene, camera);
   instanceLayers.forEach((mesh) => { mesh.count = 0; });
-  infraParticles.geometry.setDrawRange(0, 0);
+  energyLines.geometry.setDrawRange(0, 0);
 }
 
 function refreshLoadedAssets() {
@@ -361,6 +433,181 @@ function worldX(index, size) {
 
 function worldZ(index, size) {
   return Math.floor(index / size) - (size - 1) / 2;
+}
+
+function orthogonalNeighbors(index, size) {
+  const row = Math.floor(index / size);
+  const column = index % size;
+  const neighbors = [];
+  ORTHOGONAL_DIRECTIONS.forEach(([rowDelta, columnDelta]) => {
+    const nextRow = row + rowDelta;
+    const nextColumn = column + columnDelta;
+    if (nextRow < 0 || nextRow >= size || nextColumn < 0 || nextColumn >= size) return;
+    neighbors.push(nextRow * size + nextColumn);
+  });
+  return neighbors;
+}
+
+function rebuildAmbientTopology() {
+  energyLinks.length = 0;
+  residentialIndices.length = 0;
+  greenIndices.length = 0;
+
+  currentConfigs.forEach((config, index) => {
+    if (!config || config.empty || !config.type) return;
+    if (config.type === 'residential') residentialIndices.push(index);
+    if (config.type === 'green') greenIndices.push(index);
+    if (!ENERGY_SOURCE_TYPES.has(config.type)) return;
+
+    orthogonalNeighbors(index, currentSize).forEach((targetIndex) => {
+      const target = currentConfigs[targetIndex];
+      if (!target || target.empty || !ENERGY_TARGET_TYPES.has(target.type)) return;
+      energyLinks.push({
+        sourceIndex: index,
+        targetIndex,
+        color: RENEWABLE_SOURCE_TYPES.has(config.type)
+          ? CITY_AMBIENT.COLORS.renewableEnergy
+          : CITY_AMBIENT.COLORS.conventionalEnergy,
+      });
+    });
+  });
+
+  energyLinks.forEach((link, linkIndex) => {
+    const offset = linkIndex * 6;
+    energyLinePositions[offset] = worldX(link.sourceIndex, currentSize);
+    energyLinePositions[offset + 1] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
+    energyLinePositions[offset + 2] = worldZ(link.sourceIndex, currentSize);
+    energyLinePositions[offset + 3] = worldX(link.targetIndex, currentSize);
+    energyLinePositions[offset + 4] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
+    energyLinePositions[offset + 5] = worldZ(link.targetIndex, currentSize);
+    _color.setHex(link.color);
+    for (let vertexOffset = 0; vertexOffset < 2; vertexOffset++) {
+      const colorOffset = offset + vertexOffset * 3;
+      energyLineColors[colorOffset] = _color.r;
+      energyLineColors[colorOffset + 1] = _color.g;
+      energyLineColors[colorOffset + 2] = _color.b;
+    }
+  });
+  energyLines.geometry.setDrawRange(0, energyLinks.length * 2);
+  energyLines.geometry.attributes.position.needsUpdate = true;
+  energyLines.geometry.attributes.color.needsUpdate = true;
+
+  energyLinkCount = energyLinks.length;
+  energyPacketCount = 0;
+  residentAgentCount = residentialIndices.length * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL;
+  birdCount = greenIndices.length * CITY_AMBIENT.BIRDS_PER_GREEN_CELL;
+  updateStaticAmbientInstances();
+  syncEnergyBlinkTimer();
+}
+
+function updateStaticAmbientInstances() {
+  const windIndices = typeCellIndices.get('wind');
+  windIndices.forEach((cellIndex, instanceIndex) => {
+    const config = visualConfigAt(currentConfigs, cellIndex);
+    const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
+    setRotatedInstance(
+      windRotorMesh,
+      instanceIndex,
+      worldX(cellIndex, currentSize),
+      0.78 * level.scale,
+      worldZ(cellIndex, currentSize) + 0.015,
+      level.scale,
+      cellIndex * 0.23,
+    );
+    windRotorMesh.setColorAt(instanceIndex, _color.setHex(level.color).lerp(MARKER_COLORS.good, 0.45));
+  });
+  finishInstances(windRotorMesh, windIndices.length);
+
+  let agentCount = 0;
+  residentialIndices.forEach((cellIndex) => {
+    const centerX = worldX(cellIndex, currentSize);
+    const centerZ = worldZ(cellIndex, currentSize);
+    const personAngle = cellIndex * CITY_AMBIENT.PERSON_ANGLE_PER_CELL;
+    const [personScaleX, personScaleY, personScaleZ] = CITY_AMBIENT.PERSON_SCALE;
+    setAmbientInstance(
+      ambientAgentMesh,
+      agentCount,
+      centerX + Math.cos(personAngle) * CITY_AMBIENT.PERSON_ORBIT_RADIUS,
+      0.19,
+      centerZ + Math.sin(personAngle) * CITY_AMBIENT.PERSON_ORBIT_RADIUS,
+      personScaleX,
+      personScaleY,
+      personScaleZ,
+      -personAngle,
+    );
+    ambientAgentMesh.setColorAt(agentCount, _color.setHex(CITY_AMBIENT.COLORS.person));
+    agentCount++;
+
+    const carAngle = cellIndex * CITY_AMBIENT.CAR_ANGLE_PER_CELL + Math.PI;
+    const [carScaleX, carScaleY, carScaleZ] = CITY_AMBIENT.CAR_SCALE;
+    setAmbientInstance(
+      ambientAgentMesh,
+      agentCount,
+      centerX + Math.cos(carAngle) * CITY_AMBIENT.CAR_ORBIT_RADIUS,
+      0.16,
+      centerZ + Math.sin(carAngle) * CITY_AMBIENT.CAR_ORBIT_RADIUS,
+      carScaleX,
+      carScaleY,
+      carScaleZ,
+      -carAngle,
+    );
+    ambientAgentMesh.setColorAt(agentCount, _color.setHex(CITY_AMBIENT.COLORS.car));
+    agentCount++;
+  });
+
+  greenIndices.forEach((cellIndex) => {
+    const centerX = worldX(cellIndex, currentSize);
+    const centerZ = worldZ(cellIndex, currentSize);
+    for (let bird = 0; bird < CITY_AMBIENT.BIRDS_PER_GREEN_CELL; bird++) {
+      const angle = cellIndex * CITY_AMBIENT.BIRD_ANGLE_PER_CELL + bird * Math.PI;
+      const [birdScaleX, birdScaleY, birdScaleZ] = CITY_AMBIENT.BIRD_SCALE;
+      setAmbientInstance(
+        ambientAgentMesh,
+        agentCount,
+        centerX + Math.cos(angle) * CITY_AMBIENT.BIRD_ORBIT_RADIUS,
+        CITY_AMBIENT.BIRD_BASE_HEIGHT,
+        centerZ + Math.sin(angle) * CITY_AMBIENT.BIRD_ORBIT_RADIUS,
+        birdScaleX,
+        birdScaleY,
+        birdScaleZ,
+        -angle,
+      );
+      ambientAgentMesh.setColorAt(agentCount, _color.setHex(CITY_AMBIENT.COLORS.bird));
+      agentCount++;
+    }
+  });
+  finishInstances(ambientAgentMesh, agentCount);
+  ambientInstances = windIndices.length + agentCount;
+}
+
+function clearEnergyBlinkTimers() {
+  if (energyBlinkTimer != null) window.clearTimeout(energyBlinkTimer);
+  if (energyBlinkRestoreTimer != null) window.clearTimeout(energyBlinkRestoreTimer);
+  energyBlinkTimer = null;
+  energyBlinkRestoreTimer = null;
+}
+
+function syncEnergyBlinkTimer() {
+  if (!energyLinkCount) {
+    clearEnergyBlinkTimers();
+    if (energyLineMaterial) energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY;
+    return;
+  }
+  if (energyBlinkTimer != null) return;
+  energyBlinkTimer = window.setTimeout(() => {
+    energyBlinkTimer = null;
+    if (!energyLinkCount || !energyLineMaterial) return;
+    energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_FLASH_OPACITY;
+    energyBlinkCount++;
+    needsRender = true;
+    energyBlinkRestoreTimer = window.setTimeout(() => {
+      energyBlinkRestoreTimer = null;
+      if (!energyLineMaterial) return;
+      energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY;
+      needsRender = true;
+    }, CITY_AMBIENT.ENERGY_BLINK_DURATION_MS);
+    syncEnergyBlinkTimer();
+  }, CITY_AMBIENT.ENERGY_BLINK_INTERVAL_MS);
 }
 
 function easeOutBack(progress) {
@@ -536,60 +783,6 @@ function completeFinishedMotions(now) {
   return completed;
 }
 
-function updateAmbient(now) {
-  const interval = 1000 / CITY_MOTION.AMBIENT_FPS;
-  if (now - lastAmbientTime < interval) return false;
-  const elapsedSeconds = lastAmbientTime
-    ? Math.min((now - lastAmbientTime) / 1000, CITY_MOTION.MAX_DELTA_SECONDS)
-    : interval / 1000;
-  lastAmbientTime = now;
-  ambientAngle += elapsedSeconds * CITY_MOTION.WIND_RADIANS_PER_SECOND;
-
-  const windIndices = typeCellIndices.get('wind');
-  windIndices.forEach((cellIndex, instanceIndex) => {
-    const config = visualConfigAt(currentConfigs, cellIndex);
-    const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
-    const scale = visualScaleAt(cellIndex, level.scale, now);
-    setRotatedInstance(
-      windRotorMesh,
-      instanceIndex,
-      worldX(cellIndex, currentSize),
-      0.78 * scale,
-      worldZ(cellIndex, currentSize) + 0.015,
-      scale,
-      ambientAngle + cellIndex * 0.23,
-    );
-    windRotorMesh.setColorAt(instanceIndex, _color.setHex(level.color).lerp(MARKER_COLORS.good, 0.45));
-  });
-  finishInstances(windRotorMesh, windIndices.length);
-
-  let particleCount = 0;
-  for (let index = 0; index < currentConfigs.length; index++) {
-    const config = visualConfigAt(currentConfigs, index);
-    if (!config || config.empty || !INFRA_TYPES.has(config.type)) continue;
-    const tint = config.type === 'thermal' ? 0xffa45b : config.type === 'cooling' ? 0x77d7ff : 0x54e4ff;
-    _color.setHex(tint);
-    for (let particle = 0; particle < CITY_MOTION.INFRA_PARTICLES_PER_CELL; particle++) {
-      const offset = particleCount * 3;
-      const phase = (now * 0.00028 + index * 0.173 + particle * 0.5) % 1;
-      infraParticlePositions[offset] = worldX(index, currentSize) + (particle ? 0.12 : -0.12);
-      infraParticlePositions[offset + 1] = 0.28 + phase * 0.7;
-      infraParticlePositions[offset + 2] = worldZ(index, currentSize) + Math.sin(phase * Math.PI * 2) * 0.045;
-      infraParticleColors[offset] = _color.r;
-      infraParticleColors[offset + 1] = _color.g;
-      infraParticleColors[offset + 2] = _color.b;
-      particleCount++;
-    }
-  }
-  infraParticles.geometry.setDrawRange(0, particleCount);
-  infraParticles.geometry.attributes.position.needsUpdate = true;
-  infraParticles.geometry.attributes.color.needsUpdate = true;
-  ambientInstances = windIndices.length + particleCount;
-  const hasAnimatedVisuals = ambientInstances > 0 || stateRingMesh.count > 0;
-  if (hasAnimatedVisuals) ambientFrame++;
-  return hasAnimatedVisuals;
-}
-
 // 3D 씬은 한 번만 마운트되며 일반 보드와 진단 보드가 같은 GPU 자원을 공유한다.
 export function initCityScene3D(container) {
   containerEl = container;
@@ -619,13 +812,14 @@ export function initCityScene3D(container) {
   renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelRatioCap()));
 
-  scene.add(new THREE.HemisphereLight(0xc8dcff, 0x101722, 1.15));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
-  sun.position.set(4, 8, 5);
-  scene.add(sun);
-  const rim = new THREE.DirectionalLight(0x54e4ff, 0.42);
-  rim.position.set(-6, 4, -4);
-  scene.add(rim);
+  hemisphereLight = new THREE.HemisphereLight(0xc8dcff, 0x101722, 1.15);
+  scene.add(hemisphereLight);
+  sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+  sunLight.position.set(4, 8, 5);
+  scene.add(sunLight);
+  rimLight = new THREE.DirectionalLight(0x54e4ff, 0.42);
+  rimLight.position.set(-6, 4, -4);
+  scene.add(rimLight);
 
   initCityAssets((loaded, total) => {
     const loadingText = document.getElementById('loadingText');
@@ -641,6 +835,7 @@ export function initCityScene3D(container) {
   });
 
   createSceneLayers();
+  applyWorldTheme({ theme: document.documentElement.dataset.theme });
   prewarmGpuBuffers();
   cameraInteractionReady = false;
   cameraController = createCameraController({
@@ -669,6 +864,7 @@ export function initCityScene3D(container) {
   eventBus.on(Events.BOARD_PLACED, handlePlaced);
   eventBus.on(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.on(Events.BOARD_DEMOLISHED, handleDemolished);
+  eventBus.on(Events.THEME_CHANGED, applyWorldTheme);
 
   window.__clickCell = (index) => {
     const config = currentConfigs[index];
@@ -741,10 +937,6 @@ function renderFrame(now) {
     if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentSize, now);
     shouldRender = true;
   }
-  if (updateAmbient(now)) {
-    updateMarkerInstances(currentConfigs, currentSize, now);
-    shouldRender = true;
-  }
   if (!shouldRender || !renderer) return;
   renderer.render(scene, camera);
   renderCount++;
@@ -768,6 +960,7 @@ export function renderCityScene3D(cellConfigs, size) {
     cameraController?.reset(size);
   }
   updateInstances(currentConfigs, size);
+  rebuildAmbientTopology();
   needsRender = true;
 }
 
@@ -777,31 +970,40 @@ export function setCellClickHandler(fn) {
 
 export function getCityRendererStats() {
   const facilityInstances = [...facilityMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
+  const firstTileColor = tileMesh?.count ? tileMesh.getColorAt(0, _color).getHex() : null;
   return {
     drawCalls: renderer?.info.render.calls ?? 0,
     geometryCount: renderer?.info.memory.geometries ?? 0,
     textureCount: renderer?.info.memory.textures ?? 0,
     occupiedCells: currentConfigs.filter((config) => !config.empty && config.type).length,
     facilityInstances,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + 4,
+    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + 5,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
     ambientInstances,
-    ambientFrame,
+    energyLinkCount,
+    energyPacketCount,
+    energyBlinkCount,
+    residentAgentCount,
+    birdCount,
     renderCount,
     pixelRatio: renderer?.getPixelRatio() ?? 0,
+    theme: currentTheme,
+    firstTileColor,
   };
 }
 
 export function disposeCityScene3D() {
   renderer?.setAnimationLoop(null);
+  clearEnergyBlinkTimers();
   resizeObserver?.disconnect();
   resizeObserver = null;
   eventBus.off(Events.STAGE_CHANGED, resetCameraForStage);
   eventBus.off(Events.BOARD_PLACED, handlePlaced);
   eventBus.off(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.off(Events.BOARD_DEMOLISHED, handleDemolished);
+  eventBus.off(Events.THEME_CHANGED, applyWorldTheme);
   cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('pointerup', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('click', resetCameraFromButton);
@@ -817,6 +1019,15 @@ export function disposeCityScene3D() {
   ownedGeometries.clear();
   ownedMaterials.clear();
   activeMotions.clear();
+  energyLinks.length = 0;
+  residentialIndices.length = 0;
+  greenIndices.length = 0;
+  energyLinkCount = 0;
+  energyPacketCount = 0;
+  energyBlinkCount = 0;
+  residentAgentCount = 0;
+  birdCount = 0;
+  ambientInstances = 0;
   cameraController = null;
   renderer = null;
   cameraInteractionReady = false;

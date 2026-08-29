@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
-import { buildStarterCity } from '../helpers/playthrough.js';
+import { buildStarterCity, clickHudAction } from '../helpers/playthrough.js';
 
 const FACILITY_TYPES = [
   'residential', 'factory', 'data', 'thermal', 'nuclear',
@@ -22,6 +22,45 @@ async function renderMixedLevels(page, size = 5) {
 
 // WebGL 장면은 GPU/소프트웨어 렌더러별 안티앨리어싱 차이를 고려해 허용 오차를 둔다.
 test.describe('visual', () => {
+  test('fullscreen city default HUD', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await expect(page).toHaveScreenshot('world-hud-default.png', { maxDiffPixels: 18000 });
+  });
+
+  test('light theme keeps the living city and HUD readable', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.locator('[data-hud-target="menu"]').first().click();
+    await page.locator('#themeBtn').click();
+    await page.locator('#menuPanel [data-hud-close]').click();
+    await page.waitForFunction(() => window.__getCityRendererStats?.().theme === 'light');
+    await expect(page).toHaveScreenshot('world-light-living-city.png', { maxDiffPixels: 18000 });
+  });
+
+  test('floating build palette', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.locator('[data-hud-target="build"]').first().click();
+    await expect(page).toHaveScreenshot('world-hud-build.png', { maxDiffPixels: 18000 });
+  });
+
+  test('status instrument and command menu', async ({ gamePage: page }) => {
+    await buildStarterCity(page);
+    await renderMixedLevels(page);
+    await page.locator('[data-hud-target="status"]').first().click();
+    await expect(page).toHaveScreenshot('world-hud-status.png', { maxDiffPixels: 18000 });
+
+    await page.locator('[data-hud-target="menu"]').first().click();
+    await expect(page).toHaveScreenshot('world-hud-menu.png', { maxDiffPixels: 18000 });
+  });
+
+  test('achievement unlock owns a clear celebration layer', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="build"]').first().click();
+    for (let index = 0; index < 5; index++) {
+      await page.evaluate((cell) => window.__clickCell(cell), index);
+    }
+    await expect(page.locator('#achievementCelebration')).toHaveClass(/show/);
+    await expect(page).toHaveScreenshot('achievement-unlock.png', { maxDiffPixels: 18000 });
+  });
+
   test('initial board', async ({ gamePage: page }) => {
     await page.waitForTimeout(500);
     // 보드는 WebGL(Three.js)로 그려서 환경별 렌더링 차이(안티앨리어싱, GPU/소프트웨어 렌더러)가
@@ -31,7 +70,7 @@ test.describe('visual', () => {
 
   test('crisis modal', async ({ gamePage: page }) => {
     await buildStarterCity(page);
-    await page.locator('#advanceBtn').click();
+    await clickHudAction(page, 'menu', '#advanceBtn');
     await page.waitForTimeout(500);
     await expect(page.locator('.modal-card')).toHaveScreenshot('crisis-modal.png', { maxDiffPixels: 4000 });
   });
@@ -75,6 +114,17 @@ test.describe('visual', () => {
 
 test.describe('visual mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true });
+
+  test('mobile fullscreen city default HUD', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await expect(page).toHaveScreenshot('world-hud-mobile-default.png', { maxDiffPixels: 18000 });
+  });
+
+  test('mobile build sheet', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.locator('.mobile-bar [data-hud-target="build"]').click();
+    await expect(page).toHaveScreenshot('world-hud-mobile-build.png', { maxDiffPixels: 18000 });
+  });
 
   test('City Kit board fits the mobile gameplay viewport', async ({ gamePage: page }) => {
     await renderMixedLevels(page);

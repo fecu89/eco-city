@@ -7,7 +7,7 @@ import { eventBus, Events } from './core/EventBus.js';
 
 import { placeFacility } from './systems/BoardSystem.js';
 import { initAchievementSystem } from './systems/AchievementSystem.js';
-import { ask, blindBuild, defaultAdvisorTopic } from './systems/AdvisorSystem.js';
+import { ask, blindBuild } from './systems/AdvisorSystem.js';
 import { revealCrisis } from './systems/CrisisSystem.js';
 import { startQuiz } from './systems/ConceptsSystem.js';
 import { finishDiagnosis } from './systems/DiagnosisSystem.js';
@@ -20,11 +20,13 @@ import { getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityC
 import { initDiagnosisView, renderDiagnosisGrid, handleUseHint } from './ui/DiagnosisView.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
-import { initAdvisorPanel, renderPromptChips, initBadgesPanel, renderBadges, initEvidencePanel, renderEvidence } from './ui/PanelViews.js';
-import { initChartView, updateChart } from './ui/ChartView.js';
+import { initAdvisorPanel, renderPromptChips, initBadgesPanel, initAchievementTabs, renderBadges, initEvidencePanel, renderEvidence } from './ui/PanelViews.js';
+import { initChartView, requestChartResize, updateChart } from './ui/ChartView.js';
 import { initThreeBackground } from './ui/ThreeBackground.js';
-import { getWorldHudState, initWorldHud } from './ui/WorldHud.js';
+import { getWorldHudState, initWorldHud, syncWorldHud } from './ui/WorldHud.js';
+import { getTheme, initThemeManager } from './ui/ThemeManager.js';
 import { initFeedbackBridge } from './ui/FeedbackBridge.js';
+import { initAchievementCelebration } from './ui/AchievementCelebration.js';
 import {
   initStageModals,
   openHelpModal,
@@ -52,6 +54,7 @@ const els = {
   helpBtn: $('#helpBtn'),
   musicBtn: $('#musicBtn'),
   soundBtn: $('#soundBtn'),
+  themeBtn: $('#themeBtn'),
   resetBtn: $('#resetBtn'),
 
   missionTitle: $('#missionTitle'),
@@ -75,7 +78,6 @@ const els = {
   boardOverlay: $('#boardOverlay'),
   facilityDock: $('#facilityDock'),
 
-  aiAdviceBtn: $('#aiAdviceBtn'),
   advisorLog: $('#advisorLog'),
   promptChips: $('#promptChips'),
 
@@ -93,6 +95,7 @@ const els = {
 
   mobileBar: document.querySelector('.mobile-bar'),
   toastStack: $('#toastStack'),
+  achievementCelebration: $('#achievementCelebration'),
   modal: $('#modal'),
   modalCard: $('#modalCard'),
 };
@@ -116,6 +119,13 @@ function onCellClick(index) {
   if (existing) {
     openFacilityInspectorModal(index);
     renderGrid();
+    return;
+  }
+  if (getWorldHudState().activePanel !== 'build') {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '건설 메뉴를 먼저 여세요',
+      text: '오른쪽 건설 버튼을 누르면 빈 대지에 시설을 지을 수 있습니다.',
+    });
     return;
   }
   if (!gameState.isEditable) {
@@ -201,7 +211,6 @@ function handleReset() {
 }
 
 function bindEvents() {
-  els.aiAdviceBtn.addEventListener('click', () => ask(defaultAdvisorTopic()));
   els.blindBuildBtn.addEventListener('click', handleBlindBuild);
   els.advanceBtn.addEventListener('click', handleAdvance);
   els.helpBtn.addEventListener('click', openHelpModal);
@@ -248,20 +257,24 @@ function simulateLoading() {
 
 function boot() {
   initModal(els.modal, els.modalCard);
+  initThemeManager(els.themeBtn, refreshIcons);
   initToastView(els.toastStack);
   initGridView(els.cityGrid, els.boardSizeChip, onCellClick);
   initDiagnosisView(els.cityGrid, els.boardSizeChip, els.diagnosisProgress, els.diagnosisHintBtn);
-  initDockView(els.facilityDock);
-  initHudView(els);
+  initDockView(els.facilityDock, $('#selectedFacilitySummary'));
+  initHudView(els, syncWorldHud);
   initAdvisorPanel(els.advisorLog, els.promptChips, (type) => ask(type));
   initBadgesPanel(els.badges, els.badgeCount);
+  initAchievementTabs($('.achievement-tabs'), $('#badgePanel'), els.evidenceBox);
   initEvidencePanel({
     count: els.evidenceCount,
     list: els.evidenceList,
+    hint: $('#evidenceHint'),
   });
   initChartView(els.cityChart);
   initStageModals(refreshAll);
   initFeedbackBridge();
+  initAchievementCelebration(els.achievementCelebration);
   initAchievementSystem();
   initSaveSystem();
   initAudioManager();
@@ -273,6 +286,7 @@ function boot() {
     panels: [...document.querySelectorAll('[data-hud-panel]')],
     buildTriggerSummary: $('#selectedFacilitySummary'),
     evidenceBox: els.evidenceBox,
+    onStatusOpened: requestChartResize,
   });
   initThreeBackground(els.threeBg);
 
@@ -303,6 +317,7 @@ window.__getCityAssetStatus = () => getAssetStatus();
 window.__getCityLevelVisuals = () => LEVEL_VISUALS.slice(1).map((level) => ({ ...level }));
 window.__getCityRendererStats = () => getCityRendererStats();
 window.__getWorldHudState = () => getWorldHudState();
+window.__getTheme = () => getTheme();
 window.__renderCityForTest = () => renderGrid();
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
 

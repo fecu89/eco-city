@@ -7,6 +7,9 @@ let modalOpen = false;
 let openerEl = null;
 let els = null;
 let mobileQuery = null;
+let resumeBuildAfterModal = false;
+let resumeBuildOpener = null;
+const notifications = new Set();
 
 function triggers() {
   return els ? [...els.controls.querySelectorAll('[data-hud-target]')] : [];
@@ -31,6 +34,14 @@ function renderHudState() {
     trigger.classList.toggle('active', isActive);
     trigger.setAttribute('aria-expanded', isActive ? 'true' : 'false');
     trigger.disabled = modalOpen;
+    const target = trigger.dataset.hudTarget;
+    const notification = target === 'menu' && notifications.has('ready')
+      ? 'ready'
+      : target === 'achievements' && notifications.has('achievement')
+        ? 'achievement'
+        : '';
+    if (notification) trigger.dataset.notification = notification;
+    else delete trigger.dataset.notification;
   });
 }
 
@@ -38,8 +49,12 @@ export function openHudPanel(name, opener) {
   if (modalOpen || !VALID_PANELS.has(name)) return false;
   activePanel = name;
   openerEl = opener || null;
+  if (name === 'menu') notifications.delete('ready');
+  if (name === 'achievements') notifications.delete('achievement');
   renderHudState();
   eventBus.emit(Events.HUD_PANEL_CHANGED, { activePanel });
+
+  if (name === 'status') els?.onStatusOpened?.();
 
   requestAnimationFrame(() => {
     const closeButton = els?.panels
@@ -98,20 +113,47 @@ export function initWorldHud(elements) {
 
   document.addEventListener('pointerdown', (event) => {
     if (!activePanel || modalOpen) return;
+    // 건설 팔레트는 월드를 반복 클릭하는 동안 유지되는 명시적 입력 모드다.
+    // 닫기/Escape/다른 HUD 버튼은 별도 경로로 계속 동작한다.
+    if (activePanel === 'build') return;
     const active = els.panels.find((panel) => panel.dataset.hudPanel === activePanel);
     if (active?.contains(event.target) || event.target.closest('[data-hud-target]')) return;
     closeHudPanel({ restoreFocus: false });
   });
 
   eventBus.on(Events.MODAL_OPEN, () => {
+    resumeBuildAfterModal = activePanel === 'build';
+    resumeBuildOpener = resumeBuildAfterModal ? openerEl : null;
     modalOpen = true;
     closeHudPanel({ restoreFocus: false });
   });
   eventBus.on(Events.MODAL_CLOSE, () => {
     modalOpen = false;
+    if (resumeBuildAfterModal) {
+      const opener = resumeBuildOpener;
+      resumeBuildAfterModal = false;
+      resumeBuildOpener = null;
+      openHudPanel('build', opener);
+    } else {
+      renderHudState();
+    }
+  });
+  eventBus.on(Events.STAGE_READY, () => {
+    notifications.add('ready');
     renderHudState();
   });
-  eventBus.on(Events.STAGE_CHANGED, syncWorldHud);
+  eventBus.on(Events.BADGE_UNLOCKED, () => {
+    notifications.add('achievement');
+    renderHudState();
+  });
+  eventBus.on(Events.STAGE_CHANGED, () => {
+    notifications.delete('ready');
+    syncWorldHud();
+  });
+  eventBus.on(Events.GAME_RESET, () => {
+    notifications.clear();
+    syncWorldHud();
+  });
 
   mobileQuery.addEventListener('change', () => {
     closeHudPanel({ restoreFocus: false });

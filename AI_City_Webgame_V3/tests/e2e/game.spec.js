@@ -8,6 +8,8 @@ import {
   finishDiagnosisAndEnterRedesign,
   playThroughToRedesign,
   gameStateSnapshot,
+  clickHudAction,
+  openHudPanel,
 } from '../helpers/playthrough.js';
 
 test.describe('boot', () => {
@@ -49,13 +51,14 @@ test.describe('boot', () => {
     await page.waitForTimeout(500);
     expect(warnings).toEqual([]);
     const svgCount = await page.locator('.top-actions svg').count();
-    expect(svgCount).toBe(4);
+    expect(svgCount).toBe(5);
   });
 
   // 3D 보드 회귀 테스트: 레이캐스팅이 화면 좌표를 실제로 올바른 칸 인덱스로 환산하는지 확인한다.
   // (게임 로직 테스트는 좌표에 취약하지 않도록 window.__clickCell()을 쓰지만, 이 테스트만은
   // 진짜 마우스 클릭 + 레이캐스팅 경로 자체를 검증한다.)
   test('clicking the center of the 3D board resolves to the center grid index via raycasting', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
     const box = await page.locator('.board-stage canvas').boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(300);
@@ -67,6 +70,7 @@ test.describe('boot', () => {
 test.describe('stage 1: execution', () => {
   test('placing a facility spends credits and updates the grid', async ({ gamePage: page }) => {
     const before = await gameStateSnapshot(page);
+    await openHudPanel(page, 'build');
     await clickCell(page, 0);
     await page.waitForTimeout(150);
     const after = await gameStateSnapshot(page);
@@ -75,17 +79,19 @@ test.describe('stage 1: execution', () => {
   });
 
   test('"AI 말대로 짓기" places a facility and logs a transcript entry', async ({ gamePage: page }) => {
-    await page.locator('#aiBlindBuildBtn').click();
+    await clickHudAction(page, 'advisor', '#aiBlindBuildBtn');
     await page.waitForTimeout(200);
     const transcript = await page.evaluate(() => window.__GAME_STATE__.transcripts.execution);
     expect(transcript.length).toBeGreaterThan(0);
   });
 
   test('advance button stays disabled below the minimum facility count', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'menu');
     await expect(page.locator('#advanceBtn')).toBeDisabled();
   });
 
   test('clicking an occupied cell opens the facility inspector instead of placing', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
     await clickCell(page, 0);
     await page.waitForTimeout(150);
     await clickCell(page, 0);
@@ -100,6 +106,7 @@ test.describe('adjacency preview and conflicts', () => {
     await page.evaluate(() => {
       window.__GAME_STATE__.grid[5] = { type: 'thermal', level: 1 };
     });
+    await openHudPanel(page, 'build');
     const factoryBtn = page.locator('#facilityDock .facility-btn', { hasText: '공장' });
     await factoryBtn.click();
     await page.waitForTimeout(150);
@@ -114,6 +121,7 @@ test.describe('adjacency preview and conflicts', () => {
       gs.grid[1] = { type: 'nuclear', level: 1 };
     });
     // 재계산을 트리거하기 위해 빈 칸에 배치를 하나 실행한다.
+    await openHudPanel(page, 'build');
     await clickCell(page, 2);
     await page.waitForTimeout(150);
     const snap = await gameStateSnapshot(page);
@@ -152,7 +160,7 @@ test.describe('full stage progression', () => {
     expect(snap.stage).toBe(5);
     expect(snap.gridSize).toBe(6);
 
-    await page.locator('#advanceBtn').click();
+    await clickHudAction(page, 'menu', '#advanceBtn');
     await page.waitForTimeout(400);
     await expect(page.locator('.rubric')).toBeVisible();
   });
@@ -216,9 +224,10 @@ test.describe('badges and evidence', () => {
 test.describe('restart', () => {
   test('reset returns to stage 1 with starting credits, three times in a row', async ({ gamePage: page }) => {
     for (let i = 0; i < 3; i++) {
+      await openHudPanel(page, 'build');
       await clickCell(page, 0);
       await page.waitForTimeout(100);
-      await page.locator('#resetBtn').click();
+      await clickHudAction(page, 'menu', '#resetBtn');
       await page.waitForTimeout(150);
       await page.locator('#confirmReset').click();
       await page.waitForTimeout(200);
@@ -272,7 +281,7 @@ test.describe('report and bonus round', () => {
       gs.grid[13] = { type: 'data', level: 1 };
     });
 
-    await page.locator('#advanceBtn').click();
+    await clickHudAction(page, 'menu', '#advanceBtn');
     await page.waitForTimeout(400);
     await expect(page.locator('.modal-card h2')).toHaveText('재설계 성공');
 
@@ -291,7 +300,7 @@ test.describe('report and bonus round', () => {
     expect(creditsAfterBonus).toBeLessThan(creditsBeforeBonus);
 
     // 도시를 더 개선하지 않고 바로 재검증하면 목표 점수(이전 총점+5)에 못 미쳐야 한다.
-    await page.locator('#advanceBtn').click();
+    await clickHudAction(page, 'menu', '#advanceBtn');
     await page.waitForTimeout(400);
     await expect(page.locator('.modal-card h2')).toContainText('목표 미달');
   });

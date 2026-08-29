@@ -1,7 +1,9 @@
 import { test, expect } from '../fixtures/game-test.js';
+import { openHudPanel } from '../helpers/playthrough.js';
 
 test.describe('3D city motion language', () => {
   test('placing a facility starts and completes a bounded entrance motion', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
     const during = await page.evaluate(() => {
       window.__clickCell(0);
       return window.__getCityRendererStats();
@@ -44,7 +46,7 @@ test.describe('3D city motion language', () => {
     expect(after.facilityInstances).toBe(0);
   });
 
-  test('wind and infrastructure facilities use a shared semantic ambient layer', async ({ gamePage: page }) => {
+  test('wind and infrastructure facilities settle without continuous ambient rendering', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.grid[0] = { type: 'wind', level: 1 };
@@ -53,11 +55,54 @@ test.describe('3D city motion language', () => {
       window.__renderCityForTest();
     });
 
-    await page.waitForFunction(() => window.__getCityRendererStats?.().ambientInstances >= 5);
+    await page.waitForFunction(() => window.__getCityRendererStats?.().ambientInstances >= 1);
     const before = await page.evaluate(() => window.__getCityRendererStats());
-    expect(before.ambientInstances).toBeGreaterThanOrEqual(5);
-    await page.waitForTimeout(140);
+    await page.waitForTimeout(350);
     const after = await page.evaluate(() => window.__getCityRendererStats());
-    expect(after.ambientFrame).toBeGreaterThan(before.ambientFrame);
+    expect(after.renderCount - before.renderCount).toBeLessThanOrEqual(1);
+  });
+
+  test('energy producers use one shared line layer that flashes once every five seconds', async ({ gamePage: page }) => {
+    const pageErrors = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.grid[12] = { type: 'thermal', level: 1 };
+      state.grid[13] = { type: 'factory', level: 1 };
+      state.grid[17] = { type: 'residential', level: 1 };
+      window.__renderCityForTest();
+    });
+
+    await page.waitForFunction(() => {
+      const stats = window.__getCityRendererStats?.();
+      return stats?.energyLinkCount === 2;
+    });
+    const before = await page.evaluate(() => window.__getCityRendererStats());
+    expect(before.energyPacketCount).toBe(0);
+    await page.waitForFunction(
+      (blinkCount) => window.__getCityRendererStats?.().energyBlinkCount > blinkCount,
+      before.energyBlinkCount,
+      { timeout: 6500 },
+    );
+    const after = await page.evaluate(() => window.__getCityRendererStats());
+    expect(pageErrors).toEqual([]);
+    expect(after.energyBlinkCount).toBe(before.energyBlinkCount + 1);
+  });
+
+  test('residential and green facilities add static people, cars, and birds', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.grid[12] = { type: 'residential', level: 1 };
+      state.grid[13] = { type: 'green', level: 1 };
+      window.__renderCityForTest();
+    });
+
+    await page.waitForFunction(() => {
+      const stats = window.__getCityRendererStats?.();
+      return stats?.residentAgentCount === 2 && stats.ambientInstances >= 4;
+    });
+    const stats = await page.evaluate(() => window.__getCityRendererStats());
+    expect(stats.birdCount).toBe(2);
+    expect(stats.ambientInstances).toBeGreaterThanOrEqual(4);
   });
 });

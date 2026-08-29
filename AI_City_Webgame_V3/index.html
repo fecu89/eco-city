@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -101,13 +101,17 @@
               <h3>🏅 성취와 근거</h3>
               <button class="icon-btn hud-close" type="button" data-hud-close title="성취 닫기"><i data-lucide="x"></i></button>
             </div>
+            <div class="achievement-tabs" role="tablist" aria-label="성취 정보">
+              <button class="active" type="button" role="tab" data-achievement-tab="badges" aria-controls="badgePanel" aria-selected="true">배지</button>
+              <button type="button" role="tab" data-achievement-tab="evidence" aria-controls="evidenceBox" aria-selected="false">근거</button>
+            </div>
             <div id="badgePanel">
               <div class="panel-title compact"><h3>성취</h3><span id="badgeCount">0 / 9</span></div>
               <div class="badges" id="badges"></div>
             </div>
             <div class="evidence-box hidden" id="evidenceBox">
               <div class="panel-title compact"><h3>📚 근거</h3><span id="evidenceCount">0 / 3</span></div>
-              <p class="evidence-hint">보드에서 시설을 클릭 → "근거 기록" 버튼으로 기록하세요.</p>
+              <p class="evidence-hint" id="evidenceHint">보드에서 시설을 클릭 → "근거 기록" 버튼으로 기록하세요.</p>
               <div class="evidence-list" id="evidenceList"></div>
             </div>
           </section>
@@ -132,10 +136,10 @@
               <button class="icon-btn" id="helpBtn" title="도움말"><i data-lucide="circle-help"></i></button>
               <button class="icon-btn" id="musicBtn" title="배경음"><i data-lucide="music"></i></button>
               <button class="icon-btn" id="soundBtn" title="효과음"><i data-lucide="volume-2"></i></button>
+              <button class="icon-btn" id="themeBtn" title="라이트 모드"><i data-lucide="sun"></i></button>
               <button class="icon-btn danger-soft" id="resetBtn" title="초기화"><i data-lucide="rotate-ccw"></i></button>
             </div>
             <div class="main-buttons">
-              <button class="btn secondary" id="aiAdviceBtn"><i data-lucide="bot"></i><span>AI 조언</span></button>
               <button class="btn primary" id="advanceBtn"><span>1차 도시 완성</span><i data-lucide="arrow-right"></i></button>
             </div>
           </section>
@@ -152,6 +156,7 @@
     </section>
   </main>
 
+  <div class="achievement-celebration" id="achievementCelebration" role="status" aria-live="assertive"></div>
   <div class="toast-stack" id="toastStack"></div>
 
   <div class="modal hidden" id="modal">

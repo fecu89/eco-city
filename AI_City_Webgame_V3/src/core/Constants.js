@@ -87,10 +87,71 @@ export const CITY_MOTION = {
   UPGRADE_MS: 520,
   DEMOLISH_MS: 320,
   SELECT_PULSE_MS: 1400,
-  AMBIENT_FPS: 30,
-  MAX_DELTA_SECONDS: 0.1,
-  WIND_RADIANS_PER_SECOND: 1.25,
-  INFRA_PARTICLES_PER_CELL: 2,
+};
+
+export const CITY_AMBIENT = {
+  ENERGY_SOURCES: ['thermal', 'nuclear', 'solar', 'wind'],
+  ENERGY_TARGETS: ['residential', 'factory', 'data', 'cooling', 'battery'],
+  MAX_NEIGHBORS_PER_CELL: 4,
+  RESIDENT_AGENTS_PER_CELL: 2,
+  BIRDS_PER_GREEN_CELL: 2,
+  ENERGY_LINE_HEIGHT: 0.24,
+  ENERGY_LINE_BASE_OPACITY: 0.34,
+  ENERGY_LINE_FLASH_OPACITY: 0.92,
+  ENERGY_BLINK_INTERVAL_MS: 5000,
+  ENERGY_BLINK_DURATION_MS: 180,
+  PERSON_ORBIT_RADIUS: 0.35,
+  PERSON_ANGLE_PER_CELL: 0.61,
+  PERSON_SCALE: [0.045, 0.16, 0.045],
+  CAR_ORBIT_RADIUS: 0.39,
+  CAR_ANGLE_PER_CELL: 0.37,
+  CAR_SCALE: [0.12, 0.045, 0.065],
+  BIRD_ORBIT_RADIUS: 0.34,
+  BIRD_ANGLE_PER_CELL: 0.29,
+  BIRD_BASE_HEIGHT: 0.88,
+  BIRD_SCALE: [0.09, 0.018, 0.035],
+  COLORS: {
+    conventionalEnergy: 0xffb45c,
+    renewableEnergy: 0x61f3c2,
+    person: 0x8be9fd,
+    car: 0xffd166,
+    bird: 0xf1fbff,
+  },
+};
+
+export const UI_FEEDBACK = {
+  ACHIEVEMENT_CELEBRATION_MS: 3200,
+  ACHIEVEMENT_BURST_PARTICLES: 12,
+};
+
+export const THEME_STORAGE_KEY = 'ai-city-theme';
+export const THEME_SCHEMAS = {
+  dark: {
+    id: 'dark',
+    label: '다크 모드',
+    world: {
+      clear: 0x0a1a27,
+      ground: 0x0a2232,
+      tile: 0x17364c,
+      selectedTile: 0x1d4d69,
+      hemisphereSky: 0xd7efff,
+      hemisphereGround: 0x16283a,
+      rim: 0x54e4ff,
+    },
+  },
+  light: {
+    id: 'light',
+    label: '라이트 모드',
+    world: {
+      clear: 0xdceff4,
+      ground: 0xb9d2da,
+      tile: 0x91b5c2,
+      selectedTile: 0x59a9c0,
+      hemisphereSky: 0xffffff,
+      hemisphereGround: 0x7f9fac,
+      rim: 0x1688a7,
+    },
+  },
 };
 
 export const CITY_ASSET_ROOT = '/assets/city-kit/';

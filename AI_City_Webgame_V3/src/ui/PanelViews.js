@@ -42,10 +42,38 @@ export function renderPromptChips() {
 // ---------- Badges panel ----------
 let badgesEl = null;
 let badgeCountEl = null;
+let achievementTabsEl = null;
+let badgePanelEl = null;
+let evidencePanelEl = null;
+let achievementTab = 'badges';
 
 export function initBadgesPanel(listEl, countEl) {
   badgesEl = listEl;
   badgeCountEl = countEl;
+}
+
+export function initAchievementTabs(tabsEl, badgePanel, evidencePanel) {
+  achievementTabsEl = tabsEl;
+  badgePanelEl = badgePanel;
+  evidencePanelEl = evidencePanel;
+  achievementTabsEl.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-achievement-tab]');
+    if (!button) return;
+    achievementTab = button.dataset.achievementTab;
+    renderAchievementTabs();
+  });
+  renderAchievementTabs();
+}
+
+function renderAchievementTabs() {
+  if (!achievementTabsEl) return;
+  badgePanelEl.classList.toggle('hidden', achievementTab !== 'badges');
+  evidencePanelEl.classList.toggle('hidden', achievementTab !== 'evidence');
+  [...achievementTabsEl.querySelectorAll('[data-achievement-tab]')].forEach((button) => {
+    const active = button.dataset.achievementTab === achievementTab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
 }
 
 export function renderBadges() {
@@ -65,6 +93,13 @@ export function initEvidencePanel(elements) {
 }
 
 export function renderEvidence() {
+  const unlocked = gameState.stage >= STAGES.REDESIGN;
+  evidencePanelEl?.classList.toggle('locked', !unlocked);
+  if (evidenceEls.hint) {
+    evidenceEls.hint.textContent = unlocked
+      ? '보드에서 시설을 클릭 → "근거 기록" 버튼으로 기록하세요.'
+      : '5단계 재설계에서 시설별 과학 근거 기록이 열립니다.';
+  }
   const good = gameState.evidence.filter((e) => e.good).length;
   evidenceEls.count.textContent = `${Math.min(good, 3)} / 3`;
   evidenceEls.list.innerHTML = gameState.evidence

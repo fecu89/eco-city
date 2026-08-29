@@ -38,9 +38,11 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('[data-hud-target="menu"]').first().click();
     const menu = page.locator('#menuPanel');
 
-    for (const id of ['helpBtn', 'musicBtn', 'soundBtn', 'resetBtn', 'aiAdviceBtn', 'advanceBtn']) {
+    for (const id of ['helpBtn', 'musicBtn', 'soundBtn', 'resetBtn', 'advanceBtn']) {
       await expect(menu.locator(`#${id}`)).toHaveCount(1);
     }
+    await expect(menu.locator('#aiAdviceBtn')).toHaveCount(0);
+    await expect(page.locator('#advisorPanel #promptChips')).toHaveCount(1);
   });
 
   test('build palette stays open after selecting a facility', async ({ gamePage: page }) => {
@@ -49,6 +51,33 @@ test.describe('fullscreen world HUD', () => {
 
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
     await expect(page.locator('#selectedFacilitySummary')).toContainText('공장');
+  });
+
+  test('facility buttons disable when the remaining credits cannot cover their cost', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="build"]').first().click();
+    await page.evaluate(() => { window.__GAME_STATE__.credits = 3; });
+    await page.locator('#facilityDock .facility-btn', { hasText: '주거지' }).click();
+
+    await expect(page.locator('#facilityDock .facility-btn', { hasText: '주거지' })).toBeEnabled();
+    const factory = page.locator('#facilityDock .facility-btn', { hasText: '공장' });
+    await expect(factory).toBeDisabled();
+    await expect(factory).toHaveAttribute('title', /1C 부족/);
+  });
+
+  test('closing the build palette clears placement benefit and conflict markers', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__GAME_STATE__.grid[5] = { type: 'thermal', level: 1 };
+      window.__renderCityForTest();
+    });
+    await page.locator('[data-hud-target="build"]').first().click();
+    await page.locator('#facilityDock .facility-btn', { hasText: '공장' }).click();
+    await page.waitForFunction(() => window.__getCellVisual(0)?.previewGood === true);
+
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => {
+      const cell = window.__getCellVisual(0);
+      return cell?.previewGood === false && cell?.previewBad === false;
+    });
   });
 
   test('city status opens as a nonblocking floating instrument', async ({ gamePage: page }) => {
@@ -66,5 +95,77 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#evidenceBox')).toBeVisible();
     await expect(page.locator('#evidenceBox')).toContainText('5단계');
     await expect(page.locator('#badgePanel')).toBeHidden();
+  });
+
+  test('empty land builds only while the build panel is open', async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__clickCell(0));
+    expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).entities)).toHaveLength(0);
+    await expect(page.locator('.toast', { hasText: '건설 메뉴' })).toContainText('건설 메뉴');
+
+    await page.locator('[data-hud-target="build"]').first().click();
+    await page.evaluate(() => window.__clickCell(0));
+    expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).entities)).toHaveLength(1);
+    await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
+  });
+
+  test('facility inspection restores an active build panel after the modal closes', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="build"]').first().click();
+    await page.evaluate(() => window.__clickCell(0));
+    await page.evaluate(() => window.__clickCell(0));
+    await expect(page.locator('.facility-inspector-grid')).toBeVisible();
+    await page.locator('.modal-card .close-modal').click();
+
+    await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
+    await expect(page.locator('[data-hud-target="build"]').first()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('meeting the next-step condition raises one persistent menu cue', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="build"]').first().click();
+    for (let index = 0; index < 5; index++) {
+      await page.evaluate((cell) => window.__clickCell(cell), index);
+    }
+
+    await expect(page.locator('.toast', { hasText: '다음 단계 준비 완료' })).toHaveCount(1);
+    const menuTrigger = page.locator('[data-hud-target="menu"]').first();
+    await expect(menuTrigger).toHaveAttribute('data-notification', 'ready');
+
+    await page.evaluate(() => window.__clickCell(5));
+    await expect(page.locator('.toast', { hasText: '다음 단계 준비 완료' })).toHaveCount(1);
+
+    await menuTrigger.click();
+    await expect(menuTrigger).not.toHaveAttribute('data-notification', 'ready');
+  });
+
+  test('each unlocked achievement raises a celebration and a persistent achievement cue', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="build"]').first().click();
+    for (let index = 0; index < 5; index++) {
+      await page.evaluate((cell) => window.__clickCell(cell), index);
+    }
+
+    const celebration = page.locator('#achievementCelebration');
+    await expect(celebration).toHaveClass(/show/);
+    await expect(celebration).toContainText('첫 도시');
+    await expect(page.locator('.toast.priority', { hasText: '성취 해금' })).toContainText('첫 도시');
+
+    const achievementTrigger = page.locator('[data-hud-target="achievements"]').first();
+    await expect(achievementTrigger).toHaveAttribute('data-notification', 'achievement');
+    await achievementTrigger.click();
+    await expect(achievementTrigger).not.toHaveAttribute('data-notification', 'achievement');
+  });
+
+  test('theme control switches CSS and 3D palettes and persists the choice', async ({ gamePage: page }) => {
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.locator('[data-hud-target="menu"]').first().click();
+    await page.locator('#themeBtn').click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    expect(await page.evaluate(() => localStorage.getItem('ai-city-theme'))).toBe('light');
+    const rendererStats = await page.evaluate(() => window.__getCityRendererStats());
+    expect(rendererStats.theme).toBe('light');
+    expect(rendererStats.firstTileColor).toBe(0x91b5c2);
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__ && window.__getCityRendererStats?.().theme === 'light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
 });

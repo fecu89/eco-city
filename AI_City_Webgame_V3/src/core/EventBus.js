@@ -45,6 +45,8 @@ export const Events = {
   // UI
   TOAST_SHOW: 'toast:show',
   HUD_PANEL_CHANGED: 'hud:panelChanged',
+  STAGE_READY: 'stage:ready',
+  THEME_CHANGED: 'theme:changed',
   MODAL_OPEN: 'modal:open',
   MODAL_CLOSE: 'modal:close',
 

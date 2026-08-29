@@ -6,6 +6,7 @@ import { initCityScene3D, renderCityScene3D, setCellClickHandler } from './CityS
 let sizeChipEl = null;
 let onCellClick = () => {};
 let sceneMounted = false;
+let placementPreviewVisible = false;
 
 export function initGridView(gridElement, sizeChipElement, clickHandler) {
   sizeChipEl = sizeChipElement;
@@ -18,11 +19,19 @@ export function initGridView(gridElement, sizeChipElement, clickHandler) {
   eventBus.on(Events.BOARD_FACILITY_SELECTED, () => {
     if (gameState.isEditable) renderGrid();
   });
+  eventBus.on(Events.HUD_PANEL_CHANGED, ({ activePanel }) => {
+    const nextVisible = activePanel === 'build';
+    if (placementPreviewVisible === nextVisible) return;
+    placementPreviewVisible = nextVisible;
+    if (gameState.isEditable) renderGrid();
+  });
 }
 
 function buildCellConfigs() {
   const { grid, gridSize, selectedCell, expandedCells, selectedFacility } = gameState;
-  const preview = gameState.isEditable ? placementPreview(selectedFacility, grid, gridSize) : null;
+  const preview = gameState.isEditable && placementPreviewVisible
+    ? placementPreview(selectedFacility, grid, gridSize)
+    : null;
 
   return grid.map((cell, i) => {
     const base = {
