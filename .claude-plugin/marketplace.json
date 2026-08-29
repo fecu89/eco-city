@@ -1,0 +1,46 @@
+{
+  "name": "game-creator",
+  "owner": {
+    "name": "OpusGameLabs"
+  },
+  "metadata": {
+    "description": "The game studio for the agent internet. Build, monetize, and ship browser games. Phaser 2D, Three.js 3D, Play.fun monetization. Works with 40+ AI coding agents.",
+    "version": "1.3.0"
+  },
+  "plugins": [
+    {
+      "name": "game-creator",
+      "source": "./",
+      "description": "The game studio for the agent internet. Build, monetize, and ship 2D and 3D browser games with one command. Play.fun + Moltbook.",
+      "version": "1.3.0",
+      "author": {
+        "name": "OpusGameLabs"
+      },
+      "homepage": "https://opusgamelabs.github.io/game-creator",
+      "repository": "https://github.com/OpusGameLabs/game-creator",
+      "license": "MIT",
+      "keywords": [
+        "games",
+        "gamedev",
+        "threejs",
+        "phaser",
+        "3d",
+        "2d",
+        "browser-games",
+        "openclaw",
+        "moltbook",
+        "agent-internet",
+        "playfun",
+        "play-fun",
+        "opengameprotocol",
+        "monetization",
+        "game-design",
+        "game-audio",
+        "strudel",
+        "playwright",
+        "qa"
+      ],
+      "category": "development"
+    }
+  ]
+}

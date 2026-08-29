@@ -1,0 +1,83 @@
+import { test, expect } from '../fixtures/game-test.js';
+import { buildStarterCity } from '../helpers/playthrough.js';
+
+const FACILITY_TYPES = [
+  'residential', 'factory', 'data', 'thermal', 'nuclear',
+  'solar', 'wind', 'battery', 'cooling', 'green',
+];
+
+async function renderMixedLevels(page, size = 5) {
+  await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
+  await page.evaluate(({ types, gridSize }) => {
+    const state = window.__GAME_STATE__;
+    state.gridSize = gridSize;
+    state.selectedFacility = null;
+    state.grid = Array.from({ length: gridSize * gridSize }, (_, index) => (
+      index < 15 ? { type: types[index % types.length], level: (index % 3) + 1 } : null
+    ));
+    window.__renderCityForTest();
+  }, { types: FACILITY_TYPES, gridSize: size });
+  await page.waitForTimeout(180);
+}
+
+// WebGL 장면은 GPU/소프트웨어 렌더러별 안티앨리어싱 차이를 고려해 허용 오차를 둔다.
+test.describe('visual', () => {
+  test('initial board', async ({ gamePage: page }) => {
+    await page.waitForTimeout(500);
+    // 보드는 WebGL(Three.js)로 그려서 환경별 렌더링 차이(안티앨리어싱, GPU/소프트웨어 렌더러)가
+    // DOM/CSS보다 크다 — 허용 오차를 넉넉히 둔다.
+    await expect(page).toHaveScreenshot('board-initial.png', { maxDiffPixels: 20000 });
+  });
+
+  test('crisis modal', async ({ gamePage: page }) => {
+    await buildStarterCity(page);
+    await page.locator('#advanceBtn').click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('.modal-card')).toHaveScreenshot('crisis-modal.png', { maxDiffPixels: 4000 });
+  });
+
+  test('mixed City Kit facilities show all three level treatments', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('city-kit-levels.png', { maxDiffPixels: 12000 });
+  });
+
+  test('mixed city remains readable after camera orbit', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    const canvas = page.locator('.city-scene-3d-canvas');
+    const box = await canvas.boundingBox();
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.58, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(220);
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('city-kit-rotated.png', { maxDiffPixels: 12000 });
+  });
+
+  test('diagnosis colors remain separate from facility level colors', async ({ gamePage: page }) => {
+    await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
+    await page.evaluate((types) => {
+      const configs = Array.from({ length: 25 }, (_, index) => (
+        index < 12
+          ? {
+              empty: false,
+              type: types[index % types.length],
+              level: (index % 3) + 1,
+              diagnosisState: index % 3 === 0 ? 'problem' : index % 3 === 1 ? 'ok' : 'unknown',
+            }
+          : { empty: true, disabled: true }
+      ));
+      window.__renderCityConfigsForTest(configs, 5);
+    }, FACILITY_TYPES);
+    await page.waitForTimeout(180);
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('city-diagnosis.png', { maxDiffPixels: 12000 });
+  });
+});
+
+test.describe('visual mobile', () => {
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true });
+
+  test('City Kit board fits the mobile gameplay viewport', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await expect(page.locator('.left-panel')).toHaveScreenshot('city-kit-mobile.png', { maxDiffPixels: 18000 });
+  });
+});

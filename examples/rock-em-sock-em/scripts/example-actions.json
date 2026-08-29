@@ -1,0 +1,14 @@
+[
+  {"buttons":["a"],"frames":8},
+  {"buttons":[],"frames":15},
+  {"buttons":["d"],"frames":8},
+  {"buttons":[],"frames":15},
+  {"buttons":["a"],"frames":8},
+  {"buttons":["d"],"frames":8},
+  {"buttons":[],"frames":10},
+  {"buttons":["w"],"frames":20},
+  {"buttons":[],"frames":15},
+  {"buttons":["a"],"frames":8},
+  {"buttons":["d"],"frames":8},
+  {"buttons":[],"frames":80}
+]

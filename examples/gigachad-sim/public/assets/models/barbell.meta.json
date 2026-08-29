@@ -1,0 +1,27 @@
+{
+  "slug": "barbell",
+  "source": "meshy-ai",
+  "mode": "text-to-3d",
+  "prompt": "a red barbell weight with metal plates on each end, low poly game asset, gym equipment",
+  "aiModel": "latest",
+  "previewTaskId": "019cafd9-c6dc-72e4-8b5d-66354bb40205",
+  "refineTaskId": "019cafdb-2a85-7325-ba2e-7ffacfeb8a02",
+  "enablePbr": false,
+  "topology": "triangle",
+  "targetPolycount": 5000,
+  "modelUrls": {
+    "glb": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/model.glb?Expires=4926009600&Signature=qS8boKINw5h2d~WuL5v247ZPmm5kGINQRFpi7gmqkkcnZxqJ~M4dLfGBi8X3WU0lpx0uyMjFOe20jFhMLc93xv~CxMEsqwMF2bjaxm3HiZktTNr2WOB~qSJyFSbXG8ZW6wC1bS73UHA5zToRTl0EPdX7b8itwuHBQo0cWD8Ks3W10L1FpKYf-DAdYYWWmGeQuO6DY8YnuBDBCI49folm5JM4EnEQki5VjXxsAoIXNyZcmtEssmN4OokL7k2HbWNfOVvNzs1BT26skWuxWIvR4Q8y5PCFmOruAWX8nxI95qyHj9HnFxeTv5GurY1~e8f80L9wyQeKoQRO17NhGYELAQ__&Key-Pair-Id=KL5I0C8H7HX83",
+    "fbx": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/model.fbx?Expires=4926009600&Signature=hBM-dA62zFoKhFH~-7M4vovTFScDcM0XCH6r0GrufpEbwge91WPgDRn0lmX5mUzKIn45J~dB64N6RNyJpzev6H~87Lk~v7hwXHDTUm7SCyZdDpgwBwERHb4UQG4zJ6hUfTrQpw3QYc450ckPzvKwmcq1yGGwagYafwr6lpM4kSk2q-ic~2IepKMaZGxzV~lLTAf~2MRS2J4lGuNE6O9EAu17T-DzFiYJybBGtDDN1ujRnhw~1swVfFr0GQP1B6eiJlz-8QF57UMTrP6qnDqt4Ct1eC1E1S3B~0hKjreSXHC~wL0VvsKP~Rud8jBIs1Rq5bApw82oUY9MYjIK2zzLvQ__&Key-Pair-Id=KL5I0C8H7HX83",
+    "usdz": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/model.usdz?Expires=4926009600&Signature=styMpJwaQTJrGzYjdoeoh26JSobCxyY~zRzTphKo4Oke2SDmk7RgJ0iTMKh2JqWepF2G5NPC1yr6fhXCiFa3NoyWpfHrKCCYxWJtg6tbzQwHkxzuuqBfERD4ipPkuysvzPow6CQdlIbuDPrvdSZJ2IPfCDQG0TNDx3f4TfKLKBvU9dqs0896kh2-514eOeXObecaC2BkFx0KaslSQ9-BqaOgNaqZ70WVN7cQst8TWf506EG~ejdW1gyPujesJZNcLCztC8i5G1YinLaeCgnXFf8Mbkiy94ve3b39MAWJyFc9WVXqNzu3YqlQ7TurrEuAXuoW7TriCNDdhvTpHBfIoA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "obj": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/model.obj?Expires=4926009600&Signature=sFH2cUc2fEIttne8vR8D8c9s6nWW04RzsK73cxZ2SRbv0MCl~Q7xGsLbSvix0lENJhFmMqupJTQkGSJZm6qR2Uo~~B5~UwWWAF86gToBJwR5S-BU-He6oA8u0qhCuWgI3lCaFTR0zcN6c0ZcI-7eQxQUbFZJckSigK~nuLMKLsycOehH3RxUFfU5w1uoo1KNq3vcLR1qB9CjqbcTjSbdVE7rjYuhYsznsHHOmO89UoqCaxT1MpKJGr7~K0fEVEoMyj8nYNVSuPiTkbu5qTggkf-PjJeWm3w3j8NSR~MROo5NfMDi~dXxbYPhs5X4CoOno5FdMj~tV6LLErDND7sBIQ__&Key-Pair-Id=KL5I0C8H7HX83",
+    "mtl": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/model.mtl?Expires=4926009600&Signature=RDAgi3iR26X0wuNjcAP59D6K2wYSFfJ65yJ7QY2Ff8Sb4Eua-3cYKqKrzHPf~ngYW-DyF~rnfj49QzuA~W2lg125uM9pf8UJCZLwS52Xtf6UaUsHx9JzxpDQdYzykJ4AR3e39V5TZdA4kaBThuiLBW4Q4W8c4aGIdSf058aZCxrpbQ48-0S0PhEak5-ZmtDGSEFPKb1XPzFHSlutR2hpuaNdU6-G00qjXwhMPPhb4U5c0fAeu8egAMOYDVxedfeDCWN-qyq9YrnBcaO46YVLsHQ165vsvHezafXP0t~9i7C8isqh5LM-zfI9Ug1mSOFDYqKHUkOQl3P~DEQzWg0BHA__&Key-Pair-Id=KL5I0C8H7HX83"
+  },
+  "textureUrls": [
+    {
+      "base_color": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/texture_0.png?Expires=4926009600&Signature=fK-tjnER2Xx8fRfWsN5zgoewVF66I7siDpBkmKCdmj5RxYv-PU-MdViVDoNMUDmKkHOIBLw9mT6h0mUeBHnIlKUJYLnFSifpwV-ACv152RDRQoJFRkrBX7i6aJ-uMukiBvCwzOU7OA90ye5MFhh0PQzI2jraZA10FRuwhcIqjK0KOYstLjwCoF2aVGKAkC78W2ULEaylsRI6g6RbA1JA1K6NaHeIMikNUcousBG1bS1uovXI1Sx1~aGznsPqdmSDQOTGQsxZDDHC1hjEBQeNX2YkQSbmuZYGe38r8aAYeQkZNsrP~PFnQLVWMZ5kJox3vhlhq5Pz84RgrGmxn2JKJQ__&Key-Pair-Id=KL5I0C8H7HX83"
+    }
+  ],
+  "thumbnail": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-2a85-7325-ba2e-7ffacfeb8a02/output/preview.png?Expires=4926009600&Signature=FcVbpKL26Cy~P~2LILR0-TgGyt0jVGK22f4bLBGTNqGjeQZjUrYtZp1zceTmSTEk~LvAFnecQrRvBj1EH55bVVl6kOK-YYMWWPxn9ZmqoiGy8lazwerRFuRjA0bASQYqZ~edCILrYNWSrDGrCBqH15C0BwXjqM2DalpwdhJvC0yV0xwaXAAIWTGo7Kiq0PUhw5C10NR5q26CCxc0TAMXtDqy0mzw-lTNzLbrtjqypyoaGKyNrqUsNO8YPysgsEM17vQBBCGwCSEYyQ5r5DepdO3kw-uqshP-PV2P-TpK-Y3ECpuJp-kGEGkmnlXYKMw5Fgd3KnTbA~MrcpGGigg7JA__&Key-Pair-Id=KL5I0C8H7HX83",
+  "modelPath": "barbell.glb",
+  "createdAt": "2026-03-02T18:44:06.652Z"
+}

@@ -1,0 +1,55 @@
+{
+  "_comment": "Test actions for Crowd Dash. ArrowLeft/ArrowRight to dodge crowd. Auto-runs forward.",
+  "steps": [
+    {
+      "_comment": "Idle — let auto-run start and score some distance",
+      "buttons": [],
+      "frames": 15
+    },
+    {
+      "_comment": "Dodge right",
+      "buttons": ["ArrowRight"],
+      "frames": 20
+    },
+    {
+      "_comment": "Dodge left",
+      "buttons": ["ArrowLeft"],
+      "frames": 20
+    },
+    {
+      "_comment": "Idle — run straight",
+      "buttons": [],
+      "frames": 10
+    },
+    {
+      "_comment": "Quick dodge right then left",
+      "buttons": ["ArrowRight"],
+      "frames": 15
+    },
+    {
+      "_comment": "Dodge left to center",
+      "buttons": ["ArrowLeft"],
+      "frames": 15
+    },
+    {
+      "_comment": "Idle — should have scored by now",
+      "buttons": [],
+      "frames": 10
+    },
+    {
+      "_comment": "Dodge right aggressively",
+      "buttons": ["ArrowRight"],
+      "frames": 25
+    },
+    {
+      "_comment": "Return to center",
+      "buttons": ["ArrowLeft"],
+      "frames": 20
+    },
+    {
+      "_comment": "Idle — let crowds come, long period for potential collision",
+      "buttons": [],
+      "frames": 80
+    }
+  ]
+}

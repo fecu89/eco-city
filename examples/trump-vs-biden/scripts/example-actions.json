@@ -1,0 +1,13 @@
+[
+  {"buttons":["ArrowRight"],"frames":20},
+  {"buttons":["space"],"frames":3},
+  {"buttons":["ArrowLeft"],"frames":25},
+  {"buttons":["space"],"frames":3},
+  {"buttons":["ArrowRight"],"frames":15},
+  {"buttons":["space"],"frames":3},
+  {"buttons":["ArrowLeft"],"frames":20},
+  {"buttons":["space"],"frames":3},
+  {"buttons":["ArrowRight"],"frames":10},
+  {"buttons":["space"],"frames":3},
+  {"buttons":[],"frames":80}
+]

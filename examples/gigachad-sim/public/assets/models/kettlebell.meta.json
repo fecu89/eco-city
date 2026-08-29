@@ -1,0 +1,27 @@
+{
+  "slug": "kettlebell",
+  "source": "meshy-ai",
+  "mode": "text-to-3d",
+  "prompt": "a golden kettlebell weight with handle on top, low poly game asset, gym equipment",
+  "aiModel": "latest",
+  "previewTaskId": "019cafd9-d666-71ce-9377-f1b199191572",
+  "refineTaskId": "019cafdb-4504-7341-8100-a5d8531dc63d",
+  "enablePbr": false,
+  "topology": "triangle",
+  "targetPolycount": 5000,
+  "modelUrls": {
+    "glb": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/model.glb?Expires=4926009600&Signature=ROXfmdAE~snXdMfcZW6wkQHEQVwYm9tk-i7Z0J48NfsqGy8XK6yTsOnR8ikM5PU-Sx5IdUBCQ~Kjf8ZiTSwsUJH0b-29PbrGU9e-A5teDV-WdiJ8ar6i3wCXB-IzMgFEJAqpZPO9sDDglQdU69ivvAhJUNXzA~kGko7bH~LMaBhkWPEyqYHifRlLhWnVWLuls50Y-iXjpf5JbjdPpfhirCydavGu025cYz0FI91R9~sUZwZFLRdVEW4bVxNqP2MSl0du2QMUj6T~T9C3bbRK-BZ11yONEhVg5APSlZQGykTtjAOwLo6WKpyM0-CA82VFmpw1~AIzRjA76jPVtDc2lw__&Key-Pair-Id=KL5I0C8H7HX83",
+    "fbx": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/model.fbx?Expires=4926009600&Signature=JWcsJgNXwjcRoYFIP4nU0YkIh8CLwG6SkAgo9-W1PBRk4bfe~6yd3DGJD4WzC5v4ffubO9F-J-lHXAgABcTyYbknIJPkebkiJkf2PYZezWLSW7cSTo~ycRMlKwh2H4Qz23K3gORF~IkQiQ8Wn2Qml7pPbcAGm1u6nGHfL9cHrJhbG4T4C2rce5eTGOR8KC-gTHLAFsaHjnnyiWki82lrWYpgRSTj46NxUdGDslHlHrp0hgY5o0DzN5GN~yoJbnF2fdRZjvW64PRILD5rJOsH4kQnpOVi5teMGwX97iJBse0dQn3nahJHQCNzUP5Gmg~VWDaqHpkbiLLCv9TDTWTWZg__&Key-Pair-Id=KL5I0C8H7HX83",
+    "usdz": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/model.usdz?Expires=4926009600&Signature=i5ZKmk5s~dFyZUrGdp9g5-nA0vUGVhGBZG-ik-s8WBYY-5HKkzGnPeMbN30jsKQGR~d33-u5Np9dda2Bp~4VyYg06w9ix0222tUFomErZ-f68FiDu1hu5xbTsrYVFm8zrFQf51CddlxiUv6mW8M5swHrDpnm~KZLTGVPgfIsDn-rYsT6KGV2iDsxn16dmuOW7YSsqwMXAFSUox44ur-lyeztfzDFUR2HjRhImQoZUChScsvrMeZFt4bRASYb2LReX1IqM0m3oTMyr2plEmbh~z4YPpsYtvJTQNu8Jcgt6mRGjAzIwi9ihWd4A62rPe2RTofn17VdldZRmcyvI7E~Tg__&Key-Pair-Id=KL5I0C8H7HX83",
+    "obj": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/model.obj?Expires=4926009600&Signature=T7Q0CWX9TiGPM-oytG~si14jUtdafyU7pWFR7nrASg4kH6CbrVuwmUHbivN3vWN9Z8rptXC83Zq7~xThmOhl9tvbSkQa5K-Znf2mt5x6On5sv7J1t4V24stEdbR8I~IgBcv4Hnt562qsfW3CWjtMsAush5aE~dyeHHb3pJ525k~hi8KjJz2WLEtuvvDRF1qzgdAACPfiMkJSVlDtw8wC-16h~Bz1ZpVQU2MC2lPzTWV0SEyiiEBgnYHG4trFGqX7WwoHk7gcTrNimgc9gXeOxYfRuJbmgI2oRa8rY6kpWK2FzwFmR0g0yaSSCRBSoxxQMGMh7wUYi0EAV6~B9z1xzA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "mtl": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/model.mtl?Expires=4926009600&Signature=nPeaGdAVzJXb09onW9KjhzgKHDj2qKtSRCR1mnBxqPZFKCnwmvsThteGI8rqks-otQMy67YAiXFzHSVQGFrF26-NISQWz7tS6EKpOb6VkYzdmxd4-gjpBx6MS8ELqw~EjhyUg66b8OQMxLkrPNJwsoI3RVENiAyIbiCUnadwa9MXhRpJIVXYEYl38uE4V1zqPscOOpJofoLCHb9Std8EaCUR8e3Ju65EK1kIyXbdlEBwq3mmMT00gmYvXxQ13Qy96QaVYHE58bACmsqaF04M2~1hc1iw-kC8ukWnH8U1R~IDZs6Xel14IgsXzi6isJ72Va1yPluc-JPg7HxFQMYs4A__&Key-Pair-Id=KL5I0C8H7HX83"
+  },
+  "textureUrls": [
+    {
+      "base_color": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/texture_0.png?Expires=4926009600&Signature=OfI24z74z-e3BRlWZ0UJA7K1awDVs30idYhUHWhdbTlaObn7vpK9Lehc8EkXttRi0Ll9RdrzNjKubwHoce6ZRHC8Q8-dkXMxmp~mgPT3eRwLjr8jd9xqhvT4vLwZIkrNjh4ewVvINT9OUSM4L5dHgGW29~dPaU8nO2e3sNavKQth~e8mqZdOWiz4OW93D4yVT8f~pN9Sk2h2jYOg95IFgrE6MyOfFk2Whnvgymo7ZWDOG1GdFiE6ckWKjNj9~ogzdV-OwEwTdT-xAmzkP4wufRja8moVrPeqvd8SpoKc2Zv80hgn3S1OlTeF2hz6WO3XIgYf1M9hM6x~1WpJpj616A__&Key-Pair-Id=KL5I0C8H7HX83"
+    }
+  ],
+  "thumbnail": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-4504-7341-8100-a5d8531dc63d/output/preview.png?Expires=4926009600&Signature=UVHRUsSuT70cukshuJ84avuM1wg~N3Hxg7~8Q3j0nZas~6hvQfjraGo1CqU3OVz4x~bgvSgm6OFvfLNB1QmB8cKCtKZ6vr2A-hWgAdfJeJabRBI7KafvbNQ7uyfxYvu47KQgz1YZamzSJIp2RG3YCFcMT5VtvMoqXGWy~7ZUSPlbhoaR5r6xsz36pqrt2xclqCx~9N2VUia0K0d06~w~190b0nm02DuTmR3hDiQIYhj6bk2PBOX65H0-8Wg90NZ9LX6fbEArcwcMX1YiBmq8jeRHg7fc~jLPCcHJ4KDdD8I5sH3R-fxfKIFt~u3V8JCLtXuzAJY80bXEwqBmTIsZSw__&Key-Pair-Id=KL5I0C8H7HX83",
+  "modelPath": "kettlebell.glb",
+  "createdAt": "2026-03-02T18:43:51.744Z"
+}

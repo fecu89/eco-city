@@ -1,0 +1,9 @@
+[submodule "submodules/playdotfun"]
+	path = submodules/playdotfun
+	url = https://github.com/playdotfun/skills.git
+[submodule "skills/sub-games"]
+	path = skills/sub-games
+	url = git@github.com:subdotgames/skills
+[submodule "submodules/unity-mcp"]
+	path = submodules/unity-mcp
+	url = https://github.com/CoplayDev/unity-mcp.git

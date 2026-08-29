@@ -1,0 +1,12 @@
+{
+  "steps": [
+    {"_comment": "Move right to catch gems", "buttons": ["ArrowRight"], "frames": 30},
+    {"_comment": "Move left", "buttons": ["ArrowLeft"], "frames": 25},
+    {"_comment": "Idle - let some fall", "buttons": [], "frames": 15},
+    {"_comment": "Move right again", "buttons": ["ArrowRight"], "frames": 20},
+    {"_comment": "Quick left", "buttons": ["ArrowLeft"], "frames": 15},
+    {"_comment": "Right side", "buttons": ["ArrowRight"], "frames": 25},
+    {"_comment": "Center", "buttons": ["ArrowLeft"], "frames": 10},
+    {"_comment": "Long idle to let game over happen", "buttons": [], "frames": 120}
+  ]
+}

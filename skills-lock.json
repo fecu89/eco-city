@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "skills": {
+    "add-3d-assets": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "dd86664f97d5260aa13484f63ba66414d8d38c0ada923df2715c67101454e7cb"
+    },
+    "add-assets": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "5f9546ea597c28d695aa1429a0e19a190e8e43ca84113e6e9acb0e01b87ef32c"
+    },
+    "add-audio": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "8be325ab91f00fd6430ad2a061e0162c716940ef7609a9925b913f8db7554824"
+    },
+    "add-feature": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "4f2bfca00f15f15492886ab3c71722724770d7a3a760858166622cd3dc0bfaea"
+    },
+    "design-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "402b58b6a11d13f8bc0922122279aae9b7e2c0791366ebe745cb91aa1d42ed00"
+    },
+    "fetch-tweet": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "00ca2f5ed3e55ca58ff9ca1c1da33aeee73d2f21c364831b891e62577426574f"
+    },
+    "game-3d-assets": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "a86170227cd6267a477700ac0e5b9b7bc65c8fb0f0bbfd9c7c39dece494241a7"
+    },
+    "game-architecture": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "319d2befd2e7d11e484450c49244c91999695a4b66282e553e40ecdf1a558d31"
+    },
+    "game-assets": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "3296abec73c2a29d170a6ab4f549b3b31e525f294bb6be0b1c87778100c8241b"
+    },
+    "game-audio": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "6375c20972b4c59831ea21be26136851738f46f7902e1bcbba9e350806dd81b3"
+    },
+    "game-deploy": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "6b57fbae8a976f2b7d2f56afe25ffd7d14a58201d3a90a2e7453f50d68a300fb"
+    },
+    "game-designer": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "051d3e1e033f0beffeaef7a82af944d23102ef82fc6606aca4064f1100be95b7"
+    },
+    "game-qa": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "afcc914a5e307f4058917097c65d7cb1bde160a5b27b76cda9cd07594f758045"
+    },
+    "improve-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "ed91c9a70920450795be1937599016e8b7e133df80c6b1c3408184d489dd88f2"
+    },
+    "make-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "143ecce9ad2a449bfad0ce514a168830db0a125aec9bb0f8a3e1ae5ac09c90cf"
+    },
+    "meshyai": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "85bb85266c42205ec4f2dcde4ce85f854a699430ae22fb3529144857f32c4d0e"
+    },
+    "monetize-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "985d9f0cab7f00173144c60880e9a21176fc03d9a34418d53b58ca69b2acd709"
+    },
+    "phaser": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "2e8bd40c41fc4b367678e86f02b0eb4ba7aaa1770ad42cfe30b7ce74c4913364"
+    },
+    "promo-video": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "7a1f702960a3fc5f258fe670b9f6483101a1169cb2fcf5a5d22622fc6a5d9e23"
+    },
+    "qa-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "5d841e56b396a843c5237f9494e1b981bfbfd8b5bbdb41350adebc00303d9423"
+    },
+    "quick-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "ad81fad5a73c455e80b73fc159cc48b20478f8cd70d2aeb766abc3e66f349974"
+    },
+    "record-promo": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "e1575abca5e8ed9cefd4fea84f91489149feeeb62d3ee4fa7d377581d2acf07f"
+    },
+    "review-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "549e542e3809f2015df229e7f60861de82c299f834bf3264cafcba54f5e9e0c3"
+    },
+    "threejs-game": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "3b541b7f11038235ef0ebe36d318faedc4d264dc94bd31d2ba99cfd80dcf8bd8"
+    },
+    "use-template": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "36a66e02be6b0349c9e153778793fb0de6b82897c23a0a6c473efdb6a67bff9b"
+    },
+    "worldlabs": {
+      "source": "M4cs/game-creator",
+      "sourceType": "github",
+      "computedHash": "48be2abcffa851e4923c0f9552865a04d71813b0ac3da21f279b9fed76b7dc35"
+    }
+  }
+}

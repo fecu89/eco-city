@@ -1,0 +1,30 @@
+node_modules/
+dist/
+_site/
+.DS_Store
+*.log
+test-results/
+playwright-report/
+
+# Vite cache
+.vite/
+
+# Test screenshots (stray)
+test-*.png
+
+# Claude Code
+.claude/
+.plan.md
+
+# Playwright MCP
+.playwright-mcp/
+
+# Gallery build artifacts
+gallery/thumbnails/
+
+# API keys (managed by intercept hook)
+.env
+.env.local
+
+# Deployment artifacts
+.herenow/

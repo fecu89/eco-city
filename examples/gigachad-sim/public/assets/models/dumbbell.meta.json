@@ -1,0 +1,27 @@
+{
+  "slug": "dumbbell",
+  "source": "meshy-ai",
+  "mode": "text-to-3d",
+  "prompt": "a blue dumbbell weight, short metal handle with round weights on each end, low poly game asset, gym equipment",
+  "aiModel": "latest",
+  "previewTaskId": "019cafd9-cd58-72e5-9e80-d1ad244bd2de",
+  "refineTaskId": "019cafda-d2f9-7e3d-9261-9f57c68fe30a",
+  "enablePbr": false,
+  "topology": "triangle",
+  "targetPolycount": 5000,
+  "modelUrls": {
+    "glb": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/model.glb?Expires=4926009600&Signature=HStL-GkKpuECnsUMVPrOkBii-i3LjrPDkAaywnzrtHEUFxfdAdaPbjN2RfGxDeBZWqYnulbfpny~o325coHLqIER-WPZLG0ic1Pmrt2WDrsfs7kLEd6zrTnkaUsIABiq3uxDGPyCP8mtibWkyzF0lkEG2UEsTtH6fZObB4v7TPtTuOW~SZaEtFMhn1KMSOrx~7xpC49RtOS2zxGvvx7lIpX091c9bNwpdGace3BqHxOlj3cH-9QKATzboOBNEBz-zkr69-O~bdyf1fyWuywf-CXUabW51ycTxMt8z04uA~XJwyTUH0gWKzMlPSW84g1HZd6IJ7xVYaRsv8ivpW1oog__&Key-Pair-Id=KL5I0C8H7HX83",
+    "fbx": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/model.fbx?Expires=4926009600&Signature=au-te1fC6ekihRoYNlmy5~lho2axONmTDX27FJfbh17-lFQom2bCtgvf-wg8WTybSiDYRIoTxkpvIhtUZD14FUvbc8OxNy8QFgN5q9101YoSfCpuqiZvjCnsyyZApaEaLqiiQyAwYeVh5uJpk~OVnmk0kfLrs0Uli4QHoXdQUSyVm403pqWJR~XsFHHkDZ-j5jjF0oUso1v5MP5sgQA49~LZSUrz81sIaC7c9g25s18RElD0qYM0tx4VERdZOQb0hrRh6ZE-Sw4Bzo-drQUvnoYu6Q6RF5TtseRlRRpXBkLu4fU-HIrQ8eeDK2QocxBGGBh~lqZsONR9Ydg5ofPfAw__&Key-Pair-Id=KL5I0C8H7HX83",
+    "usdz": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/model.usdz?Expires=4926009600&Signature=SoHW3M62u20U5pL8k1Guc8kS0B8ZVD1PpE-tk6IDc4gTSqyWd-Lvtcz~6llouOE~XmY9VCoiRWmhsS5RxefxcGOP0~9RmqYrJqmZ8WHom976KXgRkUN7boNRT8p2ZBr~ZECRLLQ0jW3jCVy4sHxBcGvpLcQiRW~~j6O7MZLL54WKFAwqohMrQSYoUYR54vPcn4NweuHlPGawqgPv~N0WfIT69lKmuNMyXryBK-b4bUrW42LRqVOSaNs22~gXhtdZnFEQKA9~Gcq9Yc6D-OINRj5KvvMkJS0wRkmnCKxENyo10fXMrCyeLTqv4PDoPtCmj43tIM71pfo2LxLOeDUE8Q__&Key-Pair-Id=KL5I0C8H7HX83",
+    "obj": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/model.obj?Expires=4926009600&Signature=pzq1dSToGz6PYhdi9SXkGf7CwlQD07H2FDE93Y9ePAPnmwt6jxaUzT2Ov44RjjhY2vf~L5obbrUDjDu0nDBfvxtVawxfU7yrqwpVYfJH5mR2u~tRz-JAeH1Fb94-OhacefQRuwJL-gTxbRozSc4sNGoWdA6RUkyu7rNZgkQ3fDNouOyRw1vu6hopxoySPtRWV-ccBobE1DSP~e5Zpai6fOWVscfra78O3TIIBlqPShqt-i7HGA0lMRbMFLZfQOJeeEfyWI4Xa9h~cGkww6a4qP-~Ere~74Zi2KvSMiTgV0noFK5FhCSDxj-xRN4Bu24hsYn9jhvnyMGb34Topnls3A__&Key-Pair-Id=KL5I0C8H7HX83",
+    "mtl": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/model.mtl?Expires=4926009600&Signature=ZNWPJN4Q4mvq9ObNYjHYK~RQh8ypY5hhbhMsYgQ2P4ZaS~b~Sm-GdeDXOJSL1ZYgr1ubFXcKTneQKui73zD8mpIQIOeIGrxLnxkdHWpALIQfQhcETLf9BVtG3u-r0TJy~V2OVVZ-ARWP68zU9Hung69x0GS1oXaA7UljyTvTSKmN86a4uAnrTxEEQlDoS~ksRvvCaz0Ae4oAVq~PtyjW-B~~kT88pc962od2GpEkpBY5u8l2B27Kq7hEsLxgiQ6E-HfDb3nIOl-IEasxJu4wBv30gBLc2W0VOckxkhQWQlf2Zkr1T~fx1vw3piA-WYh~neBLLACBZB9FV7Dpmbq24Q__&Key-Pair-Id=KL5I0C8H7HX83"
+  },
+  "textureUrls": [
+    {
+      "base_color": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/texture_0.png?Expires=4926009600&Signature=JQW7zh~boo4Xq9BZKMfYBn4GztMkS-44UXgtoXzfhTgKSni-6Ow7amNoL1uPzfEwMymYOvimvgXASr-tGJKVVaRx2shWsb7JdLoFCK6hczihT1~Y0vbbYCvEMr1Q7wfo2vMoxs2xaGy7fARY4R0BDeMLVJT-KLX28gy5LxLFighN5BDPxYUQBNHCU0ejgTzYKqLUmpb~qrpye5p7cN79tIuW9hIOfmP7b1xkI7EppZY12S~rfhtbalhfOhzKNkxlOjY4sJsiIMKc4TUlx8ofp5XhwVsw~xy3B5SGNWzYe0aGf8FQvd~Xu4FAwbMNeC9b3pV-Aq6TbGEIsGHwvRagWg__&Key-Pair-Id=KL5I0C8H7HX83"
+    }
+  ],
+  "thumbnail": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafda-d2f9-7e3d-9261-9f57c68fe30a/output/preview.png?Expires=4926009600&Signature=qlW7XYbEjZgJrJQcqkWWeIWcqfokFizLQsAKkq0S5xmUwJu0G6y3drRmSIltZzGNUpafCrxv7tkBBF8b~AdhJECKho2ayr5z6GErY7m0bfaN4vrb-PiWGWXVemIunlTUv1i4UbzZ02LaREKwV6bromwo9Wr5-30WWYD9P4A7qOebQvuqKDIriNQmLRGRWQnVEF-Qet1-Bgj7B1GF7vjQhgpWqY4pZCT74Rp0fLsNHYdXxm1XKxOgPxgibCTgcz1DmfK74MOn9KcY~j3aY57x7ZPjZESzY0KC0jwr2B7zQq73i~Qgybb~F25OZPEk9H5QGKqXhgmhbSuv6rMAf7-YOA__&Key-Pair-Id=KL5I0C8H7HX83",
+  "modelPath": "dumbbell.glb",
+  "createdAt": "2026-03-02T18:42:45.201Z"
+}

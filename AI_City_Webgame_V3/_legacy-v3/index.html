@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#06101d" />
+  <title>AI 시티를 구하라! — 통합과학 웹게임</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="loadingScreen" class="loading-screen" aria-live="polite">
+    <div class="loader-core">
+      <div class="loader-orbit"></div>
+      <h1>AI CITY</h1>
+      <p id="loadingText">시뮬레이션 로딩…</p>
+      <div class="loading-bar"><span id="loadingBar"></span></div>
+      <small>3D · UI · CHART</small>
+    </div>
+  </div>
+
+  <canvas id="threeBg" aria-hidden="true"></canvas>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">AI</div>
+      <div class="brand-copy">
+        <strong>AI 시티를 구하라!</strong>
+        <span>통합과학 · 에너지 × AI</span>
+      </div>
+    </div>
+
+    <div class="phase-pill" id="phasePill">
+      <span class="phase-dot"></span>
+      <span id="phaseText">1단계 · 무지성 실행</span>
+    </div>
+
+    <div class="top-actions">
+      <button class="icon-btn" id="helpBtn" title="도움말"><i data-lucide="circle-help"></i></button>
+      <button class="icon-btn" id="soundBtn" title="효과음"><i data-lucide="volume-2"></i></button>
+      <button class="icon-btn danger-soft" id="resetBtn" title="초기화"><i data-lucide="rotate-ccw"></i></button>
+    </div>
+  </header>
+
+  <main class="game-shell">
+    <section class="left-panel glass">
+      <div class="mission-header">
+        <div class="mission-copy">
+          <span class="eyebrow">MISSION</span>
+          <h2 id="missionTitle">AI의 조언만으로 도시를 성장시켜라</h2>
+        </div>
+        <div class="turn-box"><span>행동</span><strong id="turnCount">0</strong></div>
+      </div>
+
+      <div class="teacher-note" id="teacherNote">
+        <i data-lucide="eye-off"></i>
+        <p><strong>1차시:</strong> 발전점수만 공개 · 숨은 비용은 완성 후 공개</p>
+      </div>
+
+      <div class="resource-row">
+        <div class="resource-card"><span>💳 C</span><strong id="credits">36</strong></div>
+        <div class="resource-card primary"><span>★ 발전</span><strong id="devScore">0</strong></div>
+        <div class="resource-card locked" id="energyCard"><span>⚡ 전력</span><strong id="energyScore">???</strong></div>
+        <div class="resource-card locked" id="carbonCard"><span>☁ CO₂</span><strong id="carbonScore">???</strong></div>
+        <div class="resource-card locked" id="waterCard"><span>💧 물</span><strong id="waterScore">???</strong></div>
+      </div>
+
+      <div class="board-stage">
+        <div class="board-wrap">
+          <div class="board-size-chip" id="boardSizeChip">5×5</div>
+          <div class="board-grid" id="cityGrid" aria-label="5x5 도시 보드"></div>
+          <div class="board-overlay hidden" id="boardOverlay">
+            <div class="crisis-stamp">ALERT</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="facility-dock" id="facilityDock"></div>
+
+      <div class="main-buttons">
+        <button class="btn secondary" id="aiAdviceBtn"><i data-lucide="bot"></i><span>AI 조언</span></button>
+        <button class="btn primary" id="advanceBtn"><span>1차 도시 완성</span><i data-lucide="arrow-right"></i></button>
+      </div>
+    </section>
+
+    <aside class="right-panel" id="rightPanel">
+      <section class="glass panel-block advisor mobile-active" id="advisorPanel" data-mobile-panel="advisor">
+        <div class="panel-title">
+          <div><span class="eyebrow">AI</span><h3>시장 보좌관</h3></div>
+          <i data-lucide="bot"></i>
+        </div>
+        <div class="advisor-log" id="advisorLog">
+          <div class="message ai"><b>AI</b><p>성장점수를 높이려면 데이터센터·공장을 우선 투자하세요. 전력시설도 필요합니다.</p></div>
+        </div>
+        <div class="prompt-chips" id="promptChips">
+          <button data-prompt="score">★ 점수</button>
+          <button data-prompt="placement">▦ 배치</button>
+          <button data-prompt="power">⚡ 전력</button>
+        </div>
+      </section>
+
+      <section class="glass panel-block badges-panel" id="badgePanel" data-mobile-panel="badges">
+        <div class="panel-title compact"><h3>🏅 성취</h3><span id="badgeCount">0 / 8</span></div>
+        <div class="badges" id="badges"></div>
+      </section>
+
+      <section class="glass panel-block status-panel" id="statusPanel" data-mobile-panel="status">
+        <div class="panel-title compact"><h3>📊 도시 상태</h3><span class="model-label">게임 모델</span></div>
+        <canvas id="cityChart" height="190"></canvas>
+        <div id="chartFallback" class="chart-fallback hidden"></div>
+      </section>
+
+      <section class="glass panel-block evidence-box hidden" id="evidenceBox" data-mobile-panel="evidence">
+        <div class="panel-title compact"><h3>📚 근거</h3><span id="evidenceCount">0 / 3</span></div>
+        <select id="evidenceConcept">
+          <option value="">개념 선택</option>
+          <option value="balance">전력 공급-수요 균형</option>
+          <option value="cooling">데이터센터 발열과 냉각수</option>
+          <option value="carbon">화석연료와 탄소 부담</option>
+          <option value="renewable">신재생에너지와 지속가능성</option>
+          <option value="efficiency">에너지 효율</option>
+        </select>
+        <textarea id="evidenceReason" maxlength="120" placeholder="선택 이유를 한 문장으로 기록"></textarea>
+        <button class="btn secondary full" id="saveEvidenceBtn">저장</button>
+        <div class="evidence-list" id="evidenceList"></div>
+      </section>
+    </aside>
+  </main>
+
+  <nav class="mobile-bar" aria-label="보조 패널">
+    <button class="active" data-open-panel="advisor" title="AI 보좌관"><i data-lucide="bot"></i><span>AI</span></button>
+    <button data-open-panel="status" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>상태</span></button>
+    <button data-open-panel="badges" title="성취"><i data-lucide="trophy"></i><span>성취</span></button>
+    <button data-open-panel="evidence" id="mobileEvidenceBtn" title="근거"><i data-lucide="notebook-pen"></i><span>근거</span></button>
+  </nav>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <div class="modal hidden" id="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" id="modalCard"></div>
+  </div>
+
+  <template id="helpTemplate">
+    <div class="modal-head">
+      <div><span class="eyebrow">HOW TO PLAY</span><h2>4단계 미션</h2></div>
+      <button class="icon-btn close-modal"><i data-lucide="x"></i></button>
+    </div>
+    <div class="help-grid">
+      <article><span>01</span><h3>건설</h3><p>빈 칸을 눌러 시설을 배치한다.</p></article>
+      <article><span>02</span><h3>관리</h3><p>건물을 다시 누르면 업그레이드·철거.</p></article>
+      <article><span>03</span><h3>인접 설계</h3><p>공장↔발전소, 데이터센터↔냉각 등 연결을 만든다.</p></article>
+      <article><span>04</span><h3>위기</h3><p>전력·탄소·냉각 비용이 공개된다.</p></article>
+      <article><span>05</span><h3>영토 확장</h3><p>3단계에서 5×5 → 6×6, Lv.3가 열린다.</p></article>
+      <article><span>06</span><h3>재설계</h3><p>근거 3개와 인접 보너스로 도시를 개선한다.</p></article>
+    </div>
+    <div class="callout"><strong>주의</strong><p>수치는 실제 실측값이 아닌 <b>교수학습용 상대값</b>입니다.</p></div>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

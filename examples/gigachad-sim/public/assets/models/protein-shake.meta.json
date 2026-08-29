@@ -1,0 +1,27 @@
+{
+  "slug": "protein-shake",
+  "source": "meshy-ai",
+  "mode": "text-to-3d",
+  "prompt": "a bright green protein shake bottle with cap, stylized cartoon, low poly game item",
+  "aiModel": "latest",
+  "previewTaskId": "019cafd9-dd94-71d4-89db-e34e7aeef85b",
+  "refineTaskId": "019cafdb-33d3-7205-b17f-db2630b2fcc9",
+  "enablePbr": false,
+  "topology": "triangle",
+  "targetPolycount": 3000,
+  "modelUrls": {
+    "glb": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/model.glb?Expires=4926009600&Signature=iymxCnCW9bizCUgVLssUTA~Flr28Deeb7pKeB4iPeWrarBgOpnVG7pSQeqvcZQiDMFjABQPVlou7Kc1PE-Wd9KktSImhvzdp6wWZOSKXiqYXG3ZSKP~YwLw6c1GEkWz5SI9AmKDpgt6M9xMd6sMVobKGl6fRAGrCs9yhZrdnU5tv4dRiiKvToskxezHj1mQ1VEzOnKT~yZiJmc7Up2QLrrBVLFSk~sEOSMwW4qFR87OcagqWZ3eUtBoH2H~pR2WJhrPTsSbJrYricSfOANjtxnda6NtZo51NfKn5nMbFMl1MVWOgyYXrIeSivzCogVPL5KrECVdxkcKAL8Z1XxtOqw__&Key-Pair-Id=KL5I0C8H7HX83",
+    "fbx": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/model.fbx?Expires=4926009600&Signature=k71Ul5LeV7jJr2S~4PW~GZfJJRy3kDNf00b3izUHAmZwH15igfFLI9~6i6pUmO-vrwgq2j7RAW92Zfecrne8UKmFApGb7AF013Z9SkD~Jvxs93N7epUQ7Y8FhX4FNh8Px~R0rrMFJtRYZoxmLQkLkU82HGe9~mx1FneIyl8O4nPynFck11~u8csoMDgFAl48pJIBZY9Zfqq4XRE5mpTjhJpwxUw4hlnLmqH7ztbNRjWARgIhEMMYx6Xju8os4onuySjiHrBP5KE7vDL91TQwQ-3z3olo03ZCgsV92dD5QtSV7cRIh3OFpOHqxxzJiUZ1cX~jlsYg2hiYQH0~ZWpAAA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "usdz": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/model.usdz?Expires=4926009600&Signature=mYVE9SCGChwtMOOQDnDEH1CRgDNwgGim1hF5yIdzIDmY-vWSrl9bsSgaqoGtR3pv3EX5gqkzQxvaTjUWwDk-5s3LC~oLGvOdh7-9b4DZrmCroFQn80H-ve0EUOYsxOJd2WYQAxDJZ~1~KMfupskRC7H4XpcR-yo4Wg1fk-woWVabdpWFAGP60fsOfUZlof1Bpva81mcsjBrnfmB6medp-bUqQtqdf1dLORMNMMjaPQBIXgz4A2qCDlkDRMK~bEQIvuxFrUb5SW8BxlN5CBVBwY7Nfzl38tc7jgJ4X8cvYiwoDpO0Fs6jlKd0Z0tIs3xWBTtUrzefwtpK2lafU73hyA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "obj": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/model.obj?Expires=4926009600&Signature=fgljqXEHlfjrrMEZGRLJNvyz17D0U6L3crMdNELCBkL-4yIBWr8vTqvpgfO1t~Iunek2BSIQVb2DDHBQBN~bWRzXw94j6p4Ax9VZ7TtJ-VNX~2hzIUke~yy4XfcBFKHgiyqbWHYFWEvUj8jXY9AO0AUGl1gifY3wBQorglLwbZ2H3eccXryEV4wXvRR-ev4QitRxzgiUTRtTm1kgnaZAQHi8oFzJ2lMzCJ8Xg1vfJg-CBL5UrY4jbqm-oZsDTQjEqldyImr5BN4jH6CLeiWpR2kyO53HYSYBzz-~6~kVrcUUCqepRoBk7upqzh5nbYuhe8q0h8e8z6y2ECIneuXtuA__&Key-Pair-Id=KL5I0C8H7HX83",
+    "mtl": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/model.mtl?Expires=4926009600&Signature=gZMwHenBq~TNjL70kwD0yVzyJQ-RS2-wmSszBLdJJ-AU1zslJoqH68oXO0mGyJ9jSEOFAN7QzXhtArSNjzpLkrUJyFQ-BmVsGQ8nyG7zUNB7mPoMZSyLB8X3on3AA7-DBiYCe5Wjl5kR2P38pXHIHZjdZy5ZqVwSnLzUmTKnpMGEBzalQRsX6e2EwBaLT5Q7WXLvjlYpP65EbLV1c3DJTrjq~nol3wLRefW0Tl56nvl4li2CbqUOx1d7Yifj3lkA0PS5CM6HI61WGTLgiczdKvIgs9roBinv4ohDrJCZPKtcpDM7qWVQGcKKe4hcQhK7kus8qjDRiX6jlCnL8oHfug__&Key-Pair-Id=KL5I0C8H7HX83"
+  },
+  "textureUrls": [
+    {
+      "base_color": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/texture_0.png?Expires=4926009600&Signature=otEuexd4PIcf14Q~USSrjZ~o2Ipz0SnaNOuCshZyF3yOi1IgClkZYlC5axubd1fYMb3hcmr0BnuyJGMOXp-1-dhaULi9PUydgAIqfmNKo4m4jIu5xUm1bJb3p0493jpmXFQC3yLEnXCkKOaZl2NseeH2Kemd0dqL5BscK8UeFCrcSWEzTwo09ZwyFCDMTfkkhfcSOsH2R4vPBCQd7Oi8ohAC3R9JU9GBOzChFi-xYY9916tV3WMep2p9sqTV2PZKoWKINDD~YCc0R97-aRSq3mz95If0dm7jLSY~r8T-tSxRb~Xbqpoll3n7uVpVdBqNZ-HaNKRx4aS5yYwSzFfnaw__&Key-Pair-Id=KL5I0C8H7HX83"
+    }
+  ],
+  "thumbnail": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019cafdb-33d3-7205-b17f-db2630b2fcc9/output/preview.png?Expires=4926009600&Signature=X1fntzxUcUj1Ny~YyYKifZapdsUonzEFhuYCdK49GVRjC3m5aet3~orb2xCRsRqmKaGk~avlEqMa6D-YkRmX5mVxD-PO6ILjprf1kntDm-KAjgPubsiAXgs01PvIeHBshUh3H4VrFRKK-rt9EWTx0VStXBKeOF2ZmoGmwbmpZi5Lrht62z47ACWO9GdqJDRwWXhz0CawtsPO3Wtt7NH3jabkE7TglRdCXcLXtoSWeDSFtiA3o0flcXW8fLohcb~Cs2lQpQ6MOWeBfShzEzKNQSfuhxg-HWHlEttjev-gWy~Zv7ddXJGytcgWa~84bV9ekNd5AxsFY6aknv6bC3~LZg__&Key-Pair-Id=KL5I0C8H7HX83",
+  "modelPath": "protein-shake.glb",
+  "createdAt": "2026-03-02T18:43:14.430Z"
+}

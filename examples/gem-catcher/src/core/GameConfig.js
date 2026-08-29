@@ -1,0 +1,28 @@
+import Phaser from 'phaser';
+import { GAME, COLORS, DPR } from './Constants.js';
+import { BootScene } from '../scenes/BootScene.js';
+import { GameScene } from '../scenes/GameScene.js';
+import { GameOverScene } from '../scenes/GameOverScene.js';
+
+export const GameConfig = {
+  type: Phaser.AUTO,
+  width: GAME.WIDTH,
+  height: GAME.HEIGHT,
+  parent: 'game-container',
+  backgroundColor: COLORS.SKY,
+  roundPixels: true,
+  antialias: true,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    zoom: 1 / DPR,
+  },
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 0 }, // No global gravity; falling objects set their own velocity
+      debug: false,
+    },
+  },
+  scene: [BootScene, GameScene, GameOverScene],
+};

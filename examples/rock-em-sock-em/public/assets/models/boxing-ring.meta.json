@@ -1,0 +1,27 @@
+{
+  "slug": "boxing-ring",
+  "source": "meshy-ai",
+  "mode": "text-to-3d",
+  "prompt": "a boxing ring platform with ropes and corner posts, low poly game asset, top down view, cartoon style",
+  "aiModel": "latest",
+  "previewTaskId": "019c9b8b-7fbd-78d4-beea-53eac0846c54",
+  "refineTaskId": "019c9b8c-ce64-7ad8-94ae-f3b18d68ead1",
+  "enablePbr": false,
+  "topology": "triangle",
+  "targetPolycount": 8000,
+  "modelUrls": {
+    "glb": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/model.glb?Expires=4925664000&Signature=I07nMaYG84XM5BuOG82XJeNxgTtibnluy6aGV2f1N9Qi7uW5zEg~RTGGmr2YV03tGTq~2gcxsKCWtyuWY8oH0pi41B6oMhcSOel2ZYDdtA6C4T18Q1dOITIC1hbxAYiztSWz3Cz9d5aKxQ9jt-iLwe62Ao~0I5r4QV4~PxhqMyL6dws3afUzlrf2IVpHrCxlHZroz1Cpq83vTiwncBLzifQFBGN4hqFTkK6bVg5f8XYNd9JMOVqjPcQDQ3JOmBlwNMV6YugHp2velNYshANYaceVqJ6wx80oPgy-ZziKtVAnyDZxpa30arMSg3JUblCStkAlmpiS1T4~rC1Q1KvbQw__&Key-Pair-Id=KL5I0C8H7HX83",
+    "fbx": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/model.fbx?Expires=4925664000&Signature=V-i2wt23iFv56MrAh3BnVLWtOykSZHUqbwVZJW0TQmIIveKeSFA1r9uz0BIl0PK3ccE9d9Io3QwtsIeEDVbdZGVAWWjBxfSxzuktiVuSBBJBkO5oY-7FxKKdNmqsA4pAdU~lgqgAA9s06vxftNxAFekIg23HEaDSy-mQHVWiciyhF72U8xESTOijB--fULS1WhLglvnp9ywNFiS9RXr1Wa~p4cmHBPTBSPgv0j9wd8gPorotwfXeXRduuIIwPvfKzx~EBqLwiuZ-W7qp0KdImDuv0WSPfwhRQf-bIk24d-Ej6A5UYaTXVrCSW46wjW~JLhJsiynhrYSkU5XyMfri~w__&Key-Pair-Id=KL5I0C8H7HX83",
+    "usdz": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/model.usdz?Expires=4925664000&Signature=TsDyeRXygTAQwezOEh6H-enFnsRNDqG-rHRP1bSuD9~UQiAFTpTq~up1ExPo5wAHDEdVBaTdOdP2O9mF1gsVTHrnSvyiz~DIOzC4AOH98SUj3cJNEPxTY2jsd8pQSb7xX4Xvi-4oKjJkgq~tOJLOYGNJUWdRnjiDSX7nGfRLIRcyP320vPET0Gzwf2Uc1vSJz1BVrQaQOnwotZ9TDT4R2PB0po6l9gg-3~eUx1jWXnHc59XxqZ2PZPo-M8jAOzGhezIDY0UUo4nkggmuRvlDqEHhhwRuFHxhwVccwv52Ta6UHj7zndskZJJ6SQxfdzQu6pP46-IqYMVQW81rejzI9Q__&Key-Pair-Id=KL5I0C8H7HX83",
+    "obj": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/model.obj?Expires=4925664000&Signature=dzv2MOdWXW18BJoe6~4q2ccGMCLigyUV60X-aWCeIg0kJ5f9YfsvdTjpQ7zEouoJcZT92zUxNSKCfjXLaVReK82jN7AEHHjq4QqDVmxjH0FXqXW4bToRbXDnqx0fVSveI7f4O~pNZUNbWfDj47QSRSOE3mYdz7PccXxd9t9nyOskBTI8vEBq~UBLrxOSVeSe~Hd5wct~jbMO0Kjr~q5F2aGEoB7hEHgkGQzTpBZ52G8Z3bffBTMySqiX86W7Y8hsRWMBbzBc~Iei3RQnZq123sJT4BZyoG2gVmQChp6cQ9L1TpE7L5oHpBNc8vZUnhTejW1SuBV24cMdDcOAPVaGRQ__&Key-Pair-Id=KL5I0C8H7HX83",
+    "mtl": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/model.mtl?Expires=4925664000&Signature=rZhKP3aavoV6grqAqMwlXAkE3EKMitr7Hm~1EiOe2LkKiJpSFpzoSQhODJ0KaVzbMH6gEfDQkmCNfOy3mOwTqX7ssXtNNVTNb0~ZLOjr-OjxIzgwB~ZI7Qe2WM4o-Tqopjp83U2TPScSkwPe4F9QIf29oqw3IPF8FkO4G7KuWS8Gcuy1VQXnfbBRtBkWA~QOoDIR~Uh58dQ4reqyvjs-QuSrnCkLsf5XFANC~6U6VlBf4vBYmHo9HQ-Cm5iBtjcENtryr5acYN2lBMzqdUNhqswUHslVC6wk9Mlo0RSQfBUeI1EFNgioFvsef76rwUVRbF8wFMCTc2K7ndc0kXV2uw__&Key-Pair-Id=KL5I0C8H7HX83"
+  },
+  "textureUrls": [
+    {
+      "base_color": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/texture_0.png?Expires=4925664000&Signature=TongWjPId6EGc9DV~YbEWTVqXTHZMxRH9k-8Li5ZTfkH0vrOgqGADHRPNM0Hbe2Mf3-t0SiPC90ArK1FXjRAZV~Ilxdq7j7866lYp2GHWQEitcXhN9xItdPDjNpIWMtj2tg8J~WcbSKMikPpBEuq3u0-7Fsv4G9Jn30kjSrowlbEhtR6~PKfvMfEmaX1-YiUSMil1XYgCQGJoGT82WvUmuzUJmZZCUiw5nWNFmCuDtBfjK9HHX540vt83pJ5xlLubtkRfcqBkaWpo1t-UmnhFeuFOGJmBKxw28-cTLJ2c7DkddKsmyvsZ~294a8dNS3HPkJtC1JywyADNiDN4I3RkA__&Key-Pair-Id=KL5I0C8H7HX83"
+    }
+  ],
+  "thumbnail": "https://assets.meshy.ai/2ed7287c-25fb-43dc-92e9-ce4c99c1c264/tasks/019c9b8c-ce64-7ad8-94ae-f3b18d68ead1/output/preview.png?Expires=4925664000&Signature=NSJ0N~l3E-XN9wYFoFi5-wRdwymKuB9X4pEUhufI-UYwbNZTubuLmVLQaIaSjmbCyUkCuslnBkQHdDApVKL67gEpocyPQpTa4osqphmdg9aO7naeSyVMJUt4pSxnAOzIDKY~Y51aZ-aPNVkcx4jv6b9Yniov1jB0ojL4gkGgxfFRQSMWyItHFQIZXpKTAkYPKTsN5yRCA8YSSnvrwBMi3W2YKe3SULAXeNZe762fB2ynvehtH5UwdQrAX3ankJYKPU~CKyFz4YCLomZxebr-hc-7ZBRMsq7rD9CtKB1XCyP8~XQVPht-3fZOWIX0VBmUwrWAp-ODQM4WQ1haUBO-rQ__&Key-Pair-Id=KL5I0C8H7HX83",
+  "modelPath": "boxing-ring.glb",
+  "createdAt": "2026-02-26T20:06:33.739Z"
+}

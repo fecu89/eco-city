@@ -1,0 +1,15 @@
+{
+  "slug": "gigachad",
+  "source": "meshy-ai",
+  "mode": "rigging",
+  "inputTaskId": "019cafda-de4e-7e3d-a713-c552e085d4e5",
+  "rigTaskId": "019cafdd-e64e-728c-a6c1-87a65fd9ac8d",
+  "heightMeters": 1.7,
+  "note": "Signed URLs removed — they were temporary Meshy AI download links that have since expired. Use task IDs above to re-generate if needed.",
+  "downloadedAnimations": {
+    "walk": "gigachad-walk.glb",
+    "run": "gigachad-run.glb"
+  },
+  "modelPath": "gigachad.glb",
+  "createdAt": "2026-03-02T18:47:25.117Z"
+}

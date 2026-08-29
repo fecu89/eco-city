@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#06101d" />
+  <title>AI 시티를 구하라! — 통합과학 웹게임</title>
+</head>
+<body>
+  <div id="loadingScreen" class="loading-screen" aria-live="polite">
+    <div class="loader-core">
+      <div class="loader-orbit"></div>
+      <h1>AI CITY</h1>
+      <p id="loadingText">시뮬레이션 로딩…</p>
+      <div class="loading-bar"><span id="loadingBar"></span></div>
+      <small>3D · UI · CHART</small>
+    </div>
+  </div>
+
+  <div id="threeBg" aria-hidden="true"></div>
+
+  <main class="game-shell world-shell">
+    <section class="left-panel glass">
+      <div class="board-stage">
+        <div class="board-wrap">
+          <div class="board-size-chip" id="boardSizeChip">5×5</div>
+          <div class="diagnosis-progress hidden" id="diagnosisProgress"></div>
+          <button class="icon-btn diagnosis-hint hidden" id="diagnosisHintBtn" title="힌트 (완벽 진단 배지 제외)"><i data-lucide="lightbulb"></i></button>
+          <div class="board-grid" id="cityGrid" aria-label="5x5 도시 보드"></div>
+          <div class="board-overlay hidden" id="boardOverlay">
+            <div class="crisis-stamp">ALERT</div>
+          </div>
+        </div>
+      </div>
+
+      <header class="topbar world-status">
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div class="brand-copy">
+            <strong>AI 시티를 구하라!</strong>
+            <span>통합과학 · 에너지 × AI</span>
+          </div>
+        </div>
+
+        <div class="phase-pill" id="phasePill">
+          <span class="phase-dot"></span>
+          <span id="phaseText">1단계 · 무지성 실행</span>
+        </div>
+
+        <div class="resource-row">
+          <div class="resource-card"><span>💳 C</span><strong id="credits">36</strong></div>
+          <div class="resource-card primary"><span>★ 발전</span><strong id="devScore">0</strong></div>
+          <div class="resource-card locked" id="energyCard"><span>⚡ 전력</span><strong id="energyScore">???</strong></div>
+          <div class="resource-card locked" id="carbonCard"><span>☁ CO₂</span><strong id="carbonScore">???</strong></div>
+          <div class="resource-card locked" id="waterCard"><span>💧 물</span><strong id="waterScore">???</strong></div>
+        </div>
+      </header>
+
+      <div class="hud-controls" id="hudControls">
+        <nav class="hud-rail" id="hudRail" aria-label="도시 제어">
+          <span class="hud-rail-label" aria-hidden="true">CITY CONTROL</span>
+          <button data-hud-target="build" aria-controls="buildPanel" aria-expanded="false" title="건설"><i data-lucide="hammer"></i><span>건설</span></button>
+          <button data-hud-target="advisor" aria-controls="advisorPanel" aria-expanded="false" title="시장 보좌관"><i data-lucide="bot"></i><span>AI</span></button>
+          <button data-hud-target="status" aria-controls="statusPanel" aria-expanded="false" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>도시</span></button>
+          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취와 근거"><i data-lucide="trophy"></i><span>성취</span></button>
+          <button data-hud-target="menu" aria-controls="menuPanel" aria-expanded="false" title="도시 메뉴"><i data-lucide="map"></i><span>메뉴</span></button>
+        </nav>
+
+        <aside class="right-panel hud-panel-host" id="rightPanel">
+          <section class="glass panel-block hud-panel build-panel" id="buildPanel" data-hud-panel="build" aria-label="건설 도구">
+            <div class="panel-title compact">
+              <div><span class="eyebrow">BUILD</span><h3>시설 건설</h3></div>
+              <button class="icon-btn hud-close" type="button" data-hud-close title="건설 닫기"><i data-lucide="x"></i></button>
+            </div>
+            <p class="selected-facility-summary" id="selectedFacilitySummary">시설을 선택하고 도시의 빈 대지를 누르세요.</p>
+            <div class="facility-dock" id="facilityDock"></div>
+          </section>
+
+          <section class="glass panel-block advisor hud-panel" id="advisorPanel" data-hud-panel="advisor">
+            <div class="panel-title">
+              <div><span class="eyebrow">AI</span><h3>시장 보좌관</h3></div>
+              <button class="icon-btn hud-close" type="button" data-hud-close title="시장 보좌관 닫기"><i data-lucide="x"></i></button>
+            </div>
+            <button class="btn secondary full ai-blind-build hidden" id="aiBlindBuildBtn"><i data-lucide="zap"></i> AI 말대로 짓기</button>
+            <div class="advisor-log" id="advisorLog">
+              <div class="message ai"><b>AI</b><p>성장점수를 높이려면 데이터센터·공장을 우선 투자하세요. 전력시설도 필요합니다.</p></div>
+            </div>
+            <div class="prompt-chips" id="promptChips"></div>
+          </section>
+
+          <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
+            <div class="panel-title compact">
+              <h3>📊 도시 상태</h3>
+              <div class="panel-title-actions"><span class="model-label">게임 모델</span><button class="icon-btn hud-close" type="button" data-hud-close title="도시 상태 닫기"><i data-lucide="x"></i></button></div>
+            </div>
+            <canvas id="cityChart" height="190"></canvas>
+          </section>
+
+          <section class="glass panel-block badges-panel hud-panel" id="achievementsPanel" data-hud-panel="achievements">
+            <div class="panel-title compact">
+              <h3>🏅 성취와 근거</h3>
+              <button class="icon-btn hud-close" type="button" data-hud-close title="성취 닫기"><i data-lucide="x"></i></button>
+            </div>
+            <div id="badgePanel">
+              <div class="panel-title compact"><h3>성취</h3><span id="badgeCount">0 / 9</span></div>
+              <div class="badges" id="badges"></div>
+            </div>
+            <div class="evidence-box hidden" id="evidenceBox">
+              <div class="panel-title compact"><h3>📚 근거</h3><span id="evidenceCount">0 / 3</span></div>
+              <p class="evidence-hint">보드에서 시설을 클릭 → "근거 기록" 버튼으로 기록하세요.</p>
+              <div class="evidence-list" id="evidenceList"></div>
+            </div>
+          </section>
+
+          <section class="glass panel-block hud-panel menu-panel" id="menuPanel" data-hud-panel="menu">
+            <div class="panel-title">
+              <div><span class="eyebrow">COMMAND</span><h3>도시 운영 메뉴</h3></div>
+              <button class="icon-btn hud-close" type="button" data-hud-close title="메뉴 닫기"><i data-lucide="x"></i></button>
+            </div>
+            <div class="mission-header">
+              <div class="mission-copy">
+                <span class="eyebrow">MISSION</span>
+                <h2 id="missionTitle">AI의 조언만으로 도시를 성장시켜라</h2>
+              </div>
+              <div class="turn-box"><span>행동</span><strong id="turnCount">0</strong></div>
+            </div>
+            <div class="teacher-note" id="teacherNote">
+              <i data-lucide="eye-off"></i>
+              <p><strong>1차시:</strong> 발전점수만 공개 · 숨은 비용은 완성 후 공개</p>
+            </div>
+            <div class="top-actions">
+              <button class="icon-btn" id="helpBtn" title="도움말"><i data-lucide="circle-help"></i></button>
+              <button class="icon-btn" id="musicBtn" title="배경음"><i data-lucide="music"></i></button>
+              <button class="icon-btn" id="soundBtn" title="효과음"><i data-lucide="volume-2"></i></button>
+              <button class="icon-btn danger-soft" id="resetBtn" title="초기화"><i data-lucide="rotate-ccw"></i></button>
+            </div>
+            <div class="main-buttons">
+              <button class="btn secondary" id="aiAdviceBtn"><i data-lucide="bot"></i><span>AI 조언</span></button>
+              <button class="btn primary" id="advanceBtn"><span>1차 도시 완성</span><i data-lucide="arrow-right"></i></button>
+            </div>
+          </section>
+        </aside>
+
+        <nav class="mobile-bar" aria-label="도시 제어">
+          <button data-hud-target="build" aria-controls="buildPanel" aria-expanded="false" title="건설"><i data-lucide="hammer"></i><span>건설</span></button>
+          <button data-hud-target="advisor" aria-controls="advisorPanel" aria-expanded="false" title="AI 보좌관"><i data-lucide="bot"></i><span>AI</span></button>
+          <button data-hud-target="status" aria-controls="statusPanel" aria-expanded="false" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>도시</span></button>
+          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취와 근거"><i data-lucide="trophy"></i><span>성취</span></button>
+          <button data-hud-target="menu" aria-controls="menuPanel" aria-expanded="false" title="도시 메뉴"><i data-lucide="map"></i><span>메뉴</span></button>
+        </nav>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <div class="modal hidden" id="modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" id="modalCard"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

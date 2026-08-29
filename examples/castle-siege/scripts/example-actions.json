@@ -1,0 +1,10 @@
+[
+  {"buttons":["Space"],"frames":10},
+  {"buttons":[],"frames":30},
+  {"buttons":["Space"],"frames":10},
+  {"buttons":[],"frames":30},
+  {"buttons":["Space"],"frames":10},
+  {"buttons":[],"frames":30},
+  {"buttons":["Space"],"frames":10},
+  {"buttons":[],"frames":80}
+]
