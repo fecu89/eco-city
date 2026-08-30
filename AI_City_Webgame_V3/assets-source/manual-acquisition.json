@@ -1,0 +1,23 @@
+{
+  "providedAt": "2026-08-30",
+  "acquired": [
+    {
+      "id": "quaternius-space",
+      "officialPage": "https://quaternius.com/packs/ultimatespacekit.html",
+      "archive": "assets-source/archives/quaternius-space-user-provided.zip",
+      "archiveKind": "curated-user-provided",
+      "sourceDirectory": "assets-source/manual/quaternius-space",
+      "bytes": 83542,
+      "sha256": "235f473a9dc9c29260886e624e61f41556fd3cbfb4edeed30fd36549917b3316"
+    },
+    {
+      "id": "quaternius-farm",
+      "officialPage": "https://quaternius.com/packs/farmbuildings.html",
+      "archive": "assets-source/archives/quaternius-farm-user-provided.zip",
+      "archiveKind": "curated-user-provided",
+      "sourceDirectory": "assets-source/manual/quaternius-farm",
+      "bytes": 44751,
+      "sha256": "33d0b055eab780b1090e0748b66747485476d1c357161021b45e18dddc2c6fd6"
+    }
+  ]
+}

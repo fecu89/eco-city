@@ -2,12 +2,14 @@ import { test, expect } from '@playwright/test';
 import { GameState, SAVE_VERSION } from '../../../src/core/GameState.js';
 import { migrateV1Save } from '../../../src/systems/SaveSystem.js';
 
-test('new state starts quest 1 at 08:00 with only residential unlocked', () => {
+test('new state starts quest 1 at 2040 epoch with only residential unlocked', () => {
   const state = new GameState();
 
-  expect(SAVE_VERSION).toBe(2);
+  expect(SAVE_VERSION).toBe(5);
   expect(state.questIndex).toBe(1);
-  expect(state.simulationHour).toBe(8);
+  expect(state.elapsedGameHours).toBe(0);
+  expect(state.boardRadius).toBe(2);
+  expect(state.grid).toHaveLength(19);
   expect([...state.unlockedFacilities]).toEqual(['residential']);
   expect(state.evidence).toBeUndefined();
   expect(state.serialize().evidence).toBeUndefined();
@@ -23,7 +25,9 @@ test('v1 redesign saves migrate to quest 10 without evidence', () => {
     evidence: [{ reason: 'legacy' }],
   });
 
-  expect(migrated.v).toBe(2);
+  expect(migrated.v).toBe(SAVE_VERSION);
+  expect(migrated.boardRadius).toBe(3);
+  expect(migrated.grid).toHaveLength(37);
   expect(migrated.questIndex).toBe(10);
   expect(migrated.credits).toBe(22);
   expect(migrated.unlockedFacilities).toContain('green');

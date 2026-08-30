@@ -1,0 +1,91 @@
+import { test, expect } from '@playwright/test';
+import { FACILITIES } from '../../../src/core/Constants.js';
+import { gameState } from '../../../src/core/GameState.js';
+import {
+  placeFacility,
+  validatePlacement,
+  validateUpgrade,
+  upgradeRequirementMessage,
+  facilityUnlockMessage,
+  upgradeCell,
+} from '../../../src/systems/BoardSystem.js';
+import { evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
+import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
+import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
+import { settleEconomy } from '../../../src/systems/EconomySystem.js';
+
+test.beforeEach(() => gameState.reset());
+
+test('placement validator and placement command share tidal outer-ring rules and cost', () => {
+  gameState.credits = 20;
+  gameState.unlockedFacilities.add('tidal');
+  gameState.research.techLevels.tidal = 1;
+  gameState.selectedFacility = 'tidal';
+  const coords = createHexCoordinates(2);
+  const outer = coords.findIndex((_, index) => isOuterRing(index, coords, 2));
+  expect(validatePlacement(gameState, 'tidal', 0)).toMatchObject({ ok: false, reason: 'outer_ring_only' });
+  expect(validatePlacement(gameState, 'tidal', outer)).toMatchObject({ ok: true });
+  expect(placeFacility(outer)).toMatchObject({ ok: true, index: outer, key: 'tidal' });
+  expect(gameState.credits).toBe(13);
+  expect(FACILITIES.tidal).toMatchObject({ cost: 7, supply: 10, carbon: 0, water: 0 });
+});
+
+test('permit, technology, credit, and facility locks explain the exact next action', () => {
+  gameState.grid[0] = { type: 'solar', level: 1 };
+  gameState.upgradePermitLevel = 1;
+  gameState.research.techLevels.solar = 2;
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('퀘스트 7');
+  gameState.upgradePermitLevel = 2;
+  gameState.research.techLevels.solar = 1;
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('고효율 태양전지');
+  gameState.research.techLevels.solar = 2;
+  gameState.credits = 0;
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('크레딧');
+  expect(facilityUnlockMessage(gameState, 'solar')).toContain('퀘스트 6');
+  expect(facilityUnlockMessage(gameState, 'tidal')).toContain('조력 발전 실증');
+});
+
+test('tidal generation is stable at every hour and costs 0.3 credits per hour', () => {
+  const coords = createHexCoordinates(2);
+  const grid = Array(19).fill(null);
+  grid[7] = { type: 'tidal', level: 1 };
+  grid[0] = { type: 'residential', level: 1 };
+  for (const hour of [0, 6, 12, 23]) {
+    const power = calculatePowerNetwork({ grid, coords, hour, tickIndex: hour });
+    expect(power.facilityPower[0].ratio).toBe(1);
+  }
+  const economy = settleEconomy({ grid, coords, facilityPower: { 0: { ratio: 1 } }, credits: 10 });
+  expect(economy.facilityEconomy[7].upkeep).toBe(0.3);
+  expect(economy.hourlyCarbon).toBe(0);
+  expect(economy.hourlyWater).toBe(1);
+});
+
+test('renewable upgrades report city permit, technology, and credit gates independently', () => {
+  gameState.grid[0] = { type: 'solar', level: 1 };
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 1;
+  gameState.research.techLevels.solar = 2;
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'city_permit_required' });
+
+  gameState.upgradePermitLevel = 2;
+  gameState.research.techLevels.solar = 1;
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'technology_required' });
+
+  gameState.research.techLevels.solar = 2;
+  gameState.credits = 0;
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'insufficient_credits' });
+});
+
+test('completed solar research can upgrade solar and satisfy quest 8', () => {
+  gameState.stage = 5;
+  gameState.questIndex = 8;
+  gameState.questProgress.quizPassed = true;
+  gameState.grid[0] = { type: 'solar', level: 1 };
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 2;
+  gameState.research.completedIds.add('solar2');
+  gameState.research.techLevels.solar = 2;
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
+  expect(upgradeCell(0)).toMatchObject({ ok: true, level: 2 });
+  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+});

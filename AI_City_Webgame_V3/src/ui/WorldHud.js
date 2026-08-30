@@ -1,6 +1,6 @@
 import { eventBus, Events } from '../core/EventBus.js';
 
-const VALID_PANELS = new Set(['build', 'advisor', 'status', 'achievements', 'menu']);
+const VALID_PANELS = new Set(['build', 'quest', 'status', 'settings']);
 
 let activePanel = null;
 let modalOpen = false;
@@ -35,11 +35,9 @@ function renderHudState() {
     trigger.setAttribute('aria-expanded', isActive ? 'true' : 'false');
     trigger.disabled = modalOpen;
     const target = trigger.dataset.hudTarget;
-    const notification = target === 'menu' && notifications.has('ready')
-      ? 'ready'
-      : target === 'achievements' && notifications.has('achievement')
-        ? 'achievement'
-        : '';
+    const notification = target === 'quest'
+      ? notifications.has('ready') ? 'ready' : notifications.has('new') ? 'new' : ''
+      : '';
     if (notification) trigger.dataset.notification = notification;
     else delete trigger.dataset.notification;
   });
@@ -49,8 +47,10 @@ export function openHudPanel(name, opener) {
   if (modalOpen || !VALID_PANELS.has(name)) return false;
   activePanel = name;
   openerEl = opener || null;
-  if (name === 'menu') notifications.delete('ready');
-  if (name === 'achievements') notifications.delete('achievement');
+  if (name === 'quest') {
+    notifications.delete('ready');
+    notifications.delete('new');
+  }
   renderHudState();
   eventBus.emit(Events.HUD_PANEL_CHANGED, { activePanel });
 
@@ -142,12 +142,12 @@ export function initWorldHud(elements) {
     notifications.add('ready');
     renderHudState();
   });
-  eventBus.on(Events.BADGE_UNLOCKED, () => {
-    notifications.add('achievement');
-    renderHudState();
-  });
   eventBus.on(Events.QUEST_CLAIMED, () => {
     notifications.delete('ready');
+    syncWorldHud();
+  });
+  eventBus.on(Events.QUEST_STARTED, () => {
+    notifications.add('new');
     syncWorldHud();
   });
   eventBus.on(Events.GAME_RESET, () => {

@@ -1,19 +1,23 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { CITY_CAMERA } from '../core/Constants.js';
+import { BOARD, CITY_CAMERA } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 
 const _ratio = new THREE.Vector3(...CITY_CAMERA.POSITION_RATIO).normalize();
 const _clampedTarget = new THREE.Vector3();
 const _targetDelta = new THREE.Vector3();
 
-export function createCameraController({ camera, domElement, getBoardSize, onInteraction = () => {} }) {
+function boardWorldSpan(radius) {
+  return Math.sqrt(3) * BOARD.HEX_SIZE * radius * 2 + BOARD.HEX_SIZE * 2;
+}
+
+export function createCameraController({ camera, domElement, getBoardRadius, onInteraction = () => {} }) {
   const controls = new OrbitControls(camera, domElement);
   const pointers = new Map();
   const completedGestures = new Map();
   let interacting = false;
   let multiTouch = false;
-  let boardSize = getBoardSize();
+  let boardRadius = getBoardRadius();
   let aspectFit = 1;
 
   controls.enablePan = true;
@@ -22,13 +26,14 @@ export function createCameraController({ camera, domElement, getBoardSize, onInt
   controls.minPolarAngle = CITY_CAMERA.MIN_POLAR_ANGLE;
   controls.maxPolarAngle = CITY_CAMERA.MAX_POLAR_ANGLE;
 
-  function applyDistanceBounds(size) {
-    controls.minDistance = size * CITY_CAMERA.MIN_DISTANCE_PER_GRID;
-    controls.maxDistance = size * CITY_CAMERA.MAX_DISTANCE_PER_GRID;
+  function applyDistanceBounds(radius) {
+    const span = boardWorldSpan(radius);
+    controls.minDistance = span * CITY_CAMERA.MIN_DISTANCE_PER_GRID;
+    controls.maxDistance = span * CITY_CAMERA.MAX_DISTANCE_PER_GRID;
   }
 
   function clampTarget() {
-    const extent = (boardSize - 1) / 2 + CITY_CAMERA.PAN_MARGIN;
+    const extent = boardWorldSpan(boardRadius) / 2 + CITY_CAMERA.PAN_MARGIN;
     _clampedTarget.copy(controls.target);
     _clampedTarget.x = THREE.MathUtils.clamp(_clampedTarget.x, -extent, extent);
     _clampedTarget.y = THREE.MathUtils.clamp(_clampedTarget.y, 0, 1.25);
@@ -87,10 +92,10 @@ export function createCameraController({ camera, domElement, getBoardSize, onInt
     return click;
   }
 
-  function reset(size = getBoardSize()) {
-    boardSize = size;
-    applyDistanceBounds(size);
-    const distance = size * CITY_CAMERA.DISTANCE_PER_GRID * aspectFit;
+  function reset(radius = getBoardRadius()) {
+    boardRadius = radius;
+    applyDistanceBounds(radius);
+    const distance = boardWorldSpan(radius) * CITY_CAMERA.DISTANCE_PER_GRID * aspectFit;
     const damping = controls.enableDamping;
     controls.enableDamping = false;
     controls.target.set(0, 0, 0);
@@ -118,9 +123,9 @@ export function createCameraController({ camera, domElement, getBoardSize, onInt
     controls.update();
   }
 
-  function resize(size = getBoardSize()) {
-    boardSize = size;
-    applyDistanceBounds(size);
+  function resize(radius = getBoardRadius()) {
+    boardRadius = radius;
+    applyDistanceBounds(radius);
     clampTarget();
   }
 
@@ -136,6 +141,18 @@ export function createCameraController({ camera, domElement, getBoardSize, onInt
       distance: Math.round(camera.position.distanceTo(controls.target) * 10000) / 10000,
       interacting,
     };
+  }
+
+  function setOrbitForTest(azimuth, polar) {
+    const distance = camera.position.distanceTo(controls.target);
+    const damping = controls.enableDamping;
+    controls.enableDamping = false;
+    camera.position.setFromSphericalCoords(distance, polar, azimuth).add(controls.target);
+    camera.lookAt(controls.target);
+    controls.update();
+    controls.enableDamping = damping;
+    onInteraction();
+    return getState();
   }
 
   function dispose() {
@@ -158,7 +175,7 @@ export function createCameraController({ camera, domElement, getBoardSize, onInt
   domElement.addEventListener('pointermove', onPointerMove);
   domElement.addEventListener('pointerup', finishPointer);
   domElement.addEventListener('pointercancel', finishPointer);
-  reset(boardSize);
+  reset(boardRadius);
 
-  return { controls, update, reset, resize, fitAspect, isGestureClick, getState, dispose };
+  return { controls, update, reset, resize, fitAspect, isGestureClick, getState, setOrbitForTest, dispose };
 }

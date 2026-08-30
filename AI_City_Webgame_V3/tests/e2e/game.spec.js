@@ -4,8 +4,8 @@ import { clickCell, clickHudAction, gameStateSnapshot, openHudPanel } from '../h
 test.describe('boot and agent contract', () => {
   test('boots at level 1 and 08:00 with controllable time', async ({ gamePage: page }) => {
     const snapshot = await gameStateSnapshot(page);
-    expect(snapshot).toMatchObject({ mode: 'playing', stage: 1, quest: 1, credits: 36 });
-    expect(snapshot.gameTime).toEqual({ day: 1, hour: 8 });
+    expect(snapshot).toMatchObject({ mode: 'playing', stage: 1, quest: 1, credits: 10 });
+    expect(snapshot.gameTime).toMatchObject({ year: 2040, month: 1, day: 1, hour: 8, timeScale: 1 });
     expect(await page.evaluate(() => typeof window.advanceTime)).toBe('function');
     expect(await page.evaluate(() => typeof window.__settleSimulationHour)).toBe('function');
   });
@@ -16,6 +16,11 @@ test.describe('boot and agent contract', () => {
     expect(snapshot.simulation).toMatchObject({ netCredits: expect.any(Number), deliveredPower: expect.any(Number), demand: expect.any(Number) });
     expect(snapshot.climateAlert).toBe('normal');
     expect(snapshot).not.toHaveProperty('evidenceCount');
+    expect(snapshot.research).toHaveProperty('jobs');
+    expect(snapshot.research).not.toHaveProperty('active');
+    expect(snapshot.visualGameTime).toMatchObject({ year: 2040, month: 1, day: 1 });
+    expect(snapshot).toHaveProperty('carbonCrisisHours');
+    expect(snapshot.island).toMatchObject({ landInstances: 37, shoreInstances: 24, waterInstances: 156 });
   });
 
   test('boot produces no page or console errors', async ({ page }) => {
@@ -28,25 +33,27 @@ test.describe('boot and agent contract', () => {
     expect(errors).toEqual([]);
   });
 
-  test('menu icons render as SVG and the removed advance control stays absent', async ({ gamePage: page }) => {
-    await openHudPanel(page, 'menu');
-    await expect(page.locator('#menuPanel .top-actions svg')).toHaveCount(5);
+  test('settings icons render as SVG and removed AI controls stay absent', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'settings');
+    await expect(page.locator('#settingsPanel .top-actions svg')).toHaveCount(6);
     await expect(page.locator('#advanceBtn')).toHaveCount(0);
+    await expect(page.locator('#aiAdviceBtn')).toHaveCount(0);
   });
 
-  test('the real center canvas click resolves to grid index 12', async ({ gamePage: page }) => {
+  test('the real center canvas click resolves to axial center index 0', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     const box = await page.locator('.board-stage canvas').boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(250);
-    expect((await gameStateSnapshot(page)).entities).toEqual([{ index: 12, type: 'residential', level: 1 }]);
+    expect((await gameStateSnapshot(page)).entities[0]).toMatchObject({ index: 0, q: 0, r: 0, type: 'residential', level: 1 });
   });
 });
 
 test.describe('construction and inspection', () => {
-  test('new games show only residential and placement spends its exact cost', async ({ gamePage: page }) => {
+  test('new games show every card but only residential is unlocked and placement spends its exact cost', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
-    await expect(page.locator('#facilityDock .facility-btn')).toHaveCount(1);
+    await expect(page.locator('#facilityDock .facility-btn')).toHaveCount(11);
+    await expect(page.locator('#facilityDock .facility-btn[aria-disabled="false"]')).toHaveCount(1);
     const before = (await gameStateSnapshot(page)).credits;
     await clickCell(page, 0);
     const after = await gameStateSnapshot(page);
@@ -54,14 +61,26 @@ test.describe('construction and inspection', () => {
     expect(after.entities[0]).toMatchObject({ index: 0, type: 'residential' });
   });
 
-  test('AI auto-build respects unlocks and records its recommendation', async ({ gamePage: page }) => {
-    await clickHudAction(page, 'advisor', '#aiBlindBuildBtn');
-    const result = await page.evaluate(() => ({
-      cell: window.__GAME_STATE__.grid[0],
-      transcript: window.__GAME_STATE__.transcripts.execution,
-    }));
-    expect(result.cell.type).toBe('residential');
-    expect(result.transcript).toHaveLength(1);
+  test('shared build detail exposes cost, hourly economy, power, carbon, water and labor', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
+    const residential = page.locator('#facilityDock .facility-btn', { hasText: '주거지' });
+    await expect(residential).toContainText('-2.00 💰');
+    const detail = page.locator('#facilityDetail');
+    await expect(detail).toContainText('+0.50/h');
+    await expect(detail).toContainText('-2E/h');
+    await expect(detail).toContainText('CO₂');
+    await expect(detail.locator('[data-metric="water"]')).toHaveAttribute('aria-label', '물');
+    await expect(detail).toContainText('인구 +4');
+  });
+
+  test('build cards follow quest unlock order and place unlocked facilities first', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__GAME_STATE__.unlockedFacilities.add('wind');
+      window.__refreshGameForTest();
+    });
+    await openHudPanel(page, 'build');
+    const order = await page.locator('#facilityDock .facility-btn').evaluateAll((cards) => cards.map((card) => card.dataset.facility));
+    expect(order).toEqual(['residential', 'wind', 'thermal', 'factory', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'green', 'tidal']);
   });
 
   test('an occupied cell opens live economics and the 50 percent demolition breakdown', async ({ gamePage: page }) => {
@@ -70,8 +89,8 @@ test.describe('construction and inspection', () => {
     await page.evaluate(() => window.__settleSimulationHour());
     await clickCell(page, 0);
     await expect(page.locator('.facility-inspector-grid')).toContainText('시간당 수입');
-    await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 2C');
-    await expect(page.locator('#demolitionBreakdown')).toContainText('환급 1C');
+    await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 2.00 💰');
+    await expect(page.locator('#demolitionBreakdown')).toContainText('환급 1.00 💰');
   });
 
   test('unlocked factory placement preview marks a power-plant neighbor', async ({ gamePage: page }) => {
@@ -87,13 +106,13 @@ test.describe('construction and inspection', () => {
   });
 });
 
-test.describe('quest diagnosis, achievements, reset, and save', () => {
+test.describe('quest diagnosis, celebration, reset, and save', () => {
   test('quest 6 scanner exposes exactly three stable risks and makes the reward ready', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.questIndex = 6;
       state.stage = 4;
-      state.firstCitySnapshot = Array(25).fill(null);
+      state.firstCitySnapshot = Array(19).fill(null);
       state.firstCitySnapshot[0] = { type: 'thermal', level: 1 };
       state.firstCitySnapshot[1] = { type: 'factory', level: 1 };
       state.firstCitySnapshot[2] = { type: 'data', level: 1 };
@@ -102,23 +121,26 @@ test.describe('quest diagnosis, achievements, reset, and save', () => {
     });
     for (const index of [0, 1, 2]) await clickCell(page, index);
     await expect(page.locator('#diagnosisProgress')).toContainText('3 / 3');
-    await expect(page.locator('#questClaimBtn')).toBeEnabled();
+    await page.locator('[data-hud-target="quest"]').first().click();
+    await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
   });
 
-  test('placing five buildings still unlocks the builder achievement effect', async ({ gamePage: page }) => {
+  test('claiming a quest raises the quest completion effect', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
-    for (let index = 0; index < 5; index++) await clickCell(page, index);
-    expect(await page.evaluate(() => [...window.__GAME_STATE__.badges])).toContain('builder');
-    await expect(page.locator('#achievementCelebration')).toHaveClass(/show/);
+    for (let index = 0; index < 2; index++) await clickCell(page, index);
+    await page.locator('[data-hud-target="quest"]').first().click();
+    await page.locator('#questPanelClaimBtn').click();
+    await expect(page.locator('#questCelebration')).toHaveClass(/show/);
+    await expect(page.locator('#questCelebration')).toContainText('2040, 첫 시민');
   });
 
   test('reset returns to quest 1, 08:00, and an empty city', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     await clickCell(page, 0);
-    await clickHudAction(page, 'menu', '#resetBtn');
+    await clickHudAction(page, 'settings', '#resetBtn');
     await page.locator('#confirmReset').click();
     const snapshot = await gameStateSnapshot(page);
-    expect(snapshot).toMatchObject({ quest: 1, credits: 36, gameTime: { day: 1, hour: 8 } });
+    expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, hour: 8 } });
     expect(snapshot.entities).toEqual([]);
   });
 

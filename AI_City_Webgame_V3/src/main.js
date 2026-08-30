@@ -1,47 +1,59 @@
 import './style.css';
-import { LEVEL_VISUALS, STAGES } from './core/Constants.js';
+import { FACILITIES, LEVEL_VISUALS, STAGES } from './core/Constants.js';
+import { formatCredits } from './core/Money.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
-import { placeFacility } from './systems/BoardSystem.js';
-import { initAchievementSystem } from './systems/AchievementSystem.js';
-import { ask, blindBuild } from './systems/AdvisorSystem.js';
+import { placeFacility, validatePlacement } from './systems/BoardSystem.js';
 import { initSaveSystem, loadSavedGame, clearSavedGame } from './systems/SaveSystem.js';
 import { calculatePowerNetwork } from './systems/PowerNetworkSystem.js';
 import { settleEconomy } from './systems/EconomySystem.js';
 import { createHourSettler, createSimulationController } from './systems/SimulationSystem.js';
 import { applySimulationQuestProgress } from './systems/QuestSystem.js';
+import { advanceResearchOneHour, researchDemandByIndex } from './systems/ResearchSystem.js';
+import { calendarAtElapsedHour, formatCalendar, intervalForTimeScale } from './systems/CalendarSystem.js';
+import { createHexCoordinates } from './systems/HexGridSystem.js';
 
-import { initModal, refreshIcons } from './ui/Modal.js';
+import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { finishBirdVisit, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, triggerBirdVisit } from './ui/CityScene3D.js';
+import { finishBirdVisit, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit } from './ui/CityScene3D.js';
 import { initDiagnosisView, renderDiagnosisGrid, handleUseHint } from './ui/DiagnosisView.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
-import { initAdvisorPanel, renderPromptChips, initBadgesPanel, renderBadges } from './ui/PanelViews.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
 import { initSimulationHudView, renderSimulationHud } from './ui/SimulationHudView.js';
 import { initChartView, requestChartResize, updateChart } from './ui/ChartView.js';
 import { initThreeBackground } from './ui/ThreeBackground.js';
 import { getWorldHudState, initWorldHud, syncWorldHud } from './ui/WorldHud.js';
 import { getTheme, initThemeManager } from './ui/ThemeManager.js';
+import { getWorldLightingMode, initWorldLightingManager } from './ui/WorldLightingManager.js';
 import { initFeedbackBridge } from './ui/FeedbackBridge.js';
-import { initAchievementCelebration } from './ui/AchievementCelebration.js';
+import { initQuestCelebration } from './ui/QuestCelebration.js';
+import { getOnboardingState, initOnboardingView, openStory, syncTutorialHighlight } from './ui/OnboardingView.js';
 import {
   initStageModals,
   openHelpModal,
   openFacilityInspectorModal,
-  openCrisisModal,
   openReportModal,
   openResetConfirmModal,
+  openCarbonGameOverModal,
+  openConstructionRiskModal,
 } from './ui/StageModals.js';
 import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
+import { createContinuousClockView } from './ui/ContinuousClockView.js';
 
 const $ = (s) => document.querySelector(s);
-const settleHour = createHourSettler({ calculatePowerNetwork, settleEconomy, evaluateQuest: applySimulationQuestProgress });
+const settleHour = createHourSettler({
+  calculatePowerNetwork,
+  settleEconomy,
+  getResearchDemand: researchDemandByIndex,
+  advanceResearch: advanceResearchOneHour,
+  evaluateQuest: applySimulationQuestProgress,
+});
 let simulationController = null;
+let continuousClockView = null;
 
 const els = {
   loading: $('#loadingScreen'),
@@ -60,50 +72,48 @@ const els = {
   teacherNote: $('#teacherNote'),
   turnCount: $('#turnCount'),
   credits: $('#credits'),
-  devScore: $('#devScore'),
-  energyScore: $('#energyScore'),
-  carbonScore: $('#carbonScore'),
-  waterScore: $('#waterScore'),
-  energyCard: $('#energyCard'),
-  carbonCard: $('#carbonCard'),
-  waterCard: $('#waterCard'),
-  blindBuildBtn: $('#aiBlindBuildBtn'),
 
   boardSizeChip: $('#boardSizeChip'),
   diagnosisProgress: $('#diagnosisProgress'),
   diagnosisHintBtn: $('#diagnosisHintBtn'),
+  diagnosisToggleBtn: $('#diagnosisToggleBtn'),
   cityGrid: $('#cityGrid'),
   boardOverlay: $('#boardOverlay'),
   facilityDock: $('#facilityDock'),
-
-  advisorLog: $('#advisorLog'),
-  promptChips: $('#promptChips'),
-
-  badges: $('#badges'),
-  badgeCount: $('#badgeCount'),
+  facilityDetail: $('#facilityDetail'),
+  buildConfirm: $('#buildConfirm'),
+  buildConfirmText: $('#buildConfirmText'),
+  cancelBuildBtn: $('#cancelBuildBtn'),
+  confirmBuildBtn: $('#confirmBuildBtn'),
 
   cityChart: $('#cityChart'),
 
   rightPanel: $('#rightPanel'),
   hudControls: $('#hudControls'),
   hudRail: $('#hudRail'),
-  questTracker: $('#questTracker'),
-  questLevel: $('#questLevel'),
-  questTitle: $('#questTitle'),
-  questGoal: $('#questGoal'),
-  questProgressBar: $('#questProgressBar'),
-  questReward: $('#questReward'),
-  questClaimBtn: $('#questClaimBtn'),
-  questMapBtn: $('#questMapBtn'),
+  questPanelMapBtn: $('#questPanelMapBtn'),
+  questPanelLevel: $('#questPanelLevel'),
+  questPanelTitle: $('#questPanelTitle'),
+  questPanelGoal: $('#questPanelGoal'),
+  questPanelProgressBar: $('#questPanelProgressBar'),
+  questPanelReward: $('#questPanelReward'),
+  questPanelClaimBtn: $('#questPanelClaimBtn'),
+  questPanelContextAction: $('#questPanelContextAction'),
   simTime: $('#simTime'),
   simNet: $('#simNet'),
+  simCarbonRate: $('#simCarbonRate'),
   simPower: $('#simPower'),
+  simWater: $('#simWater'),
+  simLabor: $('#simLabor'),
   simCarbon: $('#simCarbon'),
   simAlert: $('#simAlert'),
+  timeControls: $('#timeControls'),
+  storyReplayBtn: $('#storyReplayBtn'),
+  worldLightingControls: $('#worldLightingControls'),
 
   mobileBar: document.querySelector('.mobile-bar'),
   toastStack: $('#toastStack'),
-  achievementCelebration: $('#achievementCelebration'),
+  questCelebration: $('#questCelebration'),
   modal: $('#modal'),
   modalCard: $('#modalCard'),
 };
@@ -112,11 +122,11 @@ function refreshAll() {
   const isDiagnosis = gameState.stage === STAGES.DIAGNOSIS;
   els.diagnosisProgress.classList.toggle('hidden', !isDiagnosis);
   els.diagnosisHintBtn.classList.toggle('hidden', !isDiagnosis);
+  els.diagnosisToggleBtn.classList.toggle('hidden', !isDiagnosis);
   renderHud();
   renderDock();
   if (isDiagnosis) renderDiagnosisGrid();
   else renderGrid();
-  renderBadges();
   renderQuest();
   renderSimulationHud();
   updateChart();
@@ -124,10 +134,58 @@ function refreshAll() {
 
 function settleSimulationHour() {
   const result = settleHour(gameState);
+  result.research?.completed?.forEach((completion) => eventBus.emit(Events.RESEARCH_COMPLETED, completion));
+  if (result.research?.status !== 'idle') eventBus.emit(Events.RESEARCH_PROGRESS, result.research);
+  result.carbonCrisis?.warnings?.forEach((hours) => eventBus.emit(Events.CARBON_WARNING, { hours, summary: result.summary }));
+  if (result.carbonCrisis?.gameOverTransition) eventBus.emit(Events.GAME_OVER, { summary: result.summary });
   eventBus.emit(Events.SIMULATION_TICKED, result);
-  eventBus.emit(Events.SAVE_REQUESTED, {});
   refreshAll();
   return result;
+}
+
+function refreshTimeControls() {
+  els.timeControls.querySelectorAll('[data-time-scale]').forEach((button) => {
+    button.classList.toggle('active', Number(button.dataset.timeScale) === gameState.timeScale);
+  });
+}
+
+function completeFacilityPlacement(index) {
+  const result = placeFacility(index);
+  if (!result.ok) {
+    if (result.reason === 'insufficient_credits') {
+      eventBus.emit(Events.TOAST_SHOW, { title: '크레딧 부족', text: `${result.facility.name} 건설: ${formatCredits(result.facility.cost)}` });
+    } else eventBus.emit(Events.TOAST_SHOW, { title: result.message || '건설할 수 없습니다.' });
+    return;
+  }
+  eventBus.emit(Events.BOARD_PLACED, result);
+  eventBus.emit(Events.AUDIO_SFX, { name: 'place' });
+  refreshAll();
+}
+
+function forecastEconomyForGrid(grid) {
+  const coords = createHexCoordinates(gameState.boardRadius);
+  const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
+  const power = calculatePowerNetwork({
+    grid,
+    coords,
+    hour: calendar.hour,
+    tickIndex: gameState.tickIndex,
+    heatwave: gameState.climateAlert === 'extreme_heat',
+    additionalDemandByIndex: researchDemandByIndex(gameState),
+  });
+  return settleEconomy({ grid, coords, facilityPower: power.facilityPower, credits: gameState.credits });
+}
+
+function constructionRiskAt(index) {
+  const projectedGrid = gameState.grid.map((cell) => cell ? { ...cell } : null);
+  projectedGrid[index] = { type: gameState.selectedFacility, level: 1 };
+  const currentEconomy = forecastEconomyForGrid(gameState.grid);
+  const projectedEconomy = forecastEconomyForGrid(projectedGrid);
+  return {
+    currentEconomy,
+    projectedEconomy,
+    risky: projectedEconomy.netCredits < 0 && projectedEconomy.netCredits < currentEconomy.netCredits,
+  };
 }
 
 function onCellClick(index) {
@@ -145,55 +203,55 @@ function onCellClick(index) {
     });
     return;
   }
-  if (!gameState.isEditable) {
-    renderGrid();
-    eventBus.emit(Events.TOAST_SHOW, { title: '현재는 편집할 수 없습니다.' });
+  const validation = validatePlacement(gameState, gameState.selectedFacility, index);
+  if (!validation.ok) {
+    completeFacilityPlacement(index);
     return;
   }
-  const result = placeFacility(index);
-  if (!result.ok) {
-    if (result.reason === 'insufficient_credits') {
-      eventBus.emit(Events.TOAST_SHOW, { title: '크레딧 부족', text: `${result.facility.name} 건설: ${result.facility.cost}C` });
-    } else if (result.reason === 'locked') {
-      eventBus.emit(Events.TOAST_SHOW, { title: '아직 해금되지 않은 시설입니다.' });
-    }
+  const risk = constructionRiskAt(index);
+  if (risk.risky) {
+    openConstructionRiskModal({
+      facility: FACILITIES[gameState.selectedFacility],
+      currentEconomy: risk.currentEconomy,
+      projectedEconomy: risk.projectedEconomy,
+      onConfirm: () => completeFacilityPlacement(index),
+    });
     return;
   }
-  eventBus.emit(Events.AUDIO_SFX, { name: 'place' });
-  refreshAll();
-}
-
-function handleBlindBuild() {
-  const result = blindBuild();
-  if (!result.ok) {
-    const messages = {
-      grid_full: '보드가 가득 찼습니다.',
-      insufficient_credits: '크레딧이 부족합니다.',
-      wrong_stage: '지금은 사용할 수 없습니다.',
-    };
-    eventBus.emit(Events.TOAST_SHOW, { title: messages[result.reason] || '실행할 수 없습니다.' });
-    return;
-  }
-  eventBus.emit(Events.AUDIO_SFX, { name: 'place' });
-  refreshAll();
+  completeFacilityPlacement(index);
 }
 
 function handleReset() {
   openResetConfirmModal(() => {
     gameState.reset();
     clearSavedGame();
-    els.advisorLog.innerHTML =
-      '<div class="message ai"><b>AI</b><p>성장점수를 높이려면 데이터센터·공장을 우선 투자하세요. 전력시설도 필요합니다.</p></div>';
-    renderPromptChips();
     refreshAll();
     eventBus.emit(Events.TOAST_SHOW, { title: '초기화 완료', text: '처음부터 다시 시작합니다.' });
   });
 }
 
+function resetAfterGameOver() {
+  gameState.reset();
+  clearSavedGame();
+  closeModal();
+  simulationController.setTimeScale(gameState.timeScale);
+  continuousClockView?.renderNow();
+  refreshAll();
+  eventBus.emit(Events.TOAST_SHOW, { title: '새 도시 시작', text: '탄소 위기 기록을 초기화했습니다.' });
+}
+
 function bindEvents() {
-  els.blindBuildBtn.addEventListener('click', handleBlindBuild);
   els.helpBtn.addEventListener('click', openHelpModal);
   els.resetBtn.addEventListener('click', handleReset);
+  els.storyReplayBtn.addEventListener('click', () => openStory({ replay: true }));
+  els.timeControls.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-time-scale]');
+    if (!button) return;
+    gameState.timeScale = simulationController.setTimeScale(Number(button.dataset.timeScale));
+    continuousClockView?.renderNow();
+    refreshTimeControls();
+    eventBus.emit(Events.SAVE_REQUESTED, {});
+  });
 
   els.soundBtn.addEventListener('click', () => {
     eventBus.emit(Events.AUDIO_TOGGLE_MUTE, {});
@@ -213,7 +271,7 @@ function bindEvents() {
       eventBus.emit(Events.TOAST_SHOW, { title: '더 이상 힌트가 없습니다.' });
       return;
     }
-    eventBus.emit(Events.TOAST_SHOW, { title: '힌트 사용', text: '완벽 진단 배지 조건에서 제외됩니다.' });
+    eventBus.emit(Events.TOAST_SHOW, { title: '힌트 사용', text: '위험 지점 하나를 지도에 표시했습니다.' });
   });
 }
 
@@ -223,7 +281,7 @@ function simulateLoading() {
     [48, '공간 규칙 연결…'],
     [72, '시각화 로딩…'],
     [92, '미션 준비…'],
-    [100, 'AI CITY 준비 완료'],
+    [100, 'CLIMATE CITY 준비 완료'],
   ];
   steps.forEach(([p, t], i) => {
     setTimeout(() => {
@@ -238,33 +296,37 @@ function boot() {
   initModal(els.modal, els.modalCard);
   initThemeManager(els.themeBtn, refreshIcons);
   initToastView(els.toastStack);
-  initGridView(els.cityGrid, els.boardSizeChip, onCellClick);
-  initDiagnosisView(els.cityGrid, els.boardSizeChip, els.diagnosisProgress, els.diagnosisHintBtn);
-  initDockView(els.facilityDock, $('#selectedFacilitySummary'));
+  initGridView(els.cityGrid, els.boardSizeChip, onCellClick, {
+    root: els.buildConfirm,
+    text: els.buildConfirmText,
+    cancel: els.cancelBuildBtn,
+    confirm: els.confirmBuildBtn,
+  });
+  initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
+  initDiagnosisView(els.cityGrid, els.boardSizeChip, els.diagnosisProgress, els.diagnosisHintBtn, els.diagnosisToggleBtn);
+  initDockView(els.facilityDock, els.facilityDetail);
   initHudView(els, syncWorldHud);
-  initAdvisorPanel(els.advisorLog, els.promptChips, (type) => ask(type));
-  initBadgesPanel(els.badges, els.badgeCount);
   initQuestView({
-    root: els.questTracker,
-    level: els.questLevel,
-    title: els.questTitle,
-    goal: els.questGoal,
-    bar: els.questProgressBar,
-    reward: els.questReward,
-    claim: els.questClaimBtn,
-    map: els.questMapBtn,
+    root: document.querySelector('.quest-panel-current'),
+    level: els.questPanelLevel,
+    title: els.questPanelTitle,
+    goal: els.questPanelGoal,
+    bar: els.questPanelProgressBar,
+    reward: els.questPanelReward,
+    contextAction: els.questPanelContextAction,
+    claim: els.questPanelClaimBtn,
+    map: els.questPanelMapBtn,
   }, (change) => {
     refreshAll();
     if (change?.phase !== 'reward_closed') return;
-    if (change.quest.index === 4) openCrisisModal(gameState.baseline);
     if (change.quest.index === 15) openReportModal();
   });
-  initSimulationHudView({ time: els.simTime, net: els.simNet, power: els.simPower, carbon: els.simCarbon, alert: els.simAlert });
+  initSimulationHudView({ time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, water: els.simWater, labor: els.simLabor, carbon: els.simCarbon, alert: els.simAlert });
   initChartView(els.cityChart);
   initStageModals(refreshAll);
   initFeedbackBridge();
-  initAchievementCelebration(els.achievementCelebration);
-  initAchievementSystem();
+  initQuestCelebration(els.questCelebration);
+  initOnboardingView();
   eventBus.on(Events.DIAGNOSIS_TILE_FOUND, refreshAll);
   initSaveSystem();
   initAudioManager();
@@ -274,32 +336,58 @@ function boot() {
     mobileBar: els.mobileBar,
     panelHost: els.rightPanel,
     panels: [...document.querySelectorAll('[data-hud-panel]')],
-    buildTriggerSummary: $('#selectedFacilitySummary'),
     onStatusOpened: requestChartResize,
   });
   initThreeBackground(els.threeBg);
 
-  const loaded = loadSavedGame();
+  loadSavedGame();
 
-  simulationController = createSimulationController({ settle: settleSimulationHour });
-  eventBus.on(Events.MODAL_OPEN, () => simulationController.pause('modal'));
-  eventBus.on(Events.MODAL_CLOSE, () => simulationController.resume('modal'));
+  simulationController = createSimulationController({ settle: settleSimulationHour, getIntervalMs: intervalForTimeScale });
+  simulationController.setTimeScale(gameState.timeScale);
+  continuousClockView = createContinuousClockView({
+    timeElement: els.simTime,
+    getElapsedHours: () => gameState.elapsedGameHours,
+    getProgress: () => simulationController.getProgress(),
+  });
+  eventBus.on(Events.MODAL_OPEN, ({ pausesSimulation, pauseReason }) => {
+    if (pausesSimulation) {
+      simulationController.pause(pauseReason);
+      continuousClockView?.renderNow();
+    }
+  });
+  eventBus.on(Events.MODAL_CLOSE, ({ pausesSimulation, pauseReason }) => {
+    if (pausesSimulation) {
+      simulationController.resume(pauseReason);
+      continuousClockView?.renderNow();
+    }
+  });
+  eventBus.on(Events.CARBON_WARNING, ({ hours }) => {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '탄소 위기 경보',
+      text: `${hours}/168시간 · 시간당 탄소를 8 이하로 낮추세요.`,
+      priority: true,
+    });
+  });
+  eventBus.on(Events.GAME_OVER, ({ summary }) => {
+    openCarbonGameOverModal({ hourlyCarbon: summary?.hourlyCarbon, onReset: resetAfterGameOver });
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) simulationController.pause('hidden');
     else simulationController.resume('hidden');
   });
   simulationController.start();
+  continuousClockView.start();
+  if (gameState.gameOver) {
+    openCarbonGameOverModal({ hourlyCarbon: gameState.lastTickSummary?.hourlyCarbon, onReset: resetAfterGameOver });
+  }
 
   bindEvents();
-  renderPromptChips();
   refreshAll();
+  refreshTimeControls();
+  syncTutorialHighlight();
 
   simulateLoading();
-  if (!loaded) {
-    setTimeout(() => {
-      eventBus.emit(Events.TOAST_SHOW, { title: '시장 임명 완료', text: '빈 칸=건설 · 건물 터치=업그레이드/철거 · 🔗=인접 보너스' });
-    }, 1200);
-  }
+  openStory();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
@@ -311,40 +399,63 @@ window.__EVENT_BUS__ = eventBus;
 window.__EVENTS__ = Events;
 window.__getCityCameraState = () => getCityCameraState();
 window.__resetCityCamera = () => resetCityCamera();
+window.__setCityCameraOrbitForTest = (azimuth, polar) => setCityCameraOrbitForTest(azimuth, polar);
 window.__getCityAssetStatus = () => getAssetStatus();
 window.__getCityLevelVisuals = () => LEVEL_VISUALS.slice(1).map((level) => ({ ...level }));
 window.__getCityRendererStats = () => getCityRendererStats();
 window.__getWorldHudState = () => getWorldHudState();
 window.__getTheme = () => getTheme();
+window.__getWorldLightingMode = () => getWorldLightingMode();
+window.__getOnboardingState = () => getOnboardingState();
+window.__openStoryForTest = () => openStory({ replay: true });
 window.__renderCityForTest = () => renderGrid();
 window.__refreshGameForTest = () => refreshAll();
 window.__settleSimulationHour = () => settleSimulationHour();
 window.__getSimulationState = () => simulationController?.getState();
+window.__setTimeScale = (scale) => {
+  gameState.timeScale = simulationController.setTimeScale(scale);
+  continuousClockView?.renderNow();
+  refreshTimeControls();
+  refreshAll();
+  return gameState.timeScale;
+};
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
 window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVisit(greenIndex, birdCount);
 window.__finishBirdVisitForTest = () => finishBirdVisit();
 
 window.render_game_to_text = () => {
   const m = gameState.metrics;
+  const coords = createHexCoordinates(gameState.boardRadius);
+  const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
+  const visualCalendar = calendarAtElapsedHour(gameState.elapsedGameHours + (simulationController?.getProgress() || 0));
   const payload = {
-    coords: 'grid index 0..gridSize*gridSize-1, row-major, origin top-left',
-    mode: 'playing',
+    coords: 'axial pointy-top hex grid; index 0 is center; radius 2=19 cells, radius 3=37 cells',
+    mode: gameState.gameOver ? 'game_over' : 'playing',
     stage: gameState.stage,
     quest: gameState.questIndex,
     questStatus: gameState.questStatus,
-    gameTime: { day: gameState.simulationDay, hour: gameState.simulationHour },
+    gameTime: { ...calendar, label: formatCalendar(calendar), timeScale: gameState.timeScale },
+    visualGameTime: { ...visualCalendar, label: formatCalendar(visualCalendar) },
     climateAlert: gameState.climateAlert,
+    carbonCrisisHours: gameState.carbonCrisisHours,
+    carbonCrisisLimit: 168,
     turn: gameState.turn,
     credits: gameState.credits,
     devScore: m ? m.dev : 0,
     metrics: m,
-    gridSize: gameState.gridSize,
+    boardRadius: gameState.boardRadius,
     entities: gameState.grid
-      .map((cell, index) => (cell ? { index, type: cell.type, level: cell.level } : null))
+      .map((cell, index) => (cell ? { index, ...coords[index], type: cell.type, level: cell.level } : null))
       .filter(Boolean),
     selectedFacility: gameState.selectedFacility,
     selectedCell: gameState.selectedCell,
-    badges: [...gameState.badges],
+    research: {
+      jobs: gameState.research.jobs,
+      completedIds: [...gameState.research.completedIds],
+      techLevels: gameState.research.techLevels,
+      quizAccelerationBankHours: gameState.research.quizAccelerationBankHours,
+    },
+    island: getCityRendererStats().environment,
     simulation: gameState.lastTickSummary,
     netCreditsPerHour: gameState.lastTickSummary?.netCredits ?? 0,
     deliveredPower: gameState.lastTickSummary?.deliveredPower ?? 0,

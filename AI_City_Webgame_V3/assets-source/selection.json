@@ -1,0 +1,58 @@
+{
+  "models": [
+    { "id": "terrain.hexGrass", "source": "kenney-hexagon", "member": "Models/GLB format/grass.glb", "target": "environment/terrain/hex-grass.glb" },
+    { "id": "terrain.hexDirt", "source": "kenney-hexagon", "member": "Models/GLB format/dirt.glb", "target": "environment/terrain/hex-dirt.glb" },
+    { "id": "terrain.hexWater", "source": "kenney-hexagon", "member": "Models/GLB format/water.glb", "target": "environment/terrain/hex-water.glb" },
+
+    { "id": "environment.coast.dock", "source": "kenney-hexagon", "member": "Models/GLB format/building-dock.glb", "target": "environment/coast/building-dock.glb" },
+    { "id": "environment.coast.grassHill", "source": "kenney-hexagon", "member": "Models/GLB format/grass-hill.glb", "target": "environment/coast/grass-hill.glb" },
+    { "id": "environment.coast.stoneHill", "source": "kenney-hexagon", "member": "Models/GLB format/stone-hill.glb", "target": "environment/coast/stone-hill.glb" },
+    { "id": "environment.coast.forest", "source": "kenney-hexagon", "member": "Models/GLB format/grass-forest.glb", "target": "environment/coast/grass-forest.glb" },
+    { "id": "environment.water.rocks", "source": "kenney-hexagon", "member": "Models/GLB format/water-rocks.glb", "target": "environment/water/water-rocks.glb" },
+    { "id": "environment.water.island", "source": "kenney-hexagon", "member": "Models/GLB format/water-island.glb", "target": "environment/water/water-island.glb" },
+    { "id": "environment.water.ship", "source": "kenney-hexagon", "member": "Models/GLB format/unit-ship.glb", "target": "environment/water/ship.glb" },
+
+    { "id": "roads.straight", "source": "kenney-roads", "member": "Models/GLB format/road-straight.glb", "target": "roads/road-straight.glb" },
+    { "id": "roads.curve", "source": "kenney-roads", "member": "Models/GLB format/road-curve.glb", "target": "roads/road-curve.glb" },
+    { "id": "roads.tee", "source": "kenney-roads", "member": "Models/GLB format/road-intersection.glb", "target": "roads/road-tee.glb" },
+    { "id": "roads.cross", "source": "kenney-roads", "member": "Models/GLB format/road-crossroad.glb", "target": "roads/road-cross.glb" },
+    { "id": "roads.sidewalk", "source": "kenney-roads", "member": "Models/GLB format/road-side.glb", "target": "roads/sidewalk.glb" },
+
+    { "id": "residential.house1", "source": "kenney-suburban", "member": "Models/GLB format/building-type-a.glb", "target": "buildings/residential/house-01.glb" },
+    { "id": "residential.house2", "source": "kenney-suburban", "member": "Models/GLB format/building-type-b.glb", "target": "buildings/residential/house-02.glb" },
+    { "id": "residential.house3", "source": "kenney-suburban", "member": "Models/GLB format/building-type-c.glb", "target": "buildings/residential/house-03.glb" },
+    { "id": "residential.apartment1", "source": "kenney-suburban", "member": "Models/GLB format/building-type-t.glb", "target": "buildings/residential/apartment-01.glb" },
+    { "id": "residential.apartment2", "source": "kenney-suburban", "member": "Models/GLB format/building-type-u.glb", "target": "buildings/residential/apartment-02.glb" },
+
+    { "id": "commercial.shop1", "source": "kenney-commercial", "member": "Models/GLB format/building-a.glb", "target": "buildings/commercial/shop-01.glb" },
+    { "id": "commercial.shop2", "source": "kenney-commercial", "member": "Models/GLB format/building-b.glb", "target": "buildings/commercial/shop-02.glb" },
+    { "id": "commercial.medium1", "source": "kenney-commercial", "member": "Models/GLB format/building-skyscraper-a.glb", "target": "buildings/commercial/commercial-01.glb" },
+    { "id": "commercial.medium2", "source": "kenney-commercial", "member": "Models/GLB format/building-skyscraper-b.glb", "target": "buildings/commercial/commercial-02.glb" },
+
+    { "id": "industrial.factorySmall", "source": "kenney-industrial", "member": "Models/GLB format/building-a.glb", "target": "buildings/industrial/factory-small.glb" },
+    { "id": "industrial.factoryMedium", "source": "kenney-industrial", "member": "Models/GLB format/building-m.glb", "target": "buildings/industrial/factory-medium.glb" },
+    { "id": "industrial.factoryLarge", "source": "kenney-industrial", "member": "Models/GLB format/building-l.glb", "target": "buildings/industrial/factory-large.glb" },
+    { "id": "industrial.chimney", "source": "kenney-industrial", "member": "Models/GLB format/chimney-large.glb", "target": "buildings/industrial/chimney.glb" },
+    { "id": "industrial.storageTank", "source": "kenney-industrial", "member": "Models/GLB format/detail-tank.glb", "target": "buildings/industrial/storage-tank.glb" },
+
+    { "id": "energy.solarSmall", "source": "quaternius-space", "member": "Prepared/Models/GLB format/solar-small.glb", "sourceMembers": ["Original/Environment/GLTF/SolarPanel_Ground.gltf"], "target": "buildings/energy/solar-small.glb" },
+    { "id": "energy.solarLarge", "source": "quaternius-space", "member": "Prepared/Models/GLB format/solar-large.glb", "sourceMembers": ["Original/Environment/GLTF/SolarPanel_Structure.gltf"], "target": "buildings/energy/solar-large.glb" },
+    { "id": "energy.windBase", "source": "quaternius-farm", "member": "Prepared/Models/GLB format/wind-turbine.glb", "sourceMembers": ["Original/OBJ/Windmill.obj", "Original/OBJ/Windmill.mtl"], "target": "buildings/energy/wind-turbine.glb" },
+
+    { "id": "environment.tree1", "source": "kenney-nature", "member": "Models/GLTF format/tree_default.glb", "target": "environment/trees/tree-01.glb" },
+    { "id": "environment.tree2", "source": "kenney-nature", "member": "Models/GLTF format/tree_cone.glb", "target": "environment/trees/tree-02.glb" },
+    { "id": "environment.tree3", "source": "kenney-nature", "member": "Models/GLTF format/tree_oak.glb", "target": "environment/trees/tree-03.glb" },
+    { "id": "environment.tree4", "source": "kenney-nature", "member": "Models/GLTF format/tree_pineTallA.glb", "target": "environment/trees/tree-04.glb" },
+    { "id": "environment.bush1", "source": "kenney-nature", "member": "Models/GLTF format/plant_bush.glb", "target": "environment/trees/bush-01.glb" },
+    { "id": "environment.rock1", "source": "kenney-nature", "member": "Models/GLTF format/rock_largeA.glb", "target": "environment/rocks/rock-01.glb" },
+    { "id": "environment.rock2", "source": "kenney-nature", "member": "Models/GLTF format/rock_largeB.glb", "target": "environment/rocks/rock-02.glb" },
+    { "id": "environment.rock3", "source": "kenney-nature", "member": "Models/GLTF format/rock_tallA.glb", "target": "environment/rocks/rock-03.glb" },
+
+    { "id": "vehicles.car1", "source": "kenney-car", "member": "Models/GLB format/sedan.glb", "target": "vehicles/car-01.glb" },
+    { "id": "vehicles.car2", "source": "kenney-car", "member": "Models/GLB format/hatchback-sports.glb", "target": "vehicles/car-02.glb" },
+    { "id": "vehicles.truck1", "source": "kenney-car", "member": "Models/GLB format/truck.glb", "target": "vehicles/truck-01.glb" },
+
+    { "id": "people.citizen1", "source": "kenney-people", "member": "Models/GLB format/character-a.glb", "target": "people/citizen-01.glb" },
+    { "id": "people.citizen2", "source": "kenney-people", "member": "Models/GLB format/character-b.glb", "target": "people/citizen-02.glb" }
+  ]
+}

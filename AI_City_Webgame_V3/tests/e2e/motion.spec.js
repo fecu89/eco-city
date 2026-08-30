@@ -46,7 +46,8 @@ test.describe('3D city motion language', () => {
     expect(after.facilityInstances).toBe(0);
   });
 
-  test('wind and infrastructure facilities settle without continuous ambient rendering', async ({ gamePage: page }) => {
+  test('external wind base uses one pooled rotor and settles without continuous rendering', async ({ gamePage: page }) => {
+    await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.grid[0] = { type: 'wind', level: 1 };
@@ -55,8 +56,9 @@ test.describe('3D city motion language', () => {
       window.__renderCityForTest();
     });
 
-    await page.waitForFunction(() => window.__getCityRendererStats?.().ambientInstances >= 1);
+    await page.waitForFunction(() => window.__getCityRendererStats?.().windRotorCount === 1);
     const before = await page.evaluate(() => window.__getCityRendererStats());
+    expect(before.windRotorCount).toBe(1);
     await page.waitForTimeout(350);
     const after = await page.evaluate(() => window.__getCityRendererStats());
     expect(after.renderCount - before.renderCount).toBeLessThanOrEqual(1);
@@ -111,25 +113,15 @@ test.describe('3D city motion language', () => {
     expect(stats.ambientInstances).toBeGreaterThanOrEqual(5);
   });
 
-  test('game-hour phase changes update lighting without allocating scene resources', async ({ gamePage: page }) => {
+  test('fixed graphics phase changes update lighting without allocating scene resources', async ({ gamePage: page }) => {
     const before = await page.evaluate(() => window.__getCityRendererStats());
-    await page.evaluate(() => {
-      window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, {
-        power: { routes: [] },
-        summary: { hour: 19 },
-      });
-    });
+    await page.evaluate(() => window.__setWorldHourForTest(17));
     await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'dusk');
     const dusk = await page.evaluate(() => window.__getCityRendererStats());
     expect(dusk.resourceRevision).toBe(before.resourceRevision);
     expect(dusk.sunIntensity).toBeLessThan(before.sunIntensity);
 
-    await page.evaluate(() => {
-      window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, {
-        power: { routes: [] },
-        summary: { hour: 23 },
-      });
-    });
+    await page.evaluate(() => window.__setWorldHourForTest(23));
     await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'night');
     const night = await page.evaluate(() => window.__getCityRendererStats());
     expect(night.resourceRevision).toBe(before.resourceRevision);

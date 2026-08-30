@@ -1,6 +1,6 @@
 import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
-import { FACILITIES } from '../core/Constants.js';
+import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
 import { claimCurrentQuest, evaluateCurrentQuest, requestEmergencySupport } from '../systems/QuestSystem.js';
 import { markQuestQuizResult } from '../systems/QuestSystem.js';
 import {
@@ -12,34 +12,20 @@ import {
 } from '../systems/QuizSystem.js';
 import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
-import { escapeHtml } from './format.js';
-
-const GOALS = [
-  '주거지 2개를 건설하세요.',
-  '화력발전으로 모든 주거지에 2시간 전력을 공급하세요.',
-  '발전소 옆 공장을 2시간 가동하세요.',
-  '데이터센터를 2시간 가동하고 시설 5개를 완성하세요.',
-  '전력·탄소·냉각 퀴즈를 통과하세요.',
-  '탄소·냉각·송전 위험 지점 3곳을 진단하세요.',
-  '데이터센터 또는 핵발전 옆 순환냉각을 2시간 가동하세요.',
-  '재생에너지·저장장치 퀴즈를 통과하세요.',
-  '저장 허브로 재생에너지 8E를 전달하세요.',
-  '녹지 생활권을 만들고 2시간 흑자를 유지하세요.',
-  '극한 폭염 3시간 동안 주거 전력 90%를 지키세요.',
-  '야간에 저장량 5E와 전력수지 0 이상을 3시간 유지하세요.',
-  '저탄소 전력 70%와 탄소 감소를 3시간 유지하세요.',
-  '물 부담 감소와 흑자를 3시간 유지하세요.',
-  '기후시민위원회 최종 퀴즈를 통과하세요.',
-];
+import { escapeHtml, formatCredits } from './format.js';
+import { setDiagnosisScannerActive } from '../systems/DiagnosisSystem.js';
+import { eventBus, Events } from '../core/EventBus.js';
 
 let els;
 let onChanged = () => {};
-const QUIZ_KINDS = { 5: 'growth-cost', 8: 'clean-power', 15: 'climate-council' };
+const QUIZ_KINDS = { 8: 'clean-power', 15: 'climate-council' };
+const nodes = (value) => (Array.isArray(value) ? value : [value]).filter(Boolean);
+const eachNode = (value, callback) => nodes(value).forEach(callback);
 
 export function initQuestView(elements, changed) {
   els = elements;
   onChanged = changed || (() => {});
-  els.claim.addEventListener('click', () => {
+  eachNode(els.claim, (claim) => claim.addEventListener('click', () => {
     const quizKind = QUIZ_KINDS[gameState.questIndex];
     if (quizKind && gameState.questStatus !== 'ready_to_claim') {
       startQuestQuiz(gameState, quizKind);
@@ -49,21 +35,28 @@ export function initQuestView(elements, changed) {
     const completed = QUESTS[gameState.questIndex - 1];
     const result = claimCurrentQuest(gameState);
     if (!result.ok) return;
-    if (result.expandGrid) expandGrid(6);
+    if (result.expandGrid) expandGrid();
     onChanged({ phase: 'claimed', quest: completed, result });
     openRewardModal(completed, result, () => onChanged({ phase: 'reward_closed', quest: completed, result }));
-  });
-  els.map.addEventListener('click', openQuestMap);
+  }));
+  eachNode(els.contextAction, (contextAction) => contextAction.addEventListener('click', () => {
+    if (gameState.questIndex !== 6) return;
+    setDiagnosisScannerActive(!gameState.diagnosisScannerActive);
+    onChanged();
+  }));
+  const mapButtons = Array.isArray(els.map) ? els.map : [els.map];
+  mapButtons.filter(Boolean).forEach((button) => button.addEventListener('click', openQuestMap));
 }
 
 function rewardText(quest) {
   const parts = [];
-  if (quest.reward.credits) parts.push(`${quest.reward.credits}C`);
+  if (quest.reward.credits) parts.push(formatCredits(quest.reward.credits));
   if (quest.reward.unlockFacility) {
     const facilityName = FACILITIES[quest.reward.unlockFacility]?.name || quest.reward.unlockFacility;
     parts.push(`${facilityName} 해금`);
   }
-  if (quest.index === 10) parts.push('Lv.2·전력 우선순위');
+  if (quest.index === 7) parts.push('Lv.2 강화 허가');
+  if (quest.index === 10) parts.push('전력 우선순위 운영');
   if (quest.index === 13) parts.push('Lv.3');
   return `보상 ${parts.join(' · ') || '최종 성적표'}`;
 }
@@ -80,16 +73,24 @@ export function renderQuest() {
   if (!els) return;
   const evaluation = evaluateCurrentQuest(gameState);
   const quest = QUESTS[gameState.questIndex - 1];
-  els.level.textContent = `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`;
-  els.title.textContent = quest.title;
-  els.goal.textContent = GOALS[quest.index - 1];
-  els.reward.textContent = rewardText(quest);
-  els.bar.style.width = `${progressForCurrent()}%`;
-  els.claim.disabled = !evaluation.ready;
+  eachNode(els.level, (node) => { node.textContent = `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`; });
+  eachNode(els.title, (node) => { node.textContent = quest.title; });
+  eachNode(els.goal, (node) => { node.textContent = quest.goal; });
+  eachNode(els.reward, (node) => { node.textContent = rewardText(quest); });
+  eachNode(els.bar, (node) => { node.style.width = `${progressForCurrent()}%`; });
   const isQuizQuest = !!QUIZ_KINDS[gameState.questIndex];
-  els.claim.disabled = !evaluation.ready && !isQuizQuest;
-  els.claim.textContent = evaluation.ready ? '보상 받기' : isQuizQuest ? '퀴즈 시작' : '진행 중';
-  els.root.classList.toggle('quest-ready', evaluation.ready);
+  const quizPassed = Boolean(gameState.questProgress.quizPassed);
+  const canStartQuiz = isQuizQuest && !quizPassed;
+  eachNode(els.claim, (node) => {
+    node.disabled = !evaluation.ready && !canStartQuiz;
+    node.textContent = evaluation.ready ? '보상 받기' : canStartQuiz ? '퀴즈 시작' : quizPassed ? '도시 조건 진행 중' : '진행 중';
+  });
+  eachNode(els.root, (node) => node.classList.toggle('quest-ready', evaluation.ready));
+  eachNode(els.contextAction, (node) => {
+    node.classList.toggle('hidden', gameState.questIndex !== 6);
+    node.textContent = `위험 스캐너 ${gameState.diagnosisScannerActive ? '켜짐 · 표시된 칸 누르기' : '꺼짐 · 눌러서 켜기'}`;
+    node.setAttribute('aria-pressed', String(gameState.diagnosisScannerActive));
+  });
 }
 
 function renderQuestQuizModal() {
@@ -104,14 +105,19 @@ function renderQuestQuizModal() {
       <div id="questQuizExplain"></div>
     </div>
     <div class="modal-actions"><button class="btn primary" id="questQuizNext" disabled>${gameState.quizIndex === gameState.quizPool.length - 1 ? '결과 보기' : '다음'}</button></div>
-  `);
+  `, { id: 'quiz', pausesSimulation: true });
   $$modal('#questQuizOptions .quiz-option').forEach((button) => {
     button.addEventListener('click', () => {
       const result = answerQuestQuiz(gameState, Number(button.dataset.index));
       if (!result) return;
       button.classList.add(result.correct ? 'correct' : 'wrong');
       $$modal('#questQuizOptions .quiz-option')[result.correctIndex]?.classList.add('correct');
-      $modal('#questQuizExplain').innerHTML = `<div class="quiz-explain"><strong>${result.correct ? '정답' : '오답'}</strong><br>${escapeHtml(result.explain)}</div>`;
+      const accelerationText = result.acceleration
+        ? result.acceleration.appliedJobs.length
+          ? `활성 연구 ${result.acceleration.appliedJobs.length}개에서 각각 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간 단축`
+          : `연구 가속 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간 적립`
+        : '';
+      $modal('#questQuizExplain').innerHTML = `<div class="quiz-explain"><strong>${result.correct ? '정답' : '오답'}</strong><br>${escapeHtml(result.explain)}${accelerationText ? `<br><b>${escapeHtml(accelerationText)}</b>` : ''}</div>`;
       $modal('#questQuizNext').disabled = false;
     });
   });
@@ -128,7 +134,7 @@ function renderQuestQuizResultModal(result) {
     <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>통과 기준</span><strong>${result.passThreshold}/${result.total}</strong></div></div>
     <div class="callout"><strong>${result.passed ? '보상을 받을 수 있습니다.' : '도시 상태는 그대로 유지됩니다.'}</strong><p>${result.passed ? '퀘스트 카드에서 보상을 받아 다음 레벨로 이동하세요.' : '설명을 확인한 뒤 퀴즈만 다시 풀 수 있습니다.'}</p></div>
     <div class="modal-actions"><button class="btn primary" id="questQuizFinish">${result.passed ? '확인' : '다시 풀기'}</button></div>
-  `);
+  `, { id: 'quiz', pausesSimulation: true });
   $modal('#questQuizFinish').addEventListener('click', () => {
     if (!result.passed) {
       retryQuestQuiz(gameState);
@@ -149,6 +155,7 @@ function openRewardModal(quest, result, afterClose) {
   `);
   $modal('#questRewardClose').addEventListener('click', () => {
     closeModal();
+    if (result.nextQuest) eventBus.emit(Events.QUEST_STARTED, { quest: QUESTS[result.nextQuest - 1] });
     afterClose?.();
   });
 }
@@ -157,7 +164,7 @@ export function openQuestMap() {
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUEST MAP</span><h2>기후 생존 퀘스트</h2></div><button class="icon-btn" id="questMapClose">×</button></div>
     <div class="quest-map-list">${QUESTS.map((quest) => `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`).join('')}</div>
-    ${gameState.credits <= 1 ? '<button class="btn secondary full" id="emergencyCreditBtn">긴급지원 4C</button>' : ''}
+    ${gameState.credits <= 1 ? `<button class="btn secondary full" id="emergencyCreditBtn">긴급지원 ${formatCredits(4)}</button>` : ''}
   `);
   $modal('#questMapClose').addEventListener('click', closeModal);
   $modal('#emergencyCreditBtn')?.addEventListener('click', () => {

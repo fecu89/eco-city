@@ -2,7 +2,6 @@ const SFX_DEFS = {
   place: { freq: 540, duration: 0.055 },
   upgrade: { freq: 820, duration: 0.08 },
   demolish: { freq: 300, duration: 0.06 },
-  badge: { freq: 760, duration: 0.09 },
   correct: { freq: 720, duration: 0.07 },
   wrong: { freq: 220, duration: 0.09 },
   'problem-found': { freq: 260, duration: 0.07 },

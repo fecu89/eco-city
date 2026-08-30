@@ -1,5 +1,6 @@
-import { QUIZ_BANK } from '../core/Constants.js';
+import { QUIZ_BANK, RESEARCH_RULES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { accelerateResearchFromQuiz } from './ResearchSystem.js';
 
 const QUIZ_CONFIG = Object.freeze({
   'growth-cost': Object.freeze({
@@ -8,9 +9,9 @@ const QUIZ_CONFIG = Object.freeze({
     passThreshold: 2,
   }),
   'clean-power': Object.freeze({
-    ids: ['renewable-storage', 're100', 'power-balance'],
-    total: 3,
-    passThreshold: 2,
+    ids: ['renewable-storage', 'transmission-distance', 'power-balance', 'spatial-design'],
+    total: RESEARCH_RULES.QUIZ_QUESTION_COUNT,
+    passThreshold: 3,
   }),
   'climate-council': Object.freeze({
     ids: ['power-balance', 'cooling', 'renewable-storage', 'spatial-design'],
@@ -75,11 +76,17 @@ export function answerQuestQuiz(state, optionIndex) {
   state.quizAnswered = true;
   const correct = !!question.options[optionIndex]?.correct;
   if (correct) state.quizCorrect += 1;
+  const acceleration = correct ? accelerateResearchFromQuiz(state) : null;
   const result = {
     correct,
     correctIndex: question.options.findIndex((option) => option.correct),
     explain: question.explain,
+    acceleration,
   };
+  if (acceleration) {
+    eventBus.emit(Events.RESEARCH_ACCELERATED, acceleration);
+    acceleration.completed.forEach((completion) => eventBus.emit(Events.RESEARCH_COMPLETED, completion));
+  }
   eventBus.emit(Events.QUIZ_ANSWERED, result);
   return result;
 }

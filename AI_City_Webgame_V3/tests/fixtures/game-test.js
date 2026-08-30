@@ -16,6 +16,13 @@ export const test = base.extend({
       timeout: 5000,
     });
     await page.waitForTimeout(500);
+    // 대부분의 회귀 테스트는 게임 화면 자체를 검증한다. 최초 접속 스토리는 전용
+    // onboarding.spec.js에서 검증하고, 공용 fixture에서는 세 장을 정상 조작으로 넘긴다.
+    const storyNext = page.locator('#storyNext');
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      if (!await storyNext.isVisible().catch(() => false)) break;
+      await storyNext.click();
+    }
     await use(page);
   },
 });

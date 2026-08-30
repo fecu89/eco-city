@@ -1,21 +1,15 @@
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { STAGES } from '../core/Constants.js';
+import { ECONOMY_RULES, STAGES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
+import { roundCredits } from '../core/Money.js';
 
 const facilities = (state, type) => state.grid.filter((cell) => cell?.type === type);
-const POWER_PLANTS = new Set(['thermal', 'nuclear', 'solar', 'wind']);
-
-function orthogonalNeighbors(index, size) {
-  const row = Math.floor(index / size);
-  const column = index % size;
-  return [[1, 0], [-1, 0], [0, 1], [0, -1]]
-    .map(([dr, dc]) => [row + dr, column + dc])
-    .filter(([r, c]) => r >= 0 && r < size && c >= 0 && c < size)
-    .map(([r, c]) => r * size + c);
-}
+const POWER_PLANTS = new Set(['thermal', 'nuclear', 'solar', 'wind', 'tidal']);
 
 function hasAdjacent(state, index, types) {
-  return orthogonalNeighbors(index, state.gridSize).some((neighbor) => types.has(state.grid[neighbor]?.type));
+  const coords = createHexCoordinates(state.boardRadius);
+  return neighborIndices(index, coords).some((neighbor) => types.has(state.grid[neighbor]?.type));
 }
 
 export function evaluateCurrentQuest(state) {
@@ -23,6 +17,11 @@ export function evaluateCurrentQuest(state) {
   let ready = state.questStatus === 'ready_to_claim';
   if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
   if (state.questIndex === 6) ready = state.diagnosisFound.size >= 3;
+  if (state.questIndex === 8) ready = !!state.questProgress.quizPassed
+    && state.research.completedIds.has('solar2')
+    && facilities(state, 'solar').some((cell) => cell.level >= 2);
+  if (state.questIndex === 10) ready = state.research.completedIds.has('wind2')
+    && facilities(state, 'wind').some((cell) => cell.level >= 2);
   if (ready) {
     state.questStatus = 'ready_to_claim';
     if (!wasReady) eventBus.emit(Events.QUEST_READY, { quest: QUESTS[state.questIndex - 1] });
@@ -31,8 +30,7 @@ export function evaluateCurrentQuest(state) {
 }
 
 function stageForQuest(questIndex) {
-  if (questIndex <= 4) return STAGES.EXECUTION;
-  if (questIndex === 5) return STAGES.CONCEPTS;
+  if (questIndex <= 5) return STAGES.EXECUTION;
   if (questIndex === 6) return STAGES.DIAGNOSIS;
   if (questIndex <= 14) return STAGES.REDESIGN;
   return STAGES.REPORT;
@@ -44,14 +42,15 @@ export function claimCurrentQuest(state) {
   if (state.claimedQuestIds.has(quest.id)) return { ok: false, reason: 'already_claimed' };
   if (state.questStatus !== 'ready_to_claim') return { ok: false, reason: 'not_ready' };
   state.claimedQuestIds.add(quest.id);
-  state.credits = Math.round((state.credits + quest.reward.credits) * 10) / 10;
+  state.credits = roundCredits(state.credits + quest.reward.credits);
   if (quest.reward.unlockFacility) state.unlockedFacilities.add(quest.reward.unlockFacility);
   if (state.questIndex === 4) {
     state.firstCitySnapshot = state.grid.map((cell) => (cell ? { ...cell } : null));
     state.baseline = { ...(state.metrics || {}), ...(state.lastTickSummary || {}) };
   }
-  if (state.questIndex === 10) state.upgradePermitLevel = 2;
+  if (state.questIndex === 7) state.upgradePermitLevel = 2;
   if (state.questIndex === 13) state.upgradePermitLevel = 3;
+  if (state.questIndex === 4) state.researchMenuUnlocked = true;
   if (state.questIndex === 15) {
     state.campaignComplete = true;
     state.questStatus = 'claimed';
@@ -63,8 +62,8 @@ export function claimCurrentQuest(state) {
   state.questStatus = 'active';
   state.questProgress = {};
   state.stage = stageForQuest(state.questIndex);
-  if (state.questIndex === 11) state.climateAlert = 'extreme_heat';
-  if (quest.index === 11) state.climateAlert = 'normal';
+  if (state.questIndex === 12) state.climateAlert = 'extreme_heat';
+  if (quest.index === 12) state.climateAlert = 'normal';
   const result = {
     ok: true,
     credits: quest.reward.credits,
@@ -97,12 +96,19 @@ export function applySimulationQuestProgress(state, summary) {
         && item.income > 0);
       break;
     case 4:
-      condition = state.grid.filter(Boolean).length >= 5 && Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'data' && item.ratio >= 0.5);
+      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'data' && item.ratio >= 0.9);
+      break;
+    case 5:
+      condition = facilities(state, 'nuclear').length > 0
+        && summary.hourlyCarbon <= ECONOMY_RULES.CARBON_SAFE_RATE
+        && summary.netCredits > 0;
       break;
     case 7:
       condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'cooling'
-        && hasAdjacent(state, Number(index), new Set(['data', 'nuclear']))
-        && item.ratio >= 0.9);
+        && hasAdjacent(state, Number(index), new Set(['data']))
+        && item.ratio >= 0.9
+        && neighborIndices(Number(index), createHexCoordinates(state.boardRadius))
+          .some((neighbor) => state.grid[neighbor]?.type === 'data' && (summary.facilityPower?.[neighbor]?.ratio ?? 0) >= 0.9));
       break;
     case 9: {
       const delivered = (summary.routes || [])
@@ -112,30 +118,35 @@ export function applySimulationQuestProgress(state, summary) {
       condition = delivered > 0;
       break;
     }
-    case 10:
+    case 11:
       condition = summary.netCredits > 0 && state.grid.some((cell, index) => cell?.type === 'residential' && hasAdjacent(state, index, new Set(['green'])));
       break;
-    case 11: {
-      const ratios = allRatios(state, 'residential', summary);
+    case 12: {
+      const ratios = state.grid
+        .map((cell, index) => (cell && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type))
+          ? summary.facilityPower?.[index]?.ratio ?? 0
+          : null))
+        .filter((ratio) => ratio != null);
       condition = state.climateAlert === 'extreme_heat' && ratios.length > 0 && ratios.every((ratio) => ratio >= 0.9);
       break;
     }
-    case 12:
-      condition = (summary.hour ?? state.simulationHour) >= 19 && (summary.hour ?? state.simulationHour) <= 23 && summary.deliveredPower >= summary.demand && summary.batteryStored >= 5;
-      break;
     case 13:
-      condition = summary.lowCarbonPercent >= 70 && summary.hourlyCarbon < (state.baseline?.hourlyCarbon ?? Infinity);
+      condition = summary.hour >= 19 && summary.hour <= 23 && summary.deliveredPower >= summary.demand && summary.batteryStored >= 5;
       break;
     case 14:
-      condition = summary.hourlyWater < (state.baseline?.hourlyWater ?? Infinity) && summary.netCredits > 0;
+      condition = summary.lowCarbonPercent >= 70
+        && summary.hourlyWater < (state.baseline?.hourlyWater ?? Infinity)
+        && summary.netCredits > 0;
       break;
     default:
       return evaluateCurrentQuest(state);
   }
   state.questProgress.consecutiveHours = condition ? (state.questProgress.consecutiveHours || 0) + 1 : 0;
-  if ([2, 3, 4, 7, 10].includes(state.questIndex)) required = 2;
-  const ready = state.questProgress.consecutiveHours >= required
-    && (state.questIndex !== 9 || state.questProgress.hubEnergy >= 8);
+  if ([2, 3, 4, 5, 7].includes(state.questIndex)) required = 2;
+  if (state.questIndex === 14) required = 4;
+  const ready = state.questIndex === 9
+    ? state.questProgress.hubEnergy >= 8
+    : state.questProgress.consecutiveHours >= required;
   if (ready && state.questStatus !== 'ready_to_claim') {
     state.questStatus = 'ready_to_claim';
     eventBus.emit(Events.QUEST_READY, { quest: QUESTS[state.questIndex - 1] });
@@ -144,7 +155,8 @@ export function applySimulationQuestProgress(state, summary) {
 }
 
 export function markQuestQuizResult(state, passed) {
-  if (passed && [5, 8, 15].includes(state.questIndex)) state.questStatus = 'ready_to_claim';
+  if (state.questIndex === 8) state.questProgress.quizPassed = !!passed;
+  if (passed && state.questIndex === 15) state.questStatus = 'ready_to_claim';
   return evaluateCurrentQuest(state);
 }
 
@@ -153,6 +165,6 @@ export function requestEmergencySupport(state) {
   if (state.emergencySupportUsedQuestIds.has(key)) return { ok: false, reason: 'already_used' };
   if (state.credits > 1) return { ok: false, reason: 'not_eligible' };
   state.emergencySupportUsedQuestIds.add(key);
-  state.credits = Math.round((state.credits + 4) * 10) / 10;
+  state.credits = roundCredits(state.credits + 4);
   return { ok: true, credits: state.credits };
 }

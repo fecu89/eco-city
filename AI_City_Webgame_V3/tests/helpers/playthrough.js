@@ -22,6 +22,10 @@ export async function buildStarterCity(page, count = 5) {
   await openHudPanel(page, 'build');
   for (let i = 0; i < count; i++) {
     await clickCell(page, i);
+    // 반복 건설 중 과밀 운영비로 순수익이 음수가 되면 새 안전 확인창이 열린다.
+    // 이 헬퍼는 의도적으로 스타터 도시를 완성하므로 경고를 확인하고 계속 진행한다.
+    const riskyBuild = page.locator('#confirmRiskyBuild');
+    if (await riskyBuild.isVisible().catch(() => false)) await riskyBuild.click();
     await page.waitForTimeout(80);
   }
 }

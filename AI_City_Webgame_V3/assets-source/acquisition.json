@@ -1,0 +1,77 @@
+{
+  "acquiredAt": "2026-08-30",
+  "acquired": [
+    {
+      "id": "kenney-hexagon",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/hexagon-kit/fd3b63101b-1706007730/kenney_hexagon-kit.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/hexagon-kit/fd3b63101b-1706007730/kenney_hexagon-kit.zip",
+      "archive": "assets-source/archives/kenney-hexagon-kenney_hexagon-kit.zip",
+      "bytes": 2448931,
+      "sha256": "d14f7643852c4dd854c7530de8514c9eb77314fe9963636077f0de1da8901236"
+    },
+    {
+      "id": "kenney-roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/city-kit-roads/74288c9459-1787042796/kenney_city-kit-roads.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/city-kit-roads/74288c9459-1787042796/kenney_city-kit-roads.zip",
+      "archive": "assets-source/archives/kenney-roads-kenney_city-kit-roads.zip",
+      "bytes": 2849382,
+      "sha256": "22058af3d68173a7cf9bda9f0e243a8cef6bd68168c302ebc76327063849674e"
+    },
+    {
+      "id": "kenney-suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/city-kit-suburban/2c871b7af2-1745479373/kenney_city-kit-suburban_20.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/city-kit-suburban/2c871b7af2-1745479373/kenney_city-kit-suburban_20.zip",
+      "archive": "assets-source/archives/kenney-suburban-kenney_city-kit-suburban_20.zip",
+      "bytes": 3038740,
+      "sha256": "5869c35cf30b1c87bdb2d197b6d325eebadd2ef08ea27f04797e8e08d77a9a39"
+    },
+    {
+      "id": "kenney-commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/city-kit-commercial/a742d900eb-1753115042/kenney_city-kit-commercial_2.1.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/city-kit-commercial/a742d900eb-1753115042/kenney_city-kit-commercial_2.1.zip",
+      "archive": "assets-source/archives/kenney-commercial-kenney_city-kit-commercial_2.1.zip",
+      "bytes": 4096974,
+      "sha256": "f8b09b081c2bb88bcc126e2dec1cb40fd0dad7e7e591b6c26aaefe96fb35276b"
+    },
+    {
+      "id": "kenney-industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/city-kit-industrial/5fcb837741-1750838303/kenney_city-kit-industrial_1.0.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/city-kit-industrial/5fcb837741-1750838303/kenney_city-kit-industrial_1.0.zip",
+      "archive": "assets-source/archives/kenney-industrial-kenney_city-kit-industrial_1.0.zip",
+      "bytes": 3805564,
+      "sha256": "99a09ff148056678c0c3b7977ad9dbce55d2f243e06fbfc7c28642accef4dd9e"
+    },
+    {
+      "id": "kenney-nature",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip",
+      "archive": "assets-source/archives/kenney-nature-kenney_nature-kit.zip",
+      "bytes": 10537521,
+      "sha256": "fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d"
+    },
+    {
+      "id": "kenney-car",
+      "officialPage": "https://kenney.nl/assets/car-kit",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/car-kit/1a312ec241-1775131960/kenney_car-kit.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/car-kit/1a312ec241-1775131960/kenney_car-kit.zip",
+      "archive": "assets-source/archives/kenney-car-kenney_car-kit.zip",
+      "bytes": 4814237,
+      "sha256": "fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4"
+    },
+    {
+      "id": "kenney-people",
+      "officialPage": "https://kenney.nl/assets/blocky-characters",
+      "anchorUrl": "https://kenney.nl/media/pages/assets/blocky-characters/8369c0cf30-1749547469/kenney_blocky-characters_20.zip",
+      "finalUrl": "https://kenney.nl/media/pages/assets/blocky-characters/8369c0cf30-1749547469/kenney_blocky-characters_20.zip",
+      "archive": "assets-source/archives/kenney-people-kenney_blocky-characters_20.zip",
+      "bytes": 2148510,
+      "sha256": "5e123859aa0c1598342b600c6db197024a1d63eb9ec531398b310725f589887e"
+    }
+  ]
+}

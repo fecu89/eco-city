@@ -1,15 +1,14 @@
-import { GAME } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 
-// 진단은 항상 1차 도시(스냅샷, 5×5)를 대상으로 한다 — 재설계 전 원본 실수를 되짚어보는 단계이기 때문.
-function snapshotSize() {
-  return GAME.INITIAL_GRID_SIZE;
+function snapshotCoordinates(snapshot) {
+  return createHexCoordinates(snapshot.length === 37 ? 3 : 2);
 }
 
 export function problemTileIndices() {
   const snapshot = gameState.firstCitySnapshot || [];
-  const size = snapshotSize();
+  const coords = snapshotCoordinates(snapshot);
   const risks = new Map();
   snapshot.forEach((cell, i) => {
     if (!cell) return;
@@ -19,13 +18,7 @@ export function problemTileIndices() {
   });
   snapshot.forEach((cell, index) => {
     if (!cell || !['data', 'nuclear'].includes(cell.type) || risks.has(index)) return;
-    const row = Math.floor(index / size);
-    const column = index % size;
-    const hasCooling = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dr, dc]) => {
-      const r = row + dr;
-      const c = column + dc;
-      return r >= 0 && r < size && c >= 0 && c < size && snapshot[r * size + c]?.type === 'cooling';
-    });
+    const hasCooling = neighborIndices(index, coords).some((neighbor) => snapshot[neighbor]?.type === 'cooling');
     if (!hasCooling) risks.set(index, { kind: 'cooling', label: '냉각·물 사용 집중 위험' });
   });
   (gameState.baseline?.routes || []).forEach((route) => {
@@ -43,6 +36,16 @@ export function problemTileIndices() {
   return [...risks.keys()].slice(0, 3);
 }
 
+export function nextDiagnosisTarget() {
+  return problemTileIndices().find((index) => !gameState.diagnosisFound.has(index)) ?? null;
+}
+
+export function setDiagnosisScannerActive(active) {
+  gameState.diagnosisScannerActive = Boolean(active);
+  eventBus.emit(Events.SAVE_REQUESTED, {});
+  return gameState.diagnosisScannerActive;
+}
+
 export function diagnosisRiskAt(index) {
   if (!problemTileIndices().includes(index)) return null;
   const snapshot = gameState.firstCitySnapshot || [];
@@ -56,6 +59,7 @@ export function diagnosisRiskAt(index) {
 }
 
 export function scanTile(index) {
+  if (!gameState.diagnosisScannerActive) return { ok: false, reason: 'scanner_off' };
   const snapshot = gameState.firstCitySnapshot || [];
   const cell = snapshot[index];
   if (!cell) return { ok: false, reason: 'empty' };

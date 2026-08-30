@@ -1,27 +1,103 @@
 // 모든 게임 밸런스 수치는 실제 실측값이 아니라 교수학습용 상대값이다.
 
 export const STAGES = {
-  EXECUTION: 1, // 무지성 실행
-  CRISIS: 2, // 위기 직면
-  CONCEPTS: 3, // 개념 학습
-  DIAGNOSIS: 4, // 진단
-  REDESIGN: 5, // 재설계
-  REPORT: 6, // 성적표 + 보너스 라운드 (선택)
+  EXECUTION: 1,
+  CRISIS: 2,
+  CONCEPTS: 3,
+  DIAGNOSIS: 4,
+  REDESIGN: 5,
+  REPORT: 6,
 };
 
 export const GAME = {
-  INITIAL_CREDITS: 36,
-  INITIAL_GRID_SIZE: 5,
-  EXPANDED_GRID_SIZE: 6,
-  MIN_CELLS_TO_COMPLETE_STAGE1: 5,
+  INITIAL_CREDITS: 10,
   AUTOSAVE_KEY: 'ai-city-save-v1',
   AUTOSAVE_DEBOUNCE_MS: 600,
 };
 
+export const DISPLAY_UNITS = Object.freeze({
+  CREDIT: '💰',
+  CARBON: 'CO₂',
+});
+
+export const WORLD_LIGHTING_STORAGE_KEY = 'ai-city-world-lighting';
+export const WORLD_LIGHTING_MODES = Object.freeze({
+  day: Object.freeze({ id: 'day', label: '낮', hour: 12, icon: 'sun' }),
+  dusk: Object.freeze({ id: 'dusk', label: '노을', hour: 17, icon: 'cloud-sun' }),
+  night: Object.freeze({ id: 'night', label: '밤', hour: 23, icon: 'moon' }),
+});
+
+export const BOARD = Object.freeze({
+  INITIAL_RADIUS: 2,
+  EXPANDED_RADIUS: 3,
+  INITIAL_CELLS: 19,
+  EXPANDED_CELLS: 37,
+  HEX_SIZE: 0.56,
+  MAX_CELLS: 37,
+});
+
+export const HEX_TILE_VISUALS = Object.freeze({
+  cityCoverage: 1.006,
+  landCoverage: 1.006,
+  shoreCoverage: 1.012,
+  waterCoverage: 1.03,
+});
+
+export const ISLAND_LAYER_ELEVATIONS = Object.freeze({
+  land: -0.19,
+  shore: -0.12,
+  shoreWaterSupport: -0.22,
+  water: -0.12,
+  ocean: -0.16,
+  ship: -0.015,
+});
+
+export const COAST_PROP_ROTATION_OFFSETS = Object.freeze({
+  dock: -Math.PI / 2,
+});
+
 export const SIMULATION = {
-  HOUR_MS: 5000,
+  HOUR_MS: 1000,
   START_HOUR: 8,
 };
+
+export const CALENDAR = Object.freeze({
+  START_YEAR: 2040,
+  START_MONTH: 1,
+  START_DAY: 1,
+  START_HOUR: 8,
+  MS_PER_GAME_HOUR: 60 * 60 * 1000,
+});
+
+export const TIME = Object.freeze({
+  BASE_HOUR_MS: 1000,
+  ALLOWED_SCALES: Object.freeze([0, 1, 2, 4]),
+  DEFAULT_SCALE: 1,
+});
+
+export const RESEARCH_RULES = Object.freeze({
+  DATA_CENTER_SPEED: Object.freeze([0, 1, 1.25, 1.5]),
+  POWER_THRESHOLD: 0.9,
+  EXTRA_DEMAND: 2,
+  CANCEL_REFUND_RATIO: 0.5,
+  HOURS_PER_DAY: 24,
+  GAME_HOURS_PER_REAL_MINUTE: 60,
+  QUIZ_QUESTION_COUNT: 4,
+  QUIZ_ACCELERATION_HOURS: 45,
+  DURATION_HOURS: Object.freeze({
+    STANDARD: 120,
+    ADVANCED: 150,
+    CAPSTONE: 180,
+  }),
+});
+
+export const CARBON_CRISIS = Object.freeze({
+  SAFE_HOURLY: 8,
+  GAME_OVER_HOURS: 168,
+  RECOVERY_PER_SAFE_HOUR: 2,
+  WARNING_HOURS: Object.freeze([24, 72, 144]),
+  ACTIVE_AFTER_QUEST: 5,
+});
 
 export const POWER_RULES = {
   LOSS_PER_EXTRA_TILE: 0.06,
@@ -46,6 +122,7 @@ export const FACILITY_ECONOMY = {
   battery: { income: 0, upkeep: 0.2 },
   cooling: { income: 0, upkeep: 0.2 },
   green: { income: 0, upkeep: 0.1 },
+  tidal: { income: 0, upkeep: 0.3 },
 };
 
 export const WORKFORCE_LEVELS = {
@@ -79,6 +156,8 @@ export const CITY_CAMERA = {
   DAMPING_FACTOR: 0.075,
   PAN_MARGIN: 0.75,
   DRAG_THRESHOLD_PX: 7,
+  GROUND_PLANE_SIZE: 18,
+  GROUND_PLANE_OFFSET: [2.25, 2.8],
 };
 
 export const CITY_MOTION = {
@@ -89,7 +168,7 @@ export const CITY_MOTION = {
 };
 
 export const CITY_AMBIENT = {
-  ENERGY_SOURCES: ['thermal', 'nuclear', 'solar', 'wind'],
+  ENERGY_SOURCES: ['thermal', 'nuclear', 'solar', 'wind', 'tidal'],
   MAX_NEIGHBORS_PER_CELL: 4,
   RESIDENT_AGENTS_PER_CELL: 2,
   ENERGY_LINE_HEIGHT: 0.24,
@@ -115,8 +194,8 @@ export const CITY_AMBIENT = {
 };
 
 export const UI_FEEDBACK = {
-  ACHIEVEMENT_CELEBRATION_MS: 3200,
-  ACHIEVEMENT_BURST_PARTICLES: 12,
+  QUEST_CELEBRATION_MS: 3200,
+  QUEST_BURST_PARTICLES: 12,
 };
 
 export const THEME_STORAGE_KEY = 'ai-city-theme';
@@ -149,29 +228,49 @@ export const THEME_SCHEMAS = {
   },
 };
 
-export const CITY_ASSET_ROOT = '/assets/city-kit/';
-
 export const CITY_ASSETS = {
-  residential: { model: 'building-a.glb', height: 0.68 },
-  factory: { model: 'building-m.glb', height: 0.66 },
-  data: { model: 'building-d.glb', height: 0.82 },
-  thermal: { model: 'building-l.glb', height: 0.78 },
-  nuclear: { model: 'building-b.glb', supplement: 'chimney-large.glb', height: 0.72, supplementHeight: 0.66, supplementFootprint: 0.25 },
-  solar: { model: 'building-q.glb', height: 0.55 },
-  wind: { model: 'building-g.glb', height: 0.62 },
-  battery: { model: 'building-r.glb', height: 0.58 },
-  cooling: { model: 'building-c.glb', supplement: 'detail-tank.glb', height: 0.6, supplementHeight: 0.24, supplementFootprint: 0.28 },
-  green: { model: 'building-p.glb', height: 0.5 },
+  residential: { height: 0.68 },
+  factory: { height: 0.66 },
+  data: { height: 0.82 },
+  thermal: { height: 0.78 },
+  nuclear: { height: 0.72 },
+  solar: { height: 0.55 },
+  wind: { height: 0.62 },
+  battery: { height: 0.58 },
+  cooling: { height: 0.6 },
+  green: { height: 0.5 },
+  tidal: { height: 0.58 },
 };
 
 export const CITY_ASSET_FOOTPRINT = 0.68;
 
 export const LEVEL_VISUALS = [
   null,
-  { color: 0xb7bdc9, scale: 0.86, segments: 1, palette: 'variation-c' },
-  { color: 0x739fe8, scale: 1, segments: 2, palette: 'colormap' },
-  { color: 0xf0a06f, scale: 1.13, segments: 3, palette: 'variation-a' },
+  { color: 0xc7d2df, scale: 0.84, segments: 1, palette: 'variation-c' },
+  { color: 0xb8d4ff, scale: 1, segments: 2, palette: 'colormap' },
+  { color: 0xffd28a, scale: 1.18, segments: 3, palette: 'variation-a' },
 ];
+
+// 진단 상태는 타일 테두리로, 시설의 정체성과 레벨은 본체 색상·크기로 구분한다.
+// 각 배열은 [미사용, Lv.1, Lv.2, Lv.3] 순서다.
+export const FACILITY_LEVEL_COLORS = Object.freeze({
+  residential: Object.freeze([null, 0xc97963, 0xe99a72, 0xffbf8a]),
+  factory: Object.freeze([null, 0x9c633d, 0xc77942, 0xeea052]),
+  data: Object.freeze([null, 0x386998, 0x4b8fc7, 0x72b8e8]),
+  thermal: Object.freeze([null, 0x8e493f, 0xba5b45, 0xe17b55]),
+  nuclear: Object.freeze([null, 0x675196, 0x8569ba, 0xab91dd]),
+  solar: Object.freeze([null, 0xb88b24, 0xe2b733, 0xffdc59]),
+  wind: Object.freeze([null, 0x347c75, 0x48a99b, 0x70d3bf]),
+  battery: Object.freeze([null, 0x3f7450, 0x55a56b, 0x78ca87]),
+  cooling: Object.freeze([null, 0x438397, 0x5eabc4, 0x88d6e8]),
+  green: Object.freeze([null, 0x397640, 0x51a252, 0x76c86a]),
+  tidal: Object.freeze([null, 0x2d718f, 0x3d9fbe, 0x66cce0]),
+});
+
+export function facilityColorFor(type, level = 1) {
+  const palette = FACILITY_LEVEL_COLORS[type] || FACILITY_LEVEL_COLORS.residential;
+  return palette[level] || palette[1];
+}
 
 export const CITY_FALLBACK_PARTS = {
   residential: [
@@ -220,6 +319,11 @@ export const CITY_FALLBACK_PARTS = {
     { shape: 'cylinder', scale: [0.035, 0.15, 0.035], position: [0.14, 0.075, 0.08] },
     { shape: 'coneRound', scale: [0.17, 0.26, 0.17], position: [0.14, 0.28, 0.08] },
   ],
+  tidal: [
+    { shape: 'cylinder', scale: [0.55, 0.18, 0.55], position: [0, 0.09, 0] },
+    { shape: 'box', scale: [0.62, 0.08, 0.22], position: [0, 0.24, 0] },
+    { shape: 'cylinder', scale: [0.1, 0.32, 0.1], position: [0, 0.42, 0] },
+  ],
 };
 
 // 레벨(1~3)별 배율. 인덱스 0은 미사용.
@@ -233,7 +337,7 @@ export const LEVEL_MULTIPLIERS = {
 export const FACILITIES = {
   residential: { name: '주거지', icon: '🏢', cost: 2, dev: 5, demand: 2, supply: 0, carbon: 0, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '🌳 인접 시 생활권 +4' },
   factory: { name: '공장', icon: '🏭', cost: 4, dev: 2, demand: 4, supply: 0, carbon: 2, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '⚡ 발전소 인접 시 생산 +7' },
-  data: { name: '데이터센터', icon: '🖥️', cost: 6, dev: 10, demand: 8, supply: 0, carbon: 0, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '💧 냉각시설 인접 시 AI산업 +10' },
+  data: { name: '데이터센터', icon: '🖥️', cost: 6, dev: 10, demand: 8, supply: 0, carbon: 0, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '연구 수행 · 순환냉각 인접 시 물 부담 감소' },
   thermal: { name: '화력발전', icon: '🔥', cost: 5, dev: 3, demand: 0, supply: 13, carbon: 8, water: 2, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '전력↑ · 탄소 부담 큼' },
   nuclear: { name: '핵발전', icon: '⚛️', cost: 8, dev: 3, demand: 0, supply: 19, carbon: 1, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '💧 냉각시설 인접 시 물부담↓' },
   solar: { name: '태양광', icon: '☀️', cost: 5, dev: 3, demand: 0, supply: 7, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '🔋 저장장치 인접 시 안정공급' },
@@ -241,19 +345,8 @@ export const FACILITIES = {
   battery: { name: '에너지저장', icon: '🔋', cost: 4, dev: 2, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '☀️🌬️ 인접 재생에너지 안정화' },
   cooling: { name: '순환냉각', icon: '💧', cost: 4, dev: 1, demand: 1, supply: 0, carbon: 0, water: -5, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '🖥️/⚛️ 인접 시 추가 효과' },
   green: { name: '녹지', icon: '🌳', cost: 2, dev: 1, demand: 0, supply: 0, carbon: -1, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 1, desc: '🏢 주거 인접 시 생활권 +4' },
+  tidal: { name: '조력발전', icon: '🌊', cost: 7, dev: 3, demand: 0, supply: 10, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, placement: 'outer_ring', desc: '외곽 육각에서 일정한 저탄소 전력을 공급' },
 };
-
-export const BADGES = [
-  { id: 'builder', icon: '🏗️', name: '첫 도시' },
-  { id: 'crisis', icon: '🚨', name: '위기 발견' },
-  { id: 'scholar', icon: '🧠', name: '개념 해금' },
-  { id: 'diagnosis', icon: '🔍', name: '완벽 진단' },
-  { id: 'expansion', icon: '🗺️', name: '영토 확장' },
-  { id: 'synergy', icon: '🔗', name: '인접 설계' },
-  { id: 'upgrade', icon: '⬆️', name: 'Lv.2 달성' },
-  { id: 'low-carbon', icon: '🌍', name: '저탄소 전환' },
-  { id: 'mayor', icon: '🏅', name: '주체적 시장' },
-];
 
 export const QUIZ_BANK = [
   {
@@ -290,34 +383,22 @@ export const QUIZ_BANK = [
     options: () => [
       { text: '서버 연산에서 발생한 열을 제거하는 냉각 과정이 필요하기 때문', correct: true },
       { text: '데이터센터가 전기를 생산하기 때문', correct: false },
-      { text: 'AI가 물을 연산 매체로 사용하기 때문', correct: false },
+      { text: '서버가 물을 연산 매체로 직접 사용하기 때문', correct: false },
       { text: '냉각은 전력 사용과 무관하기 때문', correct: false },
     ],
-    explain: 'AI 사용 → 연산 → 서버 발열 → 냉각이라는 물리적 연결을 모델링합니다.',
+    explain: '서비스 연산 → 서버 발열 → 냉각이라는 물리적 연결을 모델링합니다.',
   },
   {
-    id: 'verification-question',
-    title: '검증형 AI 질문',
-    prompt: () => '지식으로 도시를 재설계하는 단계에서 가장 좋은 AI 질문은?',
+    id: 'transmission-distance',
+    title: '송전 거리',
+    prompt: () => '발전소와 소비 시설 사이가 멀어질 때 이 게임에서 생기는 변화는?',
     options: () => [
-      { text: '전력수지≥0, 탄소·물 감소, 인접 보너스 2개 이상을 만족하는 재설계안을 장단점과 함께 제시해줘.', correct: true },
-      { text: '점수가 제일 높은 도시를 만들어줘.', correct: false },
-      { text: '네가 알아서 좋은 도시를 만들어줘.', correct: false },
-      { text: '이전 도시의 답을 그대로 반복해줘.', correct: false },
+      { text: '육각 거리만큼 송전 손실이 커져 실제 도달 전력이 줄어든다.', correct: true },
+      { text: '발전량 자체가 자동으로 늘어난다.', correct: false },
+      { text: '유지비가 언제나 0이 된다.', correct: false },
+      { text: '저장장치 용량이 거리만큼 커진다.', correct: false },
     ],
-    explain: '사람이 과학 개념으로 조건을 만들고 AI 답을 검증하는 것이 핵심입니다.',
-  },
-  {
-    id: 're100',
-    title: 'RE100',
-    prompt: () => '학습 키워드로 제시된 "RE100"에 대한 설명으로 가장 적절한 것은?',
-    options: () => [
-      { text: '기업이 사용하는 전력 100%를 태양광·풍력 등 재생에너지로 충당하겠다는 국제적 자발적 캠페인이다.', correct: true },
-      { text: '정부가 원자력 발전 비중을 100%로 늘리는 정책이다.', correct: false },
-      { text: '데이터센터의 냉각 효율을 100%로 만드는 기술 표준이다.', correct: false },
-      { text: 'AI 기업이 생성한 기사를 100% 검증하는 절차다.', correct: false },
-    ],
-    explain: '데이터센터를 많이 쓰는 글로벌 IT 기업들이 RE100에 참여하는 이유도 AI/데이터센터의 막대한 전력 수요와 관련이 있습니다.',
+    explain: '전력은 멀리 보낼수록 손실이 생깁니다. 저장 허브를 소비지 가까이에 두면 손실을 줄일 수 있습니다.',
   },
   {
     id: 'renewable-storage',
@@ -333,38 +414,8 @@ export const QUIZ_BANK = [
   },
 ];
 
-export const ADVISOR_ANSWERS = {
-  score: [
-    '초반에는 데이터센터·공장으로 성장점수를 확보하세요. 같은 시설이라도 Lv.2가 되면 더 강해집니다.',
-    '점수만 보면 고성장 시설이 유리합니다. 건물을 다시 눌러 업그레이드할 수 있습니다.',
-  ],
-  placement: [
-    '공장은 발전소 옆, 데이터센터는 순환냉각 옆에서 보너스를 얻습니다. 주거지와 공장·화력은 붙이지 않는 편이 좋습니다.',
-    '태양광·풍력을 저장장치 옆에 두면 신뢰가능 전력이 높아집니다.',
-  ],
-  power: [
-    '전력수지는 공급−수요입니다. 데이터센터·공장 업그레이드는 수요도 함께 키웁니다.',
-    '재생에너지는 저장장치와 인접할 때 변동성 패널티가 크게 줄어듭니다.',
-  ],
-  rethink: [
-    "이번에는 점수만 묻지 말고 '전력수지≥0, 탄소·물 감소, 인접 보너스 2개'를 조건으로 대안을 검토하세요.",
-    '시설을 없애거나 강화하는 선택도 재설계입니다. 무엇을 왜 바꿨는지 근거를 남기세요.',
-  ],
-};
-
-export const ADVISOR_PROMPT_LABELS = {
-  score: '점수 전략?',
-  placement: '배치 전략?',
-  power: '전력 전략?',
-  rethink: '재설계 전략?',
-};
-
-// 1단계: "AI 말대로 짓기" 원클릭 제안 — 항상 성장점수 관점의 정답(데이터센터 > 공장 > 주거지)만 제시해
-// "AI는 점수 올리는 법만 알려주고 숨은 비용은 알려주지 않는다"는 지도안의 핵심 함정을 재현한다.
-export const AI_BLIND_SUGGESTION_ORDER = ['data', 'factory', 'residential', 'thermal', 'nuclear'];
-
 export const REPORT_TIERS = [
   { min: 85, icon: '🏆', title: '그린시티 마스터' },
-  { min: 70, icon: '🥇', title: '검증형 시장' },
-  { min: 0, icon: '🧭', title: '성찰형 시장' },
+  { min: 70, icon: '🥇', title: '저탄소 도시 설계자' },
+  { min: 0, icon: '🧭', title: '기후 적응 운영자' },
 ];

@@ -1,37 +1,44 @@
 import * as THREE from 'three';
 import {
+  BOARD,
   CITY_AMBIENT,
   CITY_ASSETS,
   CITY_CAMERA,
   CITY_MOTION,
+  facilityColorFor,
+  HEX_TILE_VISUALS,
   LEVEL_VISUALS,
   THEME_SCHEMAS,
 } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { assetLoader } from '../assets/AssetLoader.js';
 import {
   getCityNeutralTexture,
   getFacilityGeometry,
+  getFacilityMaterial,
   getSupplementGeometry,
   initCityAssets,
 } from '../level/CityAssetLoader.js';
 import { createCameraController } from '../systems/CameraController.js';
 import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
-import { getWorldPhase } from '../systems/ClimateSystem.js';
+import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
+import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
+import { createCityEnvironment3D } from './CityEnvironment3D.js';
 
 // 모든 레이어는 씬 수명 동안 유지된다. 상태 갱신은 instance matrix/color/count만 바꾸므로
 // 시설 선택 미리보기나 연속 배치 때 WebGL 버퍼를 생성·삭제하지 않는다.
-const MAX_CELLS = 36;
-const TILE_SIZE = 0.88;
+const MAX_CELLS = BOARD.EXPANDED_CELLS;
 const TILE_BASE_COLOR = 0x0d1f31;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
 const SUPPLEMENT_TYPES = FACILITY_TYPES.filter((type) => CITY_ASSETS[type].supplement);
 const ENERGY_SOURCE_TYPES = new Set(CITY_AMBIENT.ENERGY_SOURCES);
-const RENEWABLE_SOURCE_TYPES = new Set(['solar', 'wind']);
+const RENEWABLE_SOURCE_TYPES = new Set(['solar', 'wind', 'tidal']);
 const MAX_ENERGY_LINKS = MAX_CELLS * CITY_AMBIENT.MAX_NEIGHBORS_PER_CELL;
 const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
   + 3
 );
+const MAX_BUILDING_LIGHTS = MAX_CELLS * 3;
 const BIRD_POOL_SIZE = 3;
 
 const TILE_COLORS = {
@@ -67,7 +74,8 @@ let cameraHintEl;
 let cameraResetEl;
 let resizeObserver;
 let cameraInteractionReady = false;
-let currentSize = 5;
+let currentRadius = BOARD.INITIAL_RADIUS;
+let currentCoords = createHexCoordinates(currentRadius);
 let currentConfigs = [];
 let onCellClickCb = () => {};
 let raycaster;
@@ -87,24 +95,28 @@ let birdCount = 0;
 let birdPoolStart = 0;
 let birdVisit = null;
 let birdVisitController = null;
+let cityEnvironment = null;
+let ghostMesh;
+let ghostMaterial;
+let hoveredPreviewIndex = -1;
+let buildPreviewMode = { enabled: false, type: null, candidateIndex: null };
+let currentWorldHour = 8;
+let currentSkyState = getSkyState(currentWorldHour);
+let visualHourOverride = null;
 
-let groundMesh;
 let tileMesh;
-let pedestalMesh;
 let stateRingMesh;
-let linkMarkerMesh;
 let windRotorMesh;
 let energyLines;
 let energyLinePositions;
 let energyLineColors;
 let ambientAgentMesh;
+let buildingLightMesh;
+let buildingLightMaterial;
 let energyLineMaterial;
 let facilityMaterial;
 let tileMaterial;
-let pedestalMaterial;
 let stateRingMaterial;
-let linkMarkerMaterial;
-let groundMaterial;
 let hemisphereLight;
 let sunLight;
 let rimLight;
@@ -124,8 +136,7 @@ function applyWorldTheme({ theme, schema } = {}) {
   currentTheme = THEME_SCHEMAS[theme] ? theme : document.documentElement.dataset.theme || 'dark';
   const activeSchema = schema || THEME_SCHEMAS[currentTheme] || THEME_SCHEMAS.dark;
   const world = activeSchema.world;
-  renderer?.setClearColor(world.clear, 1);
-  groundMaterial?.color.setHex(world.ground);
+  renderer?.setClearColor(currentSkyState.bottomColor, 0);
   TILE_COLORS.base.setHex(world.tile);
   TILE_COLORS.selected.setHex(world.selectedTile);
   if (hemisphereLight) {
@@ -133,16 +144,17 @@ function applyWorldTheme({ theme, schema } = {}) {
     hemisphereLight.groundColor.setHex(world.hemisphereGround);
   }
   rimLight?.color.setHex(world.rim);
-  applyWorldPhase(worldPhase, true);
-  if (tileMesh && currentConfigs.length) updateTileInstances(currentConfigs, currentSize);
+  cityEnvironment?.setTheme(currentTheme);
+  applyWorldHour(currentWorldHour, true);
+  if (tileMesh && currentConfigs.length) updateTileInstances(currentConfigs, currentCoords);
   needsRender = true;
 }
 
 const WORLD_LIGHTING = Object.freeze({
-  dawn: { sun: 0.78, hemisphere: 0.92, rim: 0.38, sunColor: 0xffcf9c },
-  day: { sun: 1.35, hemisphere: 1.15, rim: 0.28, sunColor: 0xffffff },
-  dusk: { sun: 0.42, hemisphere: 0.68, rim: 0.48, sunColor: 0xff9d78 },
-  night: { sun: 0.12, hemisphere: 0.42, rim: 0.58, sunColor: 0x8db6ff },
+  dawn: { sun: 0.92, hemisphere: 0.94, rim: 0.4, sunColor: 0xffc89d },
+  day: { sun: 1.22, hemisphere: 1.08, rim: 0.3, sunColor: 0xffffff },
+  dusk: { sun: 0.86, hemisphere: 0.9, rim: 0.48, sunColor: 0xffaa83 },
+  night: { sun: 0.34, hemisphere: 0.7, rim: 0.64, sunColor: 0x9fbdff },
 });
 
 function applyWorldPhase(nextPhase, force = false) {
@@ -157,6 +169,35 @@ function applyWorldPhase(nextPhase, force = false) {
   if (rimLight) rimLight.intensity = lighting.rim;
   needsRender = true;
   return true;
+}
+
+function cssHex(color) {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+function paintSky(state) {
+  if (!canvasEl) return;
+  canvasEl.style.background = `linear-gradient(${cssHex(state.topColor)} 0%, ${cssHex(state.bottomColor)} 34%, ${cssHex(state.bottomColor)} 100%)`;
+}
+
+export function applyWorldHour(hour, force = false) {
+  const next = getSkyState(hour);
+  if (!force && currentWorldHour === next.hour) return false;
+  currentWorldHour = next.hour;
+  currentSkyState = next;
+  renderer?.setClearColor(next.bottomColor, 0);
+  paintSky(next);
+  applyWorldPhase(next.phase, force);
+  updateBuildingLightInstances();
+  needsRender = true;
+  return true;
+}
+
+// 연속 시계는 DOM 하늘 그라데이션만 갱신한다. Three.js 조명과 창문은 정수 시간 정산 때만 갱신한다.
+export function setVisualWorldHour(hour) {
+  if (visualHourOverride != null) return currentSkyState;
+  applyWorldHour(hour, true);
+  return currentSkyState;
 }
 
 function ownGeometry(geometry) {
@@ -282,14 +323,17 @@ function createCornerMarkerGeometry() {
 }
 
 function createSceneLayers() {
-  groundMaterial = ownMaterial(new THREE.MeshStandardMaterial({ color: 0x030b15, roughness: 1 }));
-  groundMesh = new THREE.Mesh(ownGeometry(new THREE.PlaneGeometry(60, 60)), groundMaterial);
-  groundMesh.rotation.x = -Math.PI / 2;
-  groundMesh.position.y = -0.2;
-  scene.add(groundMesh);
-
   tileMaterial = ownMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.05 }));
-  tileMesh = makeInstancedMesh(ownGeometry(new THREE.BoxGeometry(TILE_SIZE, 0.12, TILE_SIZE)), tileMaterial, MAX_CELLS);
+  tileMesh = makeInstancedMesh(
+    ownGeometry(new THREE.CylinderGeometry(
+      BOARD.HEX_SIZE * HEX_TILE_VISUALS.cityCoverage,
+      BOARD.HEX_SIZE * HEX_TILE_VISUALS.cityCoverage,
+      0.12,
+      6,
+    )),
+    tileMaterial,
+    MAX_CELLS,
+  );
   tileMesh.name = 'city-tiles';
 
   facilityMaterial = ownMaterial(new THREE.MeshStandardMaterial({
@@ -303,16 +347,28 @@ function createSceneLayers() {
     facilityMeshes.set(type, mesh);
   });
 
+  ghostMaterial = ownMaterial(new THREE.MeshStandardMaterial({
+    color: 0x71f5b4,
+    emissive: 0x71f5b4,
+    emissiveIntensity: 0.32,
+    roughness: 0.52,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+  }));
+  ghostMesh = new THREE.Mesh(getFacilityGeometry(FACILITY_TYPES[0]), ghostMaterial);
+  ghostMesh.name = 'facility-build-ghost';
+  ghostMesh.visible = false;
+  ghostMesh.renderOrder = 8;
+  scene.add(ghostMesh);
+
   const supplementPlaceholder = ownGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 10));
   SUPPLEMENT_TYPES.forEach((type) => {
     const mesh = makeInstancedMesh(supplementPlaceholder, facilityMaterial, MAX_CELLS);
     mesh.name = `facility-${type}-supplement`;
     supplementMeshes.set(type, mesh);
   });
-
-  pedestalMaterial = ownMaterial(new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  pedestalMesh = makeInstancedMesh(ownGeometry(new THREE.BoxGeometry(1, 1, 1)), pedestalMaterial, MAX_CELLS * 3);
-  pedestalMesh.name = 'level-segments';
 
   stateRingMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xffffff,
@@ -327,19 +383,6 @@ function createSceneLayers() {
   );
   stateRingMesh.name = 'cell-state-rings';
 
-  linkMarkerMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.24,
-    roughness: 0.3,
-  }));
-  linkMarkerMesh = makeInstancedMesh(
-    ownGeometry(new THREE.IcosahedronGeometry(0.1, 0)),
-    linkMarkerMaterial,
-    MAX_CELLS,
-  );
-  linkMarkerMesh.name = 'link-markers';
-
   const rotorMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xd8f7ff,
     side: THREE.DoubleSide,
@@ -348,6 +391,19 @@ function createSceneLayers() {
   }));
   windRotorMesh = makeInstancedMesh(ownGeometry(createRotorGeometry()), rotorMaterial, MAX_CELLS);
   windRotorMesh.name = 'wind-rotors';
+
+  buildingLightMaterial = ownMaterial(new THREE.MeshBasicMaterial({
+    color: 0xffdf8a,
+    transparent: true,
+    opacity: 0.88,
+    depthWrite: false,
+  }));
+  buildingLightMesh = makeInstancedMesh(
+    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    buildingLightMaterial,
+    MAX_BUILDING_LIGHTS,
+  );
+  buildingLightMesh.name = 'building-window-lights';
 
   energyLinePositions = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
   energyLineColors = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
@@ -386,11 +442,10 @@ function prewarmGpuBuffers() {
     tileMesh,
     ...facilityMeshes.values(),
     ...supplementMeshes.values(),
-    pedestalMesh,
     stateRingMesh,
-    linkMarkerMesh,
     windRotorMesh,
     ambientAgentMesh,
+    buildingLightMesh,
   ];
   instanceLayers.forEach((mesh) => {
     setInstance(mesh, 0, 100, 100, 100, 0.001);
@@ -415,7 +470,23 @@ function prewarmGpuBuffers() {
 
 function refreshLoadedAssets() {
   FACILITY_TYPES.forEach((type) => {
-    facilityMeshes.get(type).geometry = getFacilityGeometry(type);
+    const mesh = facilityMeshes.get(type);
+    mesh.geometry = getFacilityGeometry(type);
+    const material = getFacilityMaterial(type);
+    if (material) {
+      const runtimeMaterial = material.clone();
+      if (runtimeMaterial.userData?.paletteBlackLift) {
+        // 512px 공용 팔레트의 순검정 구획은 작은 도시 카메라에서 모델 파편처럼 보인다.
+        // geometry는 그대로 사용하고 레벨별 instanceColor로 읽히도록 시설 렌더에서만 atlas를 뺀다.
+        runtimeMaterial.map = null;
+        runtimeMaterial.color.setHex(0xffffff);
+        runtimeMaterial.emissive.setHex(0x111a22);
+        runtimeMaterial.emissiveIntensity = 0.16;
+        runtimeMaterial.userData.facilityPaletteMode = 'level-solid';
+        runtimeMaterial.needsUpdate = true;
+      }
+      mesh.material = ownMaterial(runtimeMaterial);
+    }
   });
   SUPPLEMENT_TYPES.forEach((type) => {
     const geometry = getSupplementGeometry(type);
@@ -427,7 +498,9 @@ function refreshLoadedAssets() {
     facilityMaterial.needsUpdate = true;
   }
   resourceRevision++;
-  updateInstances(currentConfigs, currentSize);
+  updateInstances(currentConfigs, currentCoords);
+  updateStaticAmbientInstances();
+  syncBuildGhost();
   needsRender = true;
 }
 
@@ -443,6 +516,7 @@ function tileColorFor(config) {
 }
 
 function markerColorFor(config) {
+  if (config.diagnosisTarget) return MARKER_COLORS.selected;
   if (config.previewBad || config.diagnosisState === 'problem') return MARKER_COLORS.problem;
   if (config.previewGood || config.newLand || config.diagnosisState === 'ok') return MARKER_COLORS.good;
   if (config.diagnosisState === 'unknown') return MARKER_COLORS.unknown;
@@ -450,12 +524,9 @@ function markerColorFor(config) {
   return null;
 }
 
-function worldX(index, size) {
-  return index % size - (size - 1) / 2;
-}
-
-function worldZ(index, size) {
-  return Math.floor(index / size) - (size - 1) / 2;
+function worldPosition(index, coordinates = currentCoords) {
+  const coord = coordinates[index];
+  return coord ? axialToWorld(coord, BOARD.HEX_SIZE) : { x: 0, z: 0 };
 }
 
 function rebuildAmbientTopology() {
@@ -504,12 +575,14 @@ function applyPowerRoutes(routes = []) {
 
   energyLinks.forEach((link, linkIndex) => {
     const offset = linkIndex * 6;
-    energyLinePositions[offset] = worldX(link.sourceIndex, currentSize);
+    const sourcePosition = worldPosition(link.sourceIndex);
+    const targetPosition = worldPosition(link.targetIndex);
+    energyLinePositions[offset] = sourcePosition.x;
     energyLinePositions[offset + 1] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
-    energyLinePositions[offset + 2] = worldZ(link.sourceIndex, currentSize);
-    energyLinePositions[offset + 3] = worldX(link.targetIndex, currentSize);
+    energyLinePositions[offset + 2] = sourcePosition.z;
+    energyLinePositions[offset + 3] = targetPosition.x;
     energyLinePositions[offset + 4] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
-    energyLinePositions[offset + 5] = worldZ(link.targetIndex, currentSize);
+    energyLinePositions[offset + 5] = targetPosition.z;
     _color.setHex(link.color);
     for (let vertexOffset = 0; vertexOffset < 2; vertexOffset++) {
       const colorOffset = offset + vertexOffset * 3;
@@ -530,31 +603,31 @@ function applyPowerRoutes(routes = []) {
 function handleSimulationTick(payload) {
   currentPowerRoutes = Array.isArray(payload?.power?.routes) ? payload.power.routes.map((route) => ({ ...route })) : [];
   applyPowerRoutes(currentPowerRoutes);
-  applyWorldPhase(getWorldPhase(payload?.summary?.hour ?? 12));
 }
 
 function updateStaticAmbientInstances() {
   const windIndices = typeCellIndices.get('wind');
-  windIndices.forEach((cellIndex, instanceIndex) => {
+  const rotorIndices = windIndices;
+  rotorIndices.forEach((cellIndex, instanceIndex) => {
     const config = visualConfigAt(currentConfigs, cellIndex);
     const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
+    const position = worldPosition(cellIndex);
     setRotatedInstance(
       windRotorMesh,
       instanceIndex,
-      worldX(cellIndex, currentSize),
+      position.x,
       0.78 * level.scale,
-      worldZ(cellIndex, currentSize) + 0.015,
+      position.z + 0.015,
       level.scale,
       cellIndex * 0.23,
     );
-    windRotorMesh.setColorAt(instanceIndex, _color.setHex(level.color).lerp(MARKER_COLORS.good, 0.45));
+    windRotorMesh.setColorAt(instanceIndex, _color.setHex(facilityColorFor('wind', config.level)).lerp(MARKER_COLORS.good, 0.35));
   });
-  finishInstances(windRotorMesh, windIndices.length);
+  finishInstances(windRotorMesh, rotorIndices.length);
 
   let agentCount = 0;
   residentialIndices.forEach((cellIndex) => {
-    const centerX = worldX(cellIndex, currentSize);
-    const centerZ = worldZ(cellIndex, currentSize);
+    const { x: centerX, z: centerZ } = worldPosition(cellIndex);
     const personAngle = cellIndex * CITY_AMBIENT.PERSON_ANGLE_PER_CELL;
     const [personScaleX, personScaleY, personScaleZ] = CITY_AMBIENT.PERSON_SCALE;
     setAmbientInstance(
@@ -595,14 +668,13 @@ function updateStaticAmbientInstances() {
     agentCount++;
   }
   finishInstances(ambientAgentMesh, agentCount);
-  ambientInstances = windIndices.length + agentCount;
+  ambientInstances = rotorIndices.length + agentCount;
 }
 
 function updateBirdVisit(now) {
   if (!birdVisit) return false;
   const progress = Math.min(1, Math.max(0, (now - birdVisit.startedAt) / birdVisit.durationMs));
-  const centerX = worldX(birdVisit.greenIndex, currentSize);
-  const centerZ = worldZ(birdVisit.greenIndex, currentSize);
+  const { x: centerX, z: centerZ } = worldPosition(birdVisit.greenIndex);
   const [scaleX, scaleY, scaleZ] = CITY_AMBIENT.BIRD_SCALE;
   for (let bird = 0; bird < BIRD_POOL_SIZE; bird++) {
     const instanceIndex = birdPoolStart + bird;
@@ -641,12 +713,12 @@ export function finishBirdVisit() {
   needsRender = true;
 }
 
-function pauseBirdVisits() {
-  birdVisitController?.pause('modal');
+function pauseBirdVisits({ pausesSimulation } = {}) {
+  if (pausesSimulation) birdVisitController?.pause('modal');
 }
 
-function resumeBirdVisits() {
-  birdVisitController?.resume('modal');
+function resumeBirdVisits({ pausesSimulation } = {}) {
+  if (pausesSimulation) birdVisitController?.resume('modal');
 }
 
 function handleBirdVisibility() {
@@ -721,11 +793,10 @@ function visualYAt(index, now) {
   return 0.13 - motionProgress(motion, now) * 0.22;
 }
 
-function updateTileInstances(configs, size) {
-  const count = Math.min(size * size, MAX_CELLS);
+function updateTileInstances(configs, coordinates) {
+  const count = Math.min(coordinates.length, MAX_CELLS);
   for (let index = 0; index < count; index++) {
-    const x = worldX(index, size);
-    const z = worldZ(index, size);
+    const { x, z } = worldPosition(index, coordinates);
     setBoxInstance(tileMesh, index, x, 0.06, z, 1, 1, 1);
     tileMesh.setColorAt(index, tileColorFor(configs[index] || {}));
   }
@@ -734,14 +805,13 @@ function updateTileInstances(configs, size) {
   tileMesh.computeBoundingSphere();
 }
 
-function updateFacilityInstances(configs, size, now) {
+function updateFacilityInstances(configs, coordinates, now) {
   FACILITY_TYPES.forEach((type) => { typeCellIndices.get(type).length = 0; });
   for (let index = 0; index < configs.length; index++) {
     const config = visualConfigAt(configs, index);
     if (!config?.empty && typeCellIndices.has(config.type)) typeCellIndices.get(config.type).push(index);
   }
 
-  let pedestalCount = 0;
   FACILITY_TYPES.forEach((type) => {
     const mesh = facilityMeshes.get(type);
     const supplement = supplementMeshes.get(type);
@@ -749,46 +819,51 @@ function updateFacilityInstances(configs, size, now) {
     indices.forEach((cellIndex, instanceIndex) => {
       const config = visualConfigAt(configs, cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
-      const x = worldX(cellIndex, size);
-      const z = worldZ(cellIndex, size);
+      const { x, z } = worldPosition(cellIndex, coordinates);
       const visualScale = visualScaleAt(cellIndex, level.scale, now);
       const visualY = visualYAt(cellIndex, now);
       setInstance(mesh, instanceIndex, x, visualY, z, visualScale);
-      mesh.setColorAt(instanceIndex, _color.setHex(level.color));
+      const facilityColor = facilityColorFor(type, config.level);
+      mesh.setColorAt(instanceIndex, _color.setHex(facilityColor));
 
       if (supplement) {
         const offset = type === 'nuclear' ? 0.2 : 0.22;
         setInstance(supplement, instanceIndex, x + offset, visualY, z + 0.18, visualScale * 0.9);
-        supplement.setColorAt(instanceIndex, _color.setHex(level.color));
-      }
-
-      for (let segment = 0; segment < level.segments; segment++) {
-        setBoxInstance(
-          pedestalMesh,
-          pedestalCount,
-          x - 0.27 + segment * 0.09,
-          visualY + 0.03 + segment * 0.065,
-          z + 0.29,
-          0.055 * visualScale,
-          0.035,
-          0.055 * visualScale,
-        );
-        pedestalMesh.setColorAt(pedestalCount, _color.setHex(level.color));
-        pedestalCount++;
+        supplement.setColorAt(instanceIndex, _color.setHex(facilityColor));
       }
     });
     finishInstances(mesh, indices.length);
     if (supplement) finishInstances(supplement, indices.length);
   });
-  finishInstances(pedestalMesh, pedestalCount);
 }
 
-function updateMarkerInstances(configs, size, now) {
+function updateBuildingLightInstances() {
+  if (!buildingLightMesh || !currentConfigs.length || worldPhase !== 'night') {
+    if (buildingLightMesh) finishInstances(buildingLightMesh, 0);
+    return;
+  }
+  let lightCount = 0;
+  currentConfigs.forEach((config, index) => {
+    if (!config || config.empty || !config.type) return;
+    const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
+    const { x, z } = worldPosition(index);
+    const y = 0.3 * level.scale;
+    [-0.13, 0.13].forEach((offset) => {
+      setBoxInstance(buildingLightMesh, lightCount, x + offset * level.scale, y, z + 0.29 * level.scale, 0.055, 0.045, 0.012);
+      buildingLightMesh.setColorAt(lightCount, _color.setHex(0xffdf8a));
+      lightCount++;
+    });
+    setBoxInstance(buildingLightMesh, lightCount, x + 0.29 * level.scale, y + 0.08, z, 0.012, 0.04, 0.05);
+    buildingLightMesh.setColorAt(lightCount, _color.setHex(0xffc765));
+    lightCount++;
+  });
+  finishInstances(buildingLightMesh, Math.min(lightCount, MAX_BUILDING_LIGHTS));
+}
+
+function updateMarkerInstances(configs, coordinates, now) {
   let ringCount = 0;
-  let linkCount = 0;
   configs.forEach((config, index) => {
-    const x = worldX(index, size);
-    const z = worldZ(index, size);
+    const { x, z } = worldPosition(index, coordinates);
     const markerColor = markerColorFor(config);
     if (markerColor) {
       const pulse = 1 + Math.sin((now / CITY_MOTION.SELECT_PULSE_MS) * Math.PI * 2) * 0.035;
@@ -796,22 +871,16 @@ function updateMarkerInstances(configs, size, now) {
       stateRingMesh.setColorAt(ringCount, markerColor);
       ringCount++;
     }
-    if (config.linkMark && !config.empty) {
-      const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
-      setInstance(linkMarkerMesh, linkCount, x, 1.02 * level.scale, z, 1);
-      linkMarkerMesh.setColorAt(linkCount, config.linkMark === 'good' ? MARKER_COLORS.good : MARKER_COLORS.warn);
-      linkCount++;
-    }
   });
   finishInstances(stateRingMesh, ringCount);
-  finishInstances(linkMarkerMesh, linkCount);
 }
 
-function updateInstances(configs, size, now = performance.now()) {
+function updateInstances(configs, coordinates, now = performance.now()) {
   if (!renderer) return;
-  updateTileInstances(configs, size);
-  updateFacilityInstances(configs, size, now);
-  updateMarkerInstances(configs, size, now);
+  updateTileInstances(configs, coordinates);
+  updateFacilityInstances(configs, coordinates, now);
+  updateMarkerInstances(configs, coordinates, now);
+  updateBuildingLightInstances();
 }
 
 function beginMotion(kind, payload) {
@@ -867,6 +936,7 @@ export function initCityScene3D(container) {
   canvasEl.className = 'city-scene-3d-canvas';
   container.innerHTML = '';
   container.appendChild(canvasEl);
+  paintSky(currentSkyState);
 
   cameraHintEl = document.createElement('div');
   cameraHintEl.className = 'city-camera-hint';
@@ -906,16 +976,19 @@ export function initCityScene3D(container) {
         text: '게임은 정상적으로 계속됩니다.',
       });
     }
+    const scheduleIdle = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 32));
+    scheduleIdle(() => cityEnvironment?.loadIdle().finally(() => { needsRender = true; }));
   });
 
   createSceneLayers();
+  cityEnvironment = createCityEnvironment3D({ scene, assetLoader });
   applyWorldTheme({ theme: document.documentElement.dataset.theme });
   prewarmGpuBuffers();
   cameraInteractionReady = false;
   cameraController = createCameraController({
     camera,
     domElement: canvasEl,
-    getBoardSize: () => currentSize,
+    getBoardRadius: () => currentRadius,
     onInteraction: () => {
       needsRender = true;
       if (cameraInteractionReady) cameraHintEl?.classList.add('used');
@@ -931,6 +1004,7 @@ export function initCityScene3D(container) {
   canvasEl.addEventListener('pointerdown', capturePointer);
   canvasEl.addEventListener('pointermove', updatePointer);
   canvasEl.addEventListener('pointerup', handlePointerClick);
+  canvasEl.addEventListener('pointerleave', handlePointerLeave);
 
   resizeObserver = new ResizeObserver(resizeToContainer);
   resizeObserver.observe(container);
@@ -956,8 +1030,18 @@ export function initCityScene3D(container) {
     onCellClickCb(index);
   };
   window.__getCellVisual = (index) => currentConfigs[index] ?? null;
+  window.__setWorldHourForTest = (hour) => {
+    visualHourOverride = hour;
+    return applyWorldHour(hour, true);
+  };
 
-  cameraController.reset(currentSize);
+  window.__getHexCell = (index) => {
+    const coord = currentCoords[index];
+    if (!coord) return null;
+    return { index, ...coord, ...worldPosition(index) };
+  };
+
+  cameraController.reset(currentRadius);
   resizeToContainer();
   needsRender = true;
   renderer.setAnimationLoop(renderFrame);
@@ -973,13 +1057,13 @@ function stopCameraButtonEvent(event) {
 
 function resetCameraFromButton(event) {
   event.stopPropagation();
-  cameraController?.reset(currentSize);
+  cameraController?.reset(currentRadius);
   needsRender = true;
 }
 
 function resetCameraForBoardExpansion({ settled } = {}) {
   if (settled) return;
-  cameraController?.reset(currentSize);
+  cameraController?.reset(currentRadius);
   needsRender = true;
 }
 
@@ -999,12 +1083,51 @@ function updatePointer(event) {
   const rect = canvasEl.getBoundingClientRect();
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  if (buildPreviewMode.enabled && buildPreviewMode.candidateIndex == null) {
+    hoveredPreviewIndex = raycastIndex();
+    syncBuildGhost();
+  }
+}
+
+function handlePointerLeave() {
+  if (buildPreviewMode.candidateIndex != null) return;
+  hoveredPreviewIndex = -1;
+  syncBuildGhost();
 }
 
 function raycastIndex() {
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObject(tileMesh, false)[0];
   return hit?.instanceId ?? -1;
+}
+
+function syncBuildGhost() {
+  if (!ghostMesh) return;
+  const index = buildPreviewMode.candidateIndex ?? hoveredPreviewIndex;
+  const config = currentConfigs[index];
+  const type = buildPreviewMode.type;
+  if (!buildPreviewMode.enabled || index == null || index < 0 || !type || !FACILITY_TYPES.includes(type) || !config?.empty) {
+    ghostMesh.visible = false;
+    needsRender = true;
+    return;
+  }
+  ghostMesh.geometry = getFacilityGeometry(type);
+  const { x, z } = worldPosition(index);
+  const level = LEVEL_VISUALS[1];
+  ghostMesh.position.set(x, 0.13, z);
+  ghostMesh.rotation.set(0, 0, 0);
+  ghostMesh.scale.setScalar(level.scale);
+  const color = config.placementAllowed === false ? MARKER_COLORS.problem : MARKER_COLORS.good;
+  ghostMaterial.color.copy(color);
+  ghostMaterial.emissive.copy(color);
+  ghostMesh.visible = true;
+  needsRender = true;
+}
+
+export function setBuildPreviewMode({ enabled = false, type = null, candidateIndex = null } = {}) {
+  buildPreviewMode = { enabled: Boolean(enabled), type, candidateIndex };
+  if (!buildPreviewMode.enabled) hoveredPreviewIndex = -1;
+  syncBuildGhost();
 }
 
 function handlePointerClick(event) {
@@ -1019,8 +1142,8 @@ function renderFrame(now) {
   let shouldRender = needsRender || !!cameraController?.update();
   if (birdVisit && updateBirdVisit(now)) shouldRender = true;
   if (activeMotions.size) {
-    updateInstances(currentConfigs, currentSize, now);
-    if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentSize, now);
+    updateInstances(currentConfigs, currentCoords, now);
+    if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentCoords, now);
     shouldRender = true;
   }
   if (!shouldRender || !renderer) return;
@@ -1031,22 +1154,28 @@ function renderFrame(now) {
 
 // cellConfigs: { empty, type, level, selected, newLand, previewGood, previewBad,
 // diagnosisState, linkMark, disabled } 배열이다.
-export function renderCityScene3D(cellConfigs, size) {
+export function renderCityScene3D(cellConfigs, boardRadius) {
   if (!renderer) return;
-  const cellCount = Math.min(size * size, MAX_CELLS);
+  const nextCoords = createHexCoordinates(boardRadius);
+  const cellCount = Math.min(nextCoords.length, MAX_CELLS);
   currentConfigs = Array.from({ length: cellCount }, (_, index) => ({
     index,
     empty: true,
     level: 1,
     ...(cellConfigs[index] || {}),
   }));
-  if (size !== currentSize) {
-    currentSize = size;
-    cameraController?.resize(size);
-    cameraController?.reset(size);
+  if (boardRadius !== currentRadius) {
+    currentRadius = boardRadius;
+    currentCoords = nextCoords;
+    cameraController?.resize(boardRadius);
+    cameraController?.reset(boardRadius);
+    cityEnvironment?.setBoardRadius(boardRadius);
+  } else {
+    currentCoords = nextCoords;
   }
-  updateInstances(currentConfigs, size);
+  updateInstances(currentConfigs, currentCoords);
   rebuildAmbientTopology();
+  syncBuildGhost();
   needsRender = true;
 }
 
@@ -1057,13 +1186,36 @@ export function setCellClickHandler(fn) {
 export function getCityRendererStats() {
   const facilityInstances = [...facilityMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
   const firstTileColor = tileMesh?.count ? tileMesh.getColorAt(0, _color).getHex() : null;
+  const facilityVisualSamples = {};
+  const sampleMatrix = new THREE.Matrix4();
+  const samplePosition = new THREE.Vector3();
+  const sampleQuaternion = new THREE.Quaternion();
+  const sampleScale = new THREE.Vector3();
+  FACILITY_TYPES.forEach((type) => {
+    const mesh = facilityMeshes.get(type);
+    const cellIndices = typeCellIndices.get(type);
+    if (!mesh?.count) return;
+    facilityVisualSamples[type] = Array.from({ length: mesh.count }, (_, instanceIndex) => {
+      mesh.getMatrixAt(instanceIndex, sampleMatrix);
+      sampleMatrix.decompose(samplePosition, sampleQuaternion, sampleScale);
+      return {
+        level: currentConfigs[cellIndices[instanceIndex]]?.level || 1,
+        color: mesh.getColorAt(instanceIndex, _color).getHex(),
+        scale: Number(sampleScale.x.toFixed(3)),
+      };
+    });
+  });
   return {
     drawCalls: renderer?.info.render.calls ?? 0,
     geometryCount: renderer?.info.memory.geometries ?? 0,
     textureCount: renderer?.info.memory.textures ?? 0,
     occupiedCells: currentConfigs.filter((config) => !config.empty && config.type).length,
+    tileInstances: tileMesh?.count ?? 0,
+    boardRadius: currentRadius,
+    hexCellCount: currentCoords.length,
     facilityInstances,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + 5,
+    facilityVisualSamples,
+    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + 3,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1074,12 +1226,27 @@ export function getCityRendererStats() {
     residentAgentCount,
     birdCount,
     birdPoolSize: BIRD_POOL_SIZE,
+    windRotorCount: windRotorMesh?.count ?? 0,
     worldPhase,
     sunIntensity: sunLight?.intensity ?? 0,
     renderCount,
     pixelRatio: renderer?.getPixelRatio() ?? 0,
     theme: currentTheme,
     firstTileColor,
+    environment: cityEnvironment?.getStats() ?? { state: 'idle' },
+    ghostVisible: Boolean(ghostMesh?.visible),
+    ghostCount: ghostMesh?.visible ? 1 : 0,
+    skyHour: currentWorldHour,
+    skyTopColor: currentSkyState.topColor,
+    skyBottomColor: currentSkyState.bottomColor,
+    buildingLightCount: buildingLightMesh?.count ?? 0,
+    linkMarkerCount: 0,
+    levelSegmentCount: 0,
+    facilityPaletteMode: facilityMeshes.get('factory')?.material?.userData?.facilityPaletteMode || 'textured',
+    facilityHasMap: Boolean(facilityMeshes.get('factory')?.material?.map),
+    facilityMaterialType: facilityMeshes.get('factory')?.material?.type || null,
+    facilityUsesVertexColors: Boolean(facilityMeshes.get('factory')?.material?.vertexColors),
+    hemisphereIntensity: hemisphereLight?.intensity ?? 0,
   };
 }
 
@@ -1099,12 +1266,15 @@ export function disposeCityScene3D() {
   document.removeEventListener('visibilitychange', handleBirdVisibility);
   birdVisitController?.dispose();
   birdVisitController = null;
+  cityEnvironment?.dispose();
+  cityEnvironment = null;
   cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('pointerup', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('click', resetCameraFromButton);
   canvasEl?.removeEventListener('pointerdown', capturePointer);
   canvasEl?.removeEventListener('pointermove', updatePointer);
   canvasEl?.removeEventListener('pointerup', handlePointerClick);
+  canvasEl?.removeEventListener('pointerleave', handlePointerLeave);
   cameraController?.dispose();
   ownedGeometries.forEach((geometry) => geometry.dispose());
   ownedMaterials.forEach((material) => material.dispose());
@@ -1126,6 +1296,15 @@ export function disposeCityScene3D() {
   birdVisit = null;
   ambientInstances = 0;
   cameraController = null;
+  ghostMesh = null;
+  ghostMaterial = null;
+  buildingLightMesh = null;
+  buildingLightMaterial = null;
+  currentWorldHour = 8;
+  currentSkyState = getSkyState(currentWorldHour);
+  visualHourOverride = null;
+  hoveredPreviewIndex = -1;
+  buildPreviewMode = { enabled: false, type: null, candidateIndex: null };
   renderer = null;
   cameraInteractionReady = false;
 }
@@ -1135,6 +1314,12 @@ export function getCityCameraState() {
 }
 
 export function resetCityCamera() {
-  cameraController?.reset(currentSize);
+  cameraController?.reset(currentRadius);
   needsRender = true;
+}
+
+export function setCityCameraOrbitForTest(azimuth, polar) {
+  const state = cameraController?.setOrbitForTest(azimuth, polar) ?? null;
+  needsRender = true;
+  return state;
 }

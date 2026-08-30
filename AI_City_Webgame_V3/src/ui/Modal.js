@@ -1,32 +1,26 @@
 import {
   createIcons,
-  ArrowRight,
-  BadgeCheck,
-  Bot,
   Brain,
   Building2,
   ChartNoAxesCombined,
+  CloudSun,
+  Coins,
   ChevronsUp,
   CircleHelp,
   Download,
-  EyeOff,
+  Droplets,
   Hammer,
   Lightbulb,
   Leaf,
   Map,
   Music,
-  NotebookPen,
   Presentation,
   RotateCcw,
   Scale,
   ScanSearch,
-  Search,
-  Sparkles,
   Sun,
   Moon,
   Trash2,
-  TriangleAlert,
-  Trophy,
   Users,
   Volume2,
   VolumeX,
@@ -41,33 +35,27 @@ import { eventBus, Events } from '../core/EventBus.js';
 // (예: "circle-help" -> "CircleHelp"). 키를 kebab-case로 쓰면 조용히 실패해서(콘솔 warn만 뜨고
 // 에러는 안 남) 아이콘이 전부 안 보이는 상태가 된다 — 반드시 PascalCase 키를 써야 한다.
 const ICONS = {
-  ArrowRight,
-  BadgeCheck,
-  Bot,
   Brain,
   Building2,
   ChartNoAxesCombined,
+  CloudSun,
+  Coins,
   ChevronsUp,
   CircleHelp,
   Download,
-  EyeOff,
+  Droplets,
   Hammer,
   Lightbulb,
   Leaf,
   Map,
   Music,
-  NotebookPen,
   Presentation,
   RotateCcw,
   Scale,
   ScanSearch,
-  Search,
-  Sparkles,
   Sun,
   Moon,
   Trash2,
-  TriangleAlert,
-  Trophy,
   Users,
   Volume2,
   VolumeX,
@@ -77,27 +65,36 @@ const ICONS = {
 
 let modalEl = null;
 let cardEl = null;
+let activeModal = null;
 
 export function initModal(modal, card) {
   modalEl = modal;
   cardEl = card;
   modalEl.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal-backdrop')) closeModal();
+    if (e.target.classList.contains('modal-backdrop') && activeModal?.dismissible !== false) closeModal();
   });
 }
 
-export function setModal(html) {
+export function setModal(html, { id = 'panel', pausesSimulation = false, dismissible = true } = {}) {
+  if (activeModal) eventBus.emit(Events.MODAL_CLOSE, activeModal);
+  activeModal = { id, pausesSimulation, pauseReason: id, dismissible };
   cardEl.innerHTML = html;
   modalEl.classList.remove('hidden');
-  eventBus.emit(Events.MODAL_OPEN, {});
+  eventBus.emit(Events.MODAL_OPEN, activeModal);
   createIcons({ icons: ICONS });
   anime({ targets: cardEl, scale: [0.96, 1], opacity: [0, 1], duration: 220, easing: 'easeOutCubic' });
 }
 
 export function closeModal() {
+  const closing = activeModal;
+  activeModal = null;
   modalEl.classList.add('hidden');
   cardEl.innerHTML = '';
-  eventBus.emit(Events.MODAL_CLOSE, {});
+  if (closing) eventBus.emit(Events.MODAL_CLOSE, closing);
+}
+
+export function getModalState() {
+  return activeModal ? { ...activeModal } : null;
 }
 
 export function refreshIcons() {

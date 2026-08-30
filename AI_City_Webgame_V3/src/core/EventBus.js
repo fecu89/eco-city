@@ -7,7 +7,19 @@ export const Events = {
   QUEST_PROGRESSED: 'quest:progressed',
   QUEST_READY: 'quest:ready',
   QUEST_CLAIMED: 'quest:claimed',
+  QUEST_STARTED: 'quest:started',
   FACILITY_PRIORITY_CHANGED: 'facility:priorityChanged',
+  RESEARCH_START_REQUESTED: 'research:startRequested',
+  RESEARCH_STARTED: 'research:started',
+  RESEARCH_CANCEL_REQUESTED: 'research:cancelRequested',
+  RESEARCH_CANCELLED: 'research:cancelled',
+  RESEARCH_ASSIGN_REQUESTED: 'research:assignRequested',
+  RESEARCH_ASSIGNED: 'research:assigned',
+  RESEARCH_PROGRESS: 'research:progress',
+  RESEARCH_COMPLETED: 'research:completed',
+  RESEARCH_ACCELERATED: 'research:accelerated',
+  CARBON_WARNING: 'carbon:warning',
+  GAME_OVER: 'game:over',
 
   // Board
   BOARD_PLACED: 'board:placed',
@@ -24,10 +36,6 @@ export const Events = {
   VISUAL_MOTION_STARTED: 'visual:motionStarted',
   VISUAL_MOTION_COMPLETED: 'visual:motionCompleted',
 
-  // Advisor
-  ADVISOR_ASKED: 'advisor:asked',
-  ADVISOR_BLIND_BUILD: 'advisor:blindBuild',
-
   // Quiz / concepts
   QUIZ_ANSWERED: 'quiz:answered',
   QUIZ_FINISHED: 'quiz:finished',
@@ -35,9 +43,6 @@ export const Events = {
   // Diagnosis
   DIAGNOSIS_TILE_FOUND: 'diagnosis:tileFound',
   DIAGNOSIS_COMPLETE: 'diagnosis:complete',
-
-  // Achievements
-  BADGE_UNLOCKED: 'badge:unlocked',
 
   // UI
   TOAST_SHOW: 'toast:show',

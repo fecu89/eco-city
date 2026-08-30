@@ -1,0 +1,23 @@
+# Web-prepared copy of the original Quaternius Windmill.mtl.
+# OBJ diffuse values are converted from linear values to sRGB values so that
+# glTF's sRGB base-color texture does not darken the palette a second time.
+
+newmtl Brown
+Ns 96.078431
+Ka 1.000000 1.000000 1.000000
+Kd 0.507418 0.311252 0.224448
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+
+newmtl Grey
+Ns 96.078431
+Ka 1.000000 1.000000 1.000000
+Kd 0.621194 0.621194 0.621194
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2

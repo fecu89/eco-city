@@ -4,9 +4,9 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30000,
   retries: 1,
-  // 보드가 Three.js(WebGL)라 DOM 테스트보다 워커 하나당 CPU/GPU 비용이 훨씬 크다.
-  // 기본 병렬 워커 수로 돌리면 리소스 경합으로 전체가 타임아웃되는 걸 겪어서 낮춰둔다.
-  workers: 2,
+  // 보드가 Three.js(WebGL)라 브라우저 두 개만 겹쳐도 장시간 전체 실행에서 GPU 작업이
+  // 로딩·모션 타이머를 막을 수 있다. 단일 워커로 기능 실패와 자원 경합을 분리한다.
+  workers: 1,
   use: {
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',

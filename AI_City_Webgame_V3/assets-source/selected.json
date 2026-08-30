@@ -1,0 +1,1052 @@
+{
+  "selectedAt": "2026-08-30",
+  "models": [
+    {
+      "id": "terrain.hexGrass",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/grass.glb",
+      "target": "environment/terrain/hex-grass.glb",
+      "bytes": 4680,
+      "sha256": "cd8bf98ad347c8346cf31e68006d013b822364eb602dea2749c85b28ebc465df",
+      "runtimePath": "/assets/environment/terrain/hex-grass.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 18132,
+      "optimizedSha256": "b7951a2b339668ace7e7f6af7724b76e31ce5a1bef1c2e34051a19e9078ac4c9",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "terrain.hexDirt",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/dirt.glb",
+      "target": "environment/terrain/hex-dirt.glb",
+      "bytes": 3464,
+      "sha256": "466ba402bd7e6fe64de99eb5285220d362400e2b2b854b3385b75debe8af73ae",
+      "runtimePath": "/assets/environment/terrain/hex-dirt.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 17888,
+      "optimizedSha256": "d0c0784de0dd92e76c7b9b8e3d14b625413844949d8755d0d75391dcd476f1fd",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "terrain.hexWater",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/water.glb",
+      "target": "environment/terrain/hex-water.glb",
+      "bytes": 3468,
+      "sha256": "f5ed8094f91b1b8b80e2c32b6bc16a444de85574de9bc11efb4e07d8a062fced",
+      "runtimePath": "/assets/environment/terrain/hex-water.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 17884,
+      "optimizedSha256": "8ee22d430f58134a4a4dd56904532ff3bbc70a95ca31c006ae4bad19d5a28522",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.coast.dock",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/building-dock.glb",
+      "target": "environment/coast/building-dock.glb",
+      "bytes": 28980,
+      "sha256": "84a8df7b98d2cb84c2920fed4abae5f22d6a7129589dc12d5605d071ddeeb91c",
+      "runtimePath": "/assets/environment/coast/building-dock.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 23492,
+      "optimizedSha256": "686000f722a0346857fb68812f05a131027584007c030ada39cdccdee7657bbe",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.coast.grassHill",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/grass-hill.glb",
+      "target": "environment/coast/grass-hill.glb",
+      "bytes": 34204,
+      "sha256": "458d42f38f4f53c4d11eb662d383a35da5ba1410565db78925fb13ee4f4290f4",
+      "runtimePath": "/assets/environment/coast/grass-hill.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 25232,
+      "optimizedSha256": "4d00153af83a08ddcc133e3dd3952a4abb5037afdd99f45a1bdec367a39000bb",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.coast.stoneHill",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/stone-hill.glb",
+      "target": "environment/coast/stone-hill.glb",
+      "bytes": 13412,
+      "sha256": "731158fdaa950cd348a1e88dd3dc72bff53a7d22114190353aeafc468394b478",
+      "runtimePath": "/assets/environment/coast/stone-hill.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 20412,
+      "optimizedSha256": "c831e053e8bebf8cf5eb5dd0200446f9705eed588780a1c3dd215beeed180276",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.coast.forest",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/grass-forest.glb",
+      "target": "environment/coast/grass-forest.glb",
+      "bytes": 45748,
+      "sha256": "e97c9fe52484e111d103efb4ba27955fa305812c7c4a2940b421fcacc1fde444",
+      "runtimePath": "/assets/environment/coast/grass-forest.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 27956,
+      "optimizedSha256": "f2b364b2f31dd0382e23fd4076441c77946ec63d1e67a181ff7a1459f54ad8b9",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.water.rocks",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/water-rocks.glb",
+      "target": "environment/water/water-rocks.glb",
+      "bytes": 17256,
+      "sha256": "fec764fdd5be61f6107beb7aba93d7166dfe76d22be355a9b1241ff32017ef37",
+      "runtimePath": "/assets/environment/water/water-rocks.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 20876,
+      "optimizedSha256": "203dd37b575238c0155138e6f0ba2a32ae6754d5461cf03b2c7e2ec8de5b84cb",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.water.island",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/water-island.glb",
+      "target": "environment/water/water-island.glb",
+      "bytes": 9800,
+      "sha256": "bf40f6c76814c2ef03be501d85b65e303a21a0305ead18875fd3c692a7d82649",
+      "runtimePath": "/assets/environment/water/water-island.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 19444,
+      "optimizedSha256": "b098f9711db781c3b916ca606c10ccaee87a58503e992762bb16c610829a4641",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.water.ship",
+      "source": "kenney-hexagon",
+      "member": "Models/GLB format/unit-ship.glb",
+      "target": "environment/water/ship.glb",
+      "bytes": 13268,
+      "sha256": "4ab6d170e6ac604e486285b27b59733faea75223e6799c315b37900e42a3363a",
+      "runtimePath": "/assets/environment/water/ship.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 10831,
+          "sha256": "1c3ae3b62c14acc87810027ebbe3397f21c3de7a076fdd2b2246782bab88afd3"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 20048,
+      "optimizedSha256": "839af3efe887e6d9bde86ad54fe5d269d050e122d304dee637871f7b49d23762",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "roads.straight",
+      "source": "kenney-roads",
+      "member": "Models/GLB format/road-straight.glb",
+      "target": "roads/road-straight.glb",
+      "bytes": 5248,
+      "sha256": "f8f744fb6fc96dedd5ad1f763b550166f2624a3757bf36b4b39969d2e7cacac5",
+      "runtimePath": "/assets/roads/road-straight.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11428,
+          "sha256": "a48e2962661ae44368ffddf3054f80ed8491d082b757dcc3011184cd9a98b185"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "optimizedBytes": 18636,
+      "optimizedSha256": "6dab751d354e9f45a87e859d1873756ef0c9510df9f7a352ecc04c87ea6ae7f6",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "roads.curve",
+      "source": "kenney-roads",
+      "member": "Models/GLB format/road-curve.glb",
+      "target": "roads/road-curve.glb",
+      "bytes": 23912,
+      "sha256": "d076717bfe3493dfd5a4b4207a7825e4aff1876273f0d58f5e16e8e8670906f7",
+      "runtimePath": "/assets/roads/road-curve.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11428,
+          "sha256": "a48e2962661ae44368ffddf3054f80ed8491d082b757dcc3011184cd9a98b185"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "optimizedBytes": 21544,
+      "optimizedSha256": "e5fa5aad9ef10fc9de2755e0283a1f09ab9bed11207388cca860b1f566577cc9",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "roads.tee",
+      "source": "kenney-roads",
+      "member": "Models/GLB format/road-intersection.glb",
+      "target": "roads/road-tee.glb",
+      "bytes": 7900,
+      "sha256": "fdf4f213abe41ddfe2a7e798a0ef1c3de5b7a68143e21c44f1893985ec6aae58",
+      "runtimePath": "/assets/roads/road-tee.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11428,
+          "sha256": "a48e2962661ae44368ffddf3054f80ed8491d082b757dcc3011184cd9a98b185"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "optimizedBytes": 19140,
+      "optimizedSha256": "34f6a8070e28cec253cef1783f413fcf4085702698dd2a5fea336d9408740c2a",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "roads.cross",
+      "source": "kenney-roads",
+      "member": "Models/GLB format/road-crossroad.glb",
+      "target": "roads/road-cross.glb",
+      "bytes": 10084,
+      "sha256": "2dc52a28cf89ec88025a047c0f6fff4c643f16b0f50f0e9a1140f16230c28b12",
+      "runtimePath": "/assets/roads/road-cross.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11428,
+          "sha256": "a48e2962661ae44368ffddf3054f80ed8491d082b757dcc3011184cd9a98b185"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "optimizedBytes": 19384,
+      "optimizedSha256": "822f5ce70a87828cdecc6c3d63c5ffa8cab7088f4e00009211bf55baa31e4aa5",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "roads.sidewalk",
+      "source": "kenney-roads",
+      "member": "Models/GLB format/road-side.glb",
+      "target": "roads/sidewalk.glb",
+      "bytes": 5272,
+      "sha256": "f5482c921a40719f89b1e7c0f6cc9d662b1f3a6149060e9b6bb543390fbdff66",
+      "runtimePath": "/assets/roads/sidewalk.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11428,
+          "sha256": "a48e2962661ae44368ffddf3054f80ed8491d082b757dcc3011184cd9a98b185"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "optimizedBytes": 18724,
+      "optimizedSha256": "1df1480b3c817b0d8170e07cdd3535782774f57182f246ec9249926dc326c8a0",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "residential.house1",
+      "source": "kenney-suburban",
+      "member": "Models/GLB format/building-type-a.glb",
+      "target": "buildings/residential/house-01.glb",
+      "bytes": 98604,
+      "sha256": "49f32e20b9dcd24b1c8f6d6488807b8c8cb684cbb595bfb0bb36ad903e470faa",
+      "runtimePath": "/assets/buildings/residential/house-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11784,
+          "sha256": "9b5de86078c25ef02351a80d35ff3c978693a1044565b73eedd9ae9b5b80665d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "optimizedBytes": 38656,
+      "optimizedSha256": "617c14c8e9d2678452717923fb75b0ee4a58ea04a1cdc266c9a71fe274596487",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "residential.house2",
+      "source": "kenney-suburban",
+      "member": "Models/GLB format/building-type-b.glb",
+      "target": "buildings/residential/house-02.glb",
+      "bytes": 146720,
+      "sha256": "a964a10c51bb334be677657fd8fa483531974dd15b4243575990192818e2300e",
+      "runtimePath": "/assets/buildings/residential/house-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11784,
+          "sha256": "9b5de86078c25ef02351a80d35ff3c978693a1044565b73eedd9ae9b5b80665d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "optimizedBytes": 47052,
+      "optimizedSha256": "1c25d6cec066feaac26ae0378d8ead232987ce0dbd46faf5831e1f4b70742bad",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "residential.house3",
+      "source": "kenney-suburban",
+      "member": "Models/GLB format/building-type-c.glb",
+      "target": "buildings/residential/house-03.glb",
+      "bytes": 99592,
+      "sha256": "86a69f30f1a09461283e158514945ae5cc9d56357b0ddc83a9a3f0eecd113591",
+      "runtimePath": "/assets/buildings/residential/house-03.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11784,
+          "sha256": "9b5de86078c25ef02351a80d35ff3c978693a1044565b73eedd9ae9b5b80665d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "optimizedBytes": 38076,
+      "optimizedSha256": "0630048d17389eb238669c7b913729b594e8ccf63e6e1c89c6d44d064c1501ff",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "residential.apartment1",
+      "source": "kenney-suburban",
+      "member": "Models/GLB format/building-type-t.glb",
+      "target": "buildings/residential/apartment-01.glb",
+      "bytes": 167512,
+      "sha256": "3b729b473fc995a632ebc4d96cc8f18ef9d43bdc1a6c26010a02ec0b298c34e7",
+      "runtimePath": "/assets/buildings/residential/apartment-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11784,
+          "sha256": "9b5de86078c25ef02351a80d35ff3c978693a1044565b73eedd9ae9b5b80665d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "optimizedBytes": 50624,
+      "optimizedSha256": "ae3aad600588f8488c30e8dc2289c68d12df76cbcd2ac8f25ac82cfc28558966",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "residential.apartment2",
+      "source": "kenney-suburban",
+      "member": "Models/GLB format/building-type-u.glb",
+      "target": "buildings/residential/apartment-02.glb",
+      "bytes": 117912,
+      "sha256": "fb259246fc73bdce626eed8b7167d5e97bd63651890551661ec4507311eba279",
+      "runtimePath": "/assets/buildings/residential/apartment-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11784,
+          "sha256": "9b5de86078c25ef02351a80d35ff3c978693a1044565b73eedd9ae9b5b80665d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "optimizedBytes": 42752,
+      "optimizedSha256": "a04ca95da2f89e6486aabcc7383500aee87458577f5160510241ec2719f4819c",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "commercial.shop1",
+      "source": "kenney-commercial",
+      "member": "Models/GLB format/building-a.glb",
+      "target": "buildings/commercial/shop-01.glb",
+      "bytes": 108936,
+      "sha256": "5cf220f90ee3f21e7abe38055ca409a48aa8ef1d5ffab6e2deb99e5a5e1ed5e0",
+      "runtimePath": "/assets/buildings/commercial/shop-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11002,
+          "sha256": "191bec3889aaaca5018380038fecc129ebb5c2182879a099b7b538b3fa050b5d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 37100,
+      "optimizedSha256": "e961eae12bf126b32681efba848668c7bbc3598fa6654b740d8f83bf25b7c547",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "commercial.shop2",
+      "source": "kenney-commercial",
+      "member": "Models/GLB format/building-b.glb",
+      "target": "buildings/commercial/shop-02.glb",
+      "bytes": 106408,
+      "sha256": "3b5d3ac0799c024781d92bb15971d42f4f8e380554dc5cf6a40c2f07d948947a",
+      "runtimePath": "/assets/buildings/commercial/shop-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11002,
+          "sha256": "191bec3889aaaca5018380038fecc129ebb5c2182879a099b7b538b3fa050b5d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 37340,
+      "optimizedSha256": "71050ffdf46b769cafdb0935cd4da70c2ac51ab185520aee72fe1beb8e614c5c",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "commercial.medium1",
+      "source": "kenney-commercial",
+      "member": "Models/GLB format/building-skyscraper-a.glb",
+      "target": "buildings/commercial/commercial-01.glb",
+      "bytes": 111336,
+      "sha256": "d8339bbb75944ff91d1ec9a70ec6dead71bd98b94a42d3dd0fc1f3b107ddbe85",
+      "runtimePath": "/assets/buildings/commercial/commercial-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11002,
+          "sha256": "191bec3889aaaca5018380038fecc129ebb5c2182879a099b7b538b3fa050b5d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 37488,
+      "optimizedSha256": "ae5078ceb1894d8a3e30fb9c8772388fbd2790ddc6d86f7d6c707ba802ede8be",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "commercial.medium2",
+      "source": "kenney-commercial",
+      "member": "Models/GLB format/building-skyscraper-b.glb",
+      "target": "buildings/commercial/commercial-02.glb",
+      "bytes": 138480,
+      "sha256": "3a383e8a0a8819023d30b2aee1c6f40fa6bc28990227a306a86e531f36c6b8d5",
+      "runtimePath": "/assets/buildings/commercial/commercial-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11002,
+          "sha256": "191bec3889aaaca5018380038fecc129ebb5c2182879a099b7b538b3fa050b5d"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 41672,
+      "optimizedSha256": "9d81aaf46843815c3e94d14c1c52487822defaf9e9b2597ac3a2db4c7361b151",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "industrial.factorySmall",
+      "source": "kenney-industrial",
+      "member": "Models/GLB format/building-a.glb",
+      "target": "buildings/industrial/factory-small.glb",
+      "bytes": 176884,
+      "sha256": "62b0b9ffbcea8dd914a899cacd10b54629bf7013db7bd221f2708c7ba8b054ea",
+      "runtimePath": "/assets/buildings/industrial/factory-small.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11107,
+          "sha256": "4a912ef8e95fbec4ac0cacc295b9221a4b66c482d4f90bec4e2277689c21a623"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 47820,
+      "optimizedSha256": "a1544edb3f266c4f89f339357b4f5d671b5c69b5f2583b982931e16ec83d0fcd",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "industrial.factoryMedium",
+      "source": "kenney-industrial",
+      "member": "Models/GLB format/building-m.glb",
+      "target": "buildings/industrial/factory-medium.glb",
+      "bytes": 138560,
+      "sha256": "698e133cf312f009f4c1bc7901b7be9133e72cb0a5f5dfbc483e410eb0ea2881",
+      "runtimePath": "/assets/buildings/industrial/factory-medium.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11107,
+          "sha256": "4a912ef8e95fbec4ac0cacc295b9221a4b66c482d4f90bec4e2277689c21a623"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 43916,
+      "optimizedSha256": "a86b8576fa70711ba46227e19837bf130e4f39fa6a5e3eda35c4e887dd4d6ee0",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "industrial.factoryLarge",
+      "source": "kenney-industrial",
+      "member": "Models/GLB format/building-l.glb",
+      "target": "buildings/industrial/factory-large.glb",
+      "bytes": 162036,
+      "sha256": "e8d82c9225d22a45b71db755681111cf9a27031d35e006655f93fc27f9ce5e17",
+      "runtimePath": "/assets/buildings/industrial/factory-large.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11107,
+          "sha256": "4a912ef8e95fbec4ac0cacc295b9221a4b66c482d4f90bec4e2277689c21a623"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 46756,
+      "optimizedSha256": "1cf73e5b61b7f02344bb4713e01bfc18372b7891cc9f9792e26927a65c26dad1",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "industrial.chimney",
+      "source": "kenney-industrial",
+      "member": "Models/GLB format/chimney-large.glb",
+      "target": "buildings/industrial/chimney.glb",
+      "bytes": 21408,
+      "sha256": "c9929b82a913d0372ee8849440ee9ecd79a9609aac46fb091074fdeafb731126",
+      "runtimePath": "/assets/buildings/industrial/chimney.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11107,
+          "sha256": "4a912ef8e95fbec4ac0cacc295b9221a4b66c482d4f90bec4e2277689c21a623"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 22728,
+      "optimizedSha256": "ea6b29fa2c195e12c0744caba581b9a04be6967e793bb29b6b2aea30ed8bd5f1",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "industrial.storageTank",
+      "source": "kenney-industrial",
+      "member": "Models/GLB format/detail-tank.glb",
+      "target": "buildings/industrial/storage-tank.glb",
+      "bytes": 23456,
+      "sha256": "b1edc2953c590c16f1d8280dfeb9073af6c710ac3d587f3dba144f69363d799b",
+      "runtimePath": "/assets/buildings/industrial/storage-tank.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 11107,
+          "sha256": "4a912ef8e95fbec4ac0cacc295b9221a4b66c482d4f90bec4e2277689c21a623"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "optimizedBytes": 22540,
+      "optimizedSha256": "fbf0d08cff15c059a992fb8cf6380cf79cf1a35d84333e0e0b9dd3b7b1ecf431",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "energy.solarSmall",
+      "source": "quaternius-space",
+      "member": "Prepared/Models/GLB format/solar-small.glb",
+      "sourceMembers": [
+        "Original/Environment/GLTF/SolarPanel_Ground.gltf"
+      ],
+      "target": "buildings/energy/solar-small.glb",
+      "bytes": 27528,
+      "sha256": "4cd7f15720a1f628e5de00aa664bdc341cfcc76ef334a20fb5a48212b59f86dc",
+      "runtimePath": "/assets/buildings/energy/solar-small.glb",
+      "sidecars": [],
+      "originals": [
+        {
+          "member": "Original/Environment/GLTF/SolarPanel_Ground.gltf",
+          "bytes": 37943,
+          "sha256": "39d73ce1438af148ee802597d683d19e1aba8cdfa060a5ab883f7e54f7c03cad"
+        }
+      ],
+      "creator": "Quaternius",
+      "pack": "Ultimate Space Kit",
+      "officialPage": "https://quaternius.com/packs/ultimatespacekit.html",
+      "license": "CC0-1.0",
+      "optimizedBytes": 8400,
+      "optimizedSha256": "04bd69e9a420290ec065af69b0d719945d322c14aeda2877019608f2f5e3cd7f",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "energy.solarLarge",
+      "source": "quaternius-space",
+      "member": "Prepared/Models/GLB format/solar-large.glb",
+      "sourceMembers": [
+        "Original/Environment/GLTF/SolarPanel_Structure.gltf"
+      ],
+      "target": "buildings/energy/solar-large.glb",
+      "bytes": 100380,
+      "sha256": "e63b446c7ca2d4e988c58570fa982d8d8dc0752bc410fcec41a0f4e5dfae0882",
+      "runtimePath": "/assets/buildings/energy/solar-large.glb",
+      "sidecars": [],
+      "originals": [
+        {
+          "member": "Original/Environment/GLTF/SolarPanel_Structure.gltf",
+          "bytes": 135110,
+          "sha256": "b9897db8306a7d5fb00b3dd9d41f9488ce3ced4ef2f619a2fa19cc6f58069b48"
+        }
+      ],
+      "creator": "Quaternius",
+      "pack": "Ultimate Space Kit",
+      "officialPage": "https://quaternius.com/packs/ultimatespacekit.html",
+      "license": "CC0-1.0",
+      "optimizedBytes": 22316,
+      "optimizedSha256": "2b17f2f9ef696dd72319f805fab6250bc3563fe76182d01e4da8e1187df2be44",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "energy.windBase",
+      "source": "quaternius-farm",
+      "member": "Prepared/Models/GLB format/wind-turbine.glb",
+      "sourceMembers": [
+        "Original/OBJ/Windmill.obj",
+        "Original/OBJ/Windmill.mtl"
+      ],
+      "target": "buildings/energy/wind-turbine.glb",
+      "bytes": 48132,
+      "sha256": "e4fadafce71d44c0f96b2033579295398a246b330ce62627fdc26f4a986a5e06",
+      "runtimePath": "/assets/buildings/energy/wind-turbine.glb",
+      "sidecars": [],
+      "originals": [
+        {
+          "member": "Original/OBJ/Windmill.obj",
+          "bytes": 59010,
+          "sha256": "c4aa7a840daaba671b0cbaeab75b0adc90af4d0eb2ab4c91c53168c9fe201521"
+        },
+        {
+          "member": "Original/OBJ/Windmill.mtl",
+          "bytes": 412,
+          "sha256": "9a34ee18a3464caf5dad456749ebd97a5a325b87395d2aaf25cff4237bc42ec1"
+        }
+      ],
+      "creator": "Quaternius",
+      "pack": "Farm Buildings Pack",
+      "officialPage": "https://quaternius.com/packs/farmbuildings.html",
+      "license": "CC0-1.0",
+      "optimizedBytes": 13928,
+      "optimizedSha256": "55341b998beebf04f4675fd45ad5987c2f5072c49c85b5a6220ec92d816722ea",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.tree1",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/tree_default.glb",
+      "target": "environment/trees/tree-01.glb",
+      "bytes": 9428,
+      "sha256": "562d29638c902de3c7bee465d3a53bb77117efbc392ae04ed894faf6b5dc691d",
+      "runtimePath": "/assets/environment/trees/tree-01.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 4672,
+      "optimizedSha256": "e284b6196f8f3853546ff3a45dae003c6b274d81c633da242083dcd38770ff63",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.tree2",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/tree_cone.glb",
+      "target": "environment/trees/tree-02.glb",
+      "bytes": 10924,
+      "sha256": "90be4d214ee2cbf79d317677cb87fc11dac9873b73e446b75e8c12825a374272",
+      "runtimePath": "/assets/environment/trees/tree-02.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 5048,
+      "optimizedSha256": "4490d0341d5d785e26296858fcc19af164d5e7045d5452b3519747a614028292",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.tree3",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/tree_oak.glb",
+      "target": "environment/trees/tree-03.glb",
+      "bytes": 14644,
+      "sha256": "d7fd8773674928c50c11b66d12c636d49bdcc15a8b1c7fbb98e6f63a3439a3f3",
+      "runtimePath": "/assets/environment/trees/tree-03.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 5812,
+      "optimizedSha256": "874b530b24d92f9cb8ee04ac0883d52bc6269582b14f268b8324296cb54c53d5",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.tree4",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/tree_pineTallA.glb",
+      "target": "environment/trees/tree-04.glb",
+      "bytes": 7200,
+      "sha256": "e0a56eb196d8a64ba86c7304d607136e17e6f9ad748dffcf86bd53b18b91b196",
+      "runtimePath": "/assets/environment/trees/tree-04.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 4200,
+      "optimizedSha256": "129c018f98745dbd0bea20852e2a027630c758c29aaf0144ca6cb25041545e3a",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.bush1",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/plant_bush.glb",
+      "target": "environment/trees/bush-01.glb",
+      "bytes": 4396,
+      "sha256": "ae7b1beb39e242b13f5f29e3ec23ef21034b814f82297b8aa00a9bf4e1b09590",
+      "runtimePath": "/assets/environment/trees/bush-01.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 2588,
+      "optimizedSha256": "682a79f4df51bbf91879c0824b1eb6b059780eb16df6e8bca43207902724884a",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.rock1",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/rock_largeA.glb",
+      "target": "environment/rocks/rock-01.glb",
+      "bytes": 7552,
+      "sha256": "6dd15390fd96501dcd1454765a17ba61dbbd8d47705dfe5149c8dd92b353ce25",
+      "runtimePath": "/assets/environment/rocks/rock-01.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 4324,
+      "optimizedSha256": "455f817a3869876bdf8572ae87f02274c91e467e706cef7227249b891ef81a1b",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.rock2",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/rock_largeB.glb",
+      "target": "environment/rocks/rock-02.glb",
+      "bytes": 8560,
+      "sha256": "caa8b025833d4dabf6d98fe2e96cf2fbd886693ac990df0db75f9d827194374b",
+      "runtimePath": "/assets/environment/rocks/rock-02.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 5284,
+      "optimizedSha256": "ab743a04813c8b5ffd4441205b317b43c2d5ec4b9a2449b05351494833fa8482",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "environment.rock3",
+      "source": "kenney-nature",
+      "member": "Models/GLTF format/rock_tallA.glb",
+      "target": "environment/rocks/rock-03.glb",
+      "bytes": 12072,
+      "sha256": "88250f236a3b75f8b55c1d8afb6af020f8a91b1e81f9fb51f7ef513420d45a2d",
+      "runtimePath": "/assets/environment/rocks/rock-03.glb",
+      "sidecars": [],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 5924,
+      "optimizedSha256": "ebc5bb39078945196dad573460b52f3680ab70d9825bc8561c889fb313789a39",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "vehicles.car1",
+      "source": "kenney-car",
+      "member": "Models/GLB format/sedan.glb",
+      "target": "vehicles/car-01.glb",
+      "bytes": 172216,
+      "sha256": "b532ea7d2c59f7f6b22b138cf1955218a2c1898f1cea932af4d3fd563c3959b7",
+      "runtimePath": "/assets/vehicles/car-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 12371,
+          "sha256": "f3622a03a20c6696065cae9cbe391351be873508af190c2ebd1d420c055787a5"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Car Kit",
+      "officialPage": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 43680,
+      "optimizedSha256": "e08e68d0f26bf7497af8d0608e3230e2ef76af1a89b6797a89e0c486eb7aea31",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "vehicles.car2",
+      "source": "kenney-car",
+      "member": "Models/GLB format/hatchback-sports.glb",
+      "target": "vehicles/car-02.glb",
+      "bytes": 197804,
+      "sha256": "bd5c9d4c3b4bdd254a66b8426563a68b1487ae7a5076df3a2488e6ffed7be64f",
+      "runtimePath": "/assets/vehicles/car-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 12371,
+          "sha256": "f3622a03a20c6696065cae9cbe391351be873508af190c2ebd1d420c055787a5"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Car Kit",
+      "officialPage": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 44776,
+      "optimizedSha256": "f249473b84615213a456000df018982fc506bc29d45b05c0113be39db5ab62b5",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "vehicles.truck1",
+      "source": "kenney-car",
+      "member": "Models/GLB format/truck.glb",
+      "target": "vehicles/truck-01.glb",
+      "bytes": 176360,
+      "sha256": "5e1bc66c343501dd7d5734b57e672dd949bf95d7abdce680c6508cef99d374f8",
+      "runtimePath": "/assets/vehicles/truck-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/colormap.png",
+          "bytes": 12371,
+          "sha256": "f3622a03a20c6696065cae9cbe391351be873508af190c2ebd1d420c055787a5"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Car Kit",
+      "officialPage": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "optimizedBytes": 44652,
+      "optimizedSha256": "e856af827431a44daacff9a3d6cfc225ccad56dea7c6856c4753d3277d9e9b45",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "people.citizen1",
+      "source": "kenney-people",
+      "member": "Models/GLB format/character-a.glb",
+      "target": "people/citizen-01.glb",
+      "bytes": 113596,
+      "sha256": "8ee5dae167ec589863f6bba222467eb90ace8be357a4c5abfcab289290181616",
+      "runtimePath": "/assets/people/citizen-01.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/texture-a.png",
+          "bytes": 20171,
+          "sha256": "257e944c582ce7cda206fbd8ceb717be648f9721756baf377a36478c11c0059a"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Blocky Characters",
+      "officialPage": "https://kenney.nl/assets/blocky-characters",
+      "license": "CC0-1.0",
+      "optimizedBytes": 53928,
+      "optimizedSha256": "299c796362dee430650ad28a139bed723b3a57daadbfaa42cd651a9919cf7234",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    },
+    {
+      "id": "people.citizen2",
+      "source": "kenney-people",
+      "member": "Models/GLB format/character-b.glb",
+      "target": "people/citizen-02.glb",
+      "bytes": 113596,
+      "sha256": "30ed390a741a1b285f587544819aa8a02c8f7f270e552ed742eb84785034f62a",
+      "runtimePath": "/assets/people/citizen-02.glb",
+      "sidecars": [
+        {
+          "uri": "Textures/texture-b.png",
+          "bytes": 15606,
+          "sha256": "c614148428fbf63ab701ab95e2ebe0b6103ea0e2e6212c986d8931899bad7692"
+        }
+      ],
+      "originals": [],
+      "creator": "Kenney",
+      "pack": "Blocky Characters",
+      "officialPage": "https://kenney.nl/assets/blocky-characters",
+      "license": "CC0-1.0",
+      "optimizedBytes": 46984,
+      "optimizedSha256": "ebd4e048e244a8446d990e9005c94a4866841b0d1fe83f1b560f4a6be7444b28",
+      "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
+    }
+  ]
+}

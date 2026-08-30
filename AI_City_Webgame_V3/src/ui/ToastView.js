@@ -11,7 +11,28 @@ export function initToastView(el) {
 }
 
 function removeToast(div) {
-  anime({ targets: div, translateX: [0, 40], opacity: [1, 0], duration: 240, complete: () => div.remove() });
+  anime(priorityAnimation(div, false));
+}
+
+function priorityAnimation(div, entering) {
+  const priority = div.classList.contains('priority');
+  return priority
+    ? {
+      targets: div,
+      scale: entering ? [0.96, 1] : [1, 0.96],
+      opacity: entering ? [0, 1] : [1, 0],
+      duration: entering ? 300 : 240,
+      easing: entering ? 'easeOutCubic' : 'easeInCubic',
+      complete: entering ? undefined : () => div.remove(),
+    }
+    : {
+      targets: div,
+      translateX: entering ? [30, 0] : [0, 40],
+      opacity: entering ? [0, 1] : [1, 0],
+      duration: entering ? 300 : 240,
+      easing: entering ? 'easeOutCubic' : 'easeInCubic',
+      complete: entering ? undefined : () => div.remove(),
+    };
 }
 
 export function showToast(title, text = '', priority = false) {
@@ -24,9 +45,10 @@ export function showToast(title, text = '', priority = false) {
   }
   const div = document.createElement('div');
   div.className = `toast${priority ? ' priority' : ''}`;
+  div.setAttribute('role', priority ? 'alert' : 'status');
   div.innerHTML = `<strong>${title}</strong>${text ? `<div>${text}</div>` : ''}`;
   stackEl.appendChild(div);
-  anime({ targets: div, translateX: [30, 0], opacity: [0, 1], duration: 300, easing: 'easeOutCubic' });
+  anime(priorityAnimation(div, true));
   setTimeout(() => {
     if (div.isConnected) removeToast(div);
   }, 2800);

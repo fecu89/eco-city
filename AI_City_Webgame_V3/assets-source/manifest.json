@@ -1,0 +1,85 @@
+{
+  "downloadedAt": "2026-08-30",
+  "sources": [
+    {
+      "id": "kenney-hexagon",
+      "creator": "Kenney",
+      "pack": "Hexagon Kit",
+      "officialPage": "https://kenney.nl/assets/hexagon-kit",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-roads",
+      "creator": "Kenney",
+      "pack": "City Kit Roads",
+      "officialPage": "https://kenney.nl/assets/city-kit-roads",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-suburban",
+      "creator": "Kenney",
+      "pack": "City Kit Suburban",
+      "officialPage": "https://kenney.nl/assets/city-kit-suburban",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-commercial",
+      "creator": "Kenney",
+      "pack": "City Kit Commercial",
+      "officialPage": "https://kenney.nl/assets/city-kit-commercial",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-industrial",
+      "creator": "Kenney",
+      "pack": "City Kit Industrial",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-nature",
+      "creator": "Kenney",
+      "pack": "Nature Kit",
+      "officialPage": "https://kenney.nl/assets/nature-kit",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-car",
+      "creator": "Kenney",
+      "pack": "Car Kit",
+      "officialPage": "https://kenney.nl/assets/car-kit",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "kenney-people",
+      "creator": "Kenney",
+      "pack": "Blocky Characters",
+      "officialPage": "https://kenney.nl/assets/blocky-characters",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
+      "id": "quaternius-space",
+      "creator": "Quaternius",
+      "pack": "Ultimate Space Kit",
+      "officialPage": "https://quaternius.com/packs/ultimatespacekit.html",
+      "license": "CC0-1.0",
+      "strategy": "official-linked-download"
+    },
+    {
+      "id": "quaternius-farm",
+      "creator": "Quaternius",
+      "pack": "Farm Buildings Pack",
+      "officialPage": "https://quaternius.com/packs/farmbuildings.html",
+      "license": "CC0-1.0",
+      "strategy": "official-linked-download"
+    }
+  ]
+}

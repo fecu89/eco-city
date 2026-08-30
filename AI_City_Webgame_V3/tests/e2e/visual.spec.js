@@ -6,22 +6,26 @@ const FACILITY_TYPES = [
   'solar', 'wind', 'battery', 'cooling', 'green',
 ];
 
-async function renderMixedLevels(page, size = 5) {
+async function renderMixedLevels(page, radius = 2) {
   await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
-  await page.evaluate(({ types, gridSize }) => {
+  await page.evaluate(({ types, boardRadius }) => {
     const state = window.__GAME_STATE__;
-    state.gridSize = gridSize;
+    state.boardRadius = boardRadius;
     state.selectedFacility = null;
-    state.grid = Array.from({ length: gridSize * gridSize }, (_, index) => (
+    const cellCount = boardRadius === 3 ? 37 : 19;
+    state.grid = Array.from({ length: cellCount }, (_, index) => (
       index < 15 ? { type: types[index % types.length], level: (index % 3) + 1 } : null
     ));
     window.__renderCityForTest();
-  }, { types: FACILITY_TYPES, gridSize: size });
+  }, { types: FACILITY_TYPES, boardRadius: radius });
   await page.waitForTimeout(180);
 }
 
 // WebGL 장면은 GPU/소프트웨어 렌더러별 안티앨리어싱 차이를 고려해 허용 오차를 둔다.
 test.describe('visual', () => {
+  test.beforeEach(async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__setTimeScale(0));
+  });
   test('fullscreen city default HUD', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
     await expect(page).toHaveScreenshot('world-hud-default.png', { maxDiffPixels: 18000 });
@@ -29,11 +33,29 @@ test.describe('visual', () => {
 
   test('light theme keeps the living city and HUD readable', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
-    await page.locator('[data-hud-target="menu"]').first().click();
+    await page.locator('[data-hud-target="settings"]').first().click();
     await page.locator('#themeBtn').click();
-    await page.locator('#menuPanel [data-hud-close]').click();
+    await page.locator('#settingsPanel [data-hud-close]').click();
     await page.waitForFunction(() => window.__getCityRendererStats?.().theme === 'light');
     await expect(page).toHaveScreenshot('world-light-living-city.png', { maxDiffPixels: 18000 });
+  });
+
+  test('daylight sky uses a clean blue gradient without a celestial object', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.evaluate(() => window.__setWorldHourForTest(12));
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-day.png', { maxDiffPixels: 12000 });
+  });
+
+  test('dusk sky warms gradually without hiding the city', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.evaluate(() => window.__setWorldHourForTest(17));
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-dusk.png', { maxDiffPixels: 12000 });
+  });
+
+  test('night keeps readable building lights without a celestial object', async ({ gamePage: page }) => {
+    await renderMixedLevels(page);
+    await page.evaluate(() => window.__setWorldHourForTest(23));
+    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-night.png', { maxDiffPixels: 12000 });
   });
 
   test('floating build palette', async ({ gamePage: page }) => {
@@ -48,17 +70,19 @@ test.describe('visual', () => {
     await page.locator('[data-hud-target="status"]').first().click();
     await expect(page).toHaveScreenshot('world-hud-status.png', { maxDiffPixels: 18000 });
 
-    await page.locator('[data-hud-target="menu"]').first().click();
+    await page.locator('[data-hud-target="settings"]').first().click();
     await expect(page).toHaveScreenshot('world-hud-menu.png', { maxDiffPixels: 18000 });
   });
 
-  test('achievement unlock owns a clear celebration layer', async ({ gamePage: page }) => {
+  test('quest completion owns a clear celebration layer', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 2; index++) {
       await page.evaluate((cell) => window.__clickCell(cell), index);
     }
-    await expect(page.locator('#achievementCelebration')).toHaveClass(/show/);
-    await expect(page).toHaveScreenshot('achievement-unlock.png', { maxDiffPixels: 18000 });
+    await page.locator('[data-hud-target="quest"]').first().click();
+    await page.locator('#questPanelClaimBtn').click();
+    await expect(page.locator('#questCelebration')).toHaveClass(/show/);
+    await expect(page).toHaveScreenshot('quest-complete.png', { maxDiffPixels: 18000 });
   });
 
   test('initial board', async ({ gamePage: page }) => {
@@ -68,20 +92,6 @@ test.describe('visual', () => {
     await expect(page).toHaveScreenshot('board-initial.png', { maxDiffPixels: 20000 });
   });
 
-  test('crisis modal', async ({ gamePage: page }) => {
-    await page.evaluate(() => {
-      const state = window.__GAME_STATE__;
-      state.questIndex = 4;
-      state.questStatus = 'ready_to_claim';
-      state.metrics = { reliableSupply: 10, demand: 8, balance: 2, carbon: 7, water: 5 };
-      state.lastTickSummary = { deliveredPower: 10, demand: 8, hourlyCarbon: 7, hourlyWater: 5, routes: [] };
-      window.__refreshGameForTest();
-    });
-    await page.locator('#questClaimBtn').click();
-    await page.locator('#questRewardClose').click();
-    await expect(page.locator('.modal-card')).toHaveScreenshot('crisis-modal.png', { maxDiffPixels: 4000 });
-  });
-
   test('mixed City Kit facilities show all three level treatments', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
     await expect(page.locator('#cityGrid')).toHaveScreenshot('city-kit-levels.png', { maxDiffPixels: 12000 });
@@ -89,20 +99,15 @@ test.describe('visual', () => {
 
   test('mixed city remains readable after camera orbit', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
-    const canvas = page.locator('.city-scene-3d-canvas');
-    const box = await canvas.boundingBox();
-    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.58, { steps: 8 });
-    await page.mouse.up();
-    await page.waitForTimeout(220);
+    await page.evaluate(() => window.__setCityCameraOrbitForTest(0.82, 0.88));
+    await page.waitForTimeout(120);
     await expect(page.locator('#cityGrid')).toHaveScreenshot('city-kit-rotated.png', { maxDiffPixels: 12000 });
   });
 
   test('diagnosis colors remain separate from facility level colors', async ({ gamePage: page }) => {
     await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
     await page.evaluate((types) => {
-      const configs = Array.from({ length: 25 }, (_, index) => (
+      const configs = Array.from({ length: 19 }, (_, index) => (
         index < 12
           ? {
               empty: false,
@@ -112,7 +117,7 @@ test.describe('visual', () => {
             }
           : { empty: true, disabled: true }
       ));
-      window.__renderCityConfigsForTest(configs, 5);
+      window.__renderCityConfigsForTest(configs, 2);
     }, FACILITY_TYPES);
     await page.waitForTimeout(180);
     await expect(page.locator('#cityGrid')).toHaveScreenshot('city-diagnosis.png', { maxDiffPixels: 12000 });
@@ -121,6 +126,9 @@ test.describe('visual', () => {
 
 test.describe('visual mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true });
+  test.beforeEach(async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__setTimeScale(0));
+  });
 
   test('mobile fullscreen city default HUD', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
@@ -131,6 +139,11 @@ test.describe('visual mobile', () => {
     await renderMixedLevels(page);
     await page.locator('.mobile-bar [data-hud-target="build"]').click();
     await expect(page).toHaveScreenshot('world-hud-mobile-build.png', { maxDiffPixels: 18000 });
+  });
+
+  test('mobile quest details live inside the quest sheet', async ({ gamePage: page }) => {
+    await page.locator('.mobile-bar [data-hud-target="quest"]').click();
+    await expect(page).toHaveScreenshot('world-hud-mobile-quest.png', { maxDiffPixels: 18000 });
   });
 
   test('City Kit board fits the mobile gameplay viewport', async ({ gamePage: page }) => {

@@ -1,12 +1,12 @@
 import { REPORT_TIERS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
-import { calcMetrics } from './BoardSystem.js';
+import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 // 15개 퀘스트의 실제 운영 기록을 요약한다. 별도 일괄 검증 관문은 만들지 않는다.
 export function computeReport() {
-  const m = calcMetrics(gameState.grid, gameState.gridSize);
+  const m = calcMetrics(gameState.grid, getBoardCoordinates(gameState));
   const b = gameState.baseline || m;
   const totals = gameState.simulationTotals;
   const hours = Math.max(1, totals.hours);
@@ -22,16 +22,16 @@ export function computeReport() {
     healthCost: Math.round(totals.health * 10) / 10,
   };
 
-  const science = clamp(100 - Math.max(0, -m.balance) * 8 - m.carbon * 2.2 - Math.max(0, m.water - 10) * 2, 0, 100);
+  const sustainability = clamp(100 - Math.max(0, -m.balance) * 8 - m.carbon * 2.2 - Math.max(0, m.water - 10) * 2, 0, 100);
   const spatial = clamp(m.synergyLinks * 18 - m.conflictPairs * 12, 0, 100);
   const autonomy = clamp((gameState.claimedQuestIds.size / 15) * 80 + Object.values(gameState.quizResults).filter((result) => result.passed).length * 7, 0, 100);
-  const total = Math.round(science * 0.4 + spatial * 0.25 + autonomy * 0.25 + clamp(m.dev, 0, 100) * 0.1);
+  const total = Math.round(sustainability * 0.4 + spatial * 0.25 + autonomy * 0.25 + clamp(m.dev, 0, 100) * 0.1);
   const tier = REPORT_TIERS.find((t) => total >= t.min);
 
   return {
     metrics: m,
     baseline: b,
-    science: Math.round(science),
+    sustainability: Math.round(sustainability),
     spatial: Math.round(spatial),
     autonomy: Math.round(autonomy),
     total,
@@ -47,9 +47,9 @@ export function computeReport() {
 export function exportReport() {
   const report = computeReport();
   return {
-    title: 'AI 시티를 구하라!',
-    note: '게임 밸런스 수치는 교수학습용 상대값입니다. 에너지 비교 출처는 docs/gameplan.md 참고.',
-    gridSize: gameState.gridSize,
+    title: '2040 기후 생존 도시',
+    note: '게임 밸런스 수치는 기후·에너지 시스템 학습용 상대값입니다.',
+    boardRadius: gameState.boardRadius,
     baselineMetrics: gameState.baseline,
     finalMetrics: report.metrics,
     finalScore: report,
@@ -57,8 +57,6 @@ export function exportReport() {
     completedQuests: [...gameState.claimedQuestIds],
     operations: report.operations,
     quizResults: gameState.quizResults,
-    transcripts: gameState.transcripts,
-    badges: [...gameState.badges],
     createdAt: new Date().toISOString(),
   };
 }

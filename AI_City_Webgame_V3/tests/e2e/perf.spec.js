@@ -3,20 +3,22 @@ import { clickCell } from '../helpers/playthrough.js';
 
 async function renderRepresentativeCity(page) {
   await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
+  await page.waitForFunction(() => window.__getCityRendererStats?.().environment?.state === 'ready');
+  const renderCount = await page.evaluate(() => window.__getCityRendererStats().renderCount);
   await page.evaluate(() => {
     const types = [
       'residential', 'factory', 'data', 'thermal', 'nuclear',
-      'solar', 'wind', 'battery', 'cooling', 'green',
+      'solar', 'wind', 'battery', 'cooling', 'green', 'tidal',
     ];
     const state = window.__GAME_STATE__;
-    state.gridSize = 6;
-    state.grid = Array.from({ length: 36 }, (_, index) => ({
+    state.boardRadius = 3;
+    state.grid = Array.from({ length: 37 }, (_, index) => ({
       type: types[index % types.length],
       level: (index % 3) + 1,
     }));
     window.__renderCityForTest();
   });
-  await page.waitForTimeout(100);
+  await page.waitForFunction((before) => window.__getCityRendererStats().renderCount > before, renderCount);
 }
 
 test.describe('performance', () => {
@@ -76,12 +78,12 @@ test.describe('performance', () => {
     expect(after - before).toBeLessThanOrEqual(2);
   });
 
-  test('representative 6×6 city stays within the 24 draw-call budget', async ({ gamePage: page }) => {
+  test('representative 37-cell hex city stays within the 24 draw-call budget', async ({ gamePage: page }) => {
     await renderRepresentativeCity(page);
     const stats = await page.evaluate(() => window.__getCityRendererStats());
 
-    expect(stats.occupiedCells).toBe(36);
-    expect(stats.facilityInstances).toBe(36);
+    expect(stats.occupiedCells).toBe(37);
+    expect(stats.facilityInstances).toBe(37);
     expect(stats.drawCalls).toBeLessThanOrEqual(24);
   });
 
@@ -138,6 +140,12 @@ test.describe('performance', () => {
     });
     await page.goto('/');
     await page.waitForFunction(() => window.__GAME_STATE__ && window.__getCityAssetStatus?.().state === 'ready');
+    await page.waitForTimeout(1400);
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      const next = page.locator('#storyNext');
+      if (!await next.isVisible().catch(() => false)) break;
+      await next.click();
+    }
     await renderRepresentativeCity(page);
     await page.waitForTimeout(150);
     await page.evaluate(() => {
@@ -181,6 +189,12 @@ test.describe('performance', () => {
     });
     await page.goto('/');
     await page.waitForFunction(() => window.__GAME_STATE__ && window.__getCityAssetStatus?.().state === 'ready');
+    await page.waitForTimeout(1400);
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      const next = page.locator('#storyNext');
+      if (!await next.isVisible().catch(() => false)) break;
+      await next.click();
+    }
     await renderRepresentativeCity(page);
     await page.evaluate(() => {
       window.__GPU_BUFFER_COUNTS__.created = 0;

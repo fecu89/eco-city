@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { BADGES } from '../../../src/core/Constants.js';
 import { Events } from '../../../src/core/EventBus.js';
 import { gameState } from '../../../src/core/GameState.js';
 import { computeReport, exportReport } from '../../../src/systems/ReportSystem.js';
@@ -9,8 +8,8 @@ test('product state and events contain no evidence or batch redesign concepts', 
   expect(gameState.evidence).toBeUndefined();
   expect(Events.EVIDENCE_SAVED).toBeUndefined();
   expect(Events.REDESIGN_VALIDATED).toBeUndefined();
-  expect(BADGES.some((badge) => badge.id === 'evidence')).toBe(false);
-  expect(BADGES.some((badge) => badge.id === 'low-carbon')).toBe(true);
+  expect(Events.BADGE_UNLOCKED).toBeUndefined();
+  expect(Events.ADVISOR_ASKED).toBeUndefined();
 });
 
 test('final campaign report evaluates operations and exports no evidence field', () => {
@@ -42,4 +41,7 @@ test('final campaign report evaluates operations and exports no evidence field',
   expect(exported.completedQuests).toEqual(['first-citizens', 'power-on']);
   expect(exported.quizResults['growth-cost'].passed).toBe(true);
   expect(exported.evidence).toBeUndefined();
+  expect(exported.badges).toBeUndefined();
+  expect(exported.transcripts).toBeUndefined();
+  expect(exported.boardRadius).toBe(2);
 });

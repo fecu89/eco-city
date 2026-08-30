@@ -7,6 +7,8 @@ import {
   requestEmergencySupport,
   markQuestQuizResult,
 } from '../../../src/systems/QuestSystem.js';
+import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
+import { QUESTS } from '../../../src/core/QuestDefinitions.js';
 
 const powered = (ratio = 1) => ({ demand: 2, delivered: 2 * ratio, ratio });
 const summary = (overrides = {}) => ({
@@ -38,17 +40,33 @@ test('quest 1 becomes ready with two homes and claims its reward once', () => {
   expect(state.credits).toBe(before + 4);
 });
 
-test('quest 13 needs three consecutive low-carbon, lower-carbon hours', () => {
+test('quest 14 needs four consecutive low-carbon, lower-water profitable hours', () => {
   const state = new GameState();
-  state.questIndex = 13;
-  state.baseline = { hourlyCarbon: 10 };
+  state.questIndex = 14;
+  state.baseline = { hourlyWater: 10 };
 
-  applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyCarbon: 8 });
-  applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyCarbon: 8 });
+  applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
+  applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
   expect(state.questStatus).toBe('active');
-  applySimulationQuestProgress(state, { lowCarbonPercent: 60, hourlyCarbon: 8 });
+  applySimulationQuestProgress(state, { lowCarbonPercent: 60, hourlyWater: 8, netCredits: 1 });
   expect(state.questProgress.consecutiveHours).toBe(0);
-  for (let i = 0; i < 3; i++) applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyCarbon: 8 });
+  for (let i = 0; i < 4; i++) applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 5 replaces the quiz-only gate with two safe profitable nuclear hours', () => {
+  expect(QUESTS.filter((quest) => quest.progressKind === 'quiz').map((quest) => quest.index)).toEqual([15]);
+  expect(QUESTS[4]).toMatchObject({ index: 5, progressKind: 'hours', quizKind: null });
+
+  const state = new GameState();
+  state.questIndex = 5;
+  state.grid[0] = { type: 'nuclear', level: 1 };
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 8, netCredits: 1 }));
+  expect(state.questStatus).toBe('active');
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 8.1, netCredits: 1 }));
+  expect(state.questProgress.consecutiveHours).toBe(0);
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 7, netCredits: 1 }));
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 7, netCredits: 1 }));
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
@@ -57,7 +75,7 @@ test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration
     {
       quest: 2,
       grid: [{ type: 'residential' }, { type: 'thermal' }],
-      tick: summary({ facilityPower: { 0: powered(0.95) } }),
+      tick: summary({ facilityPower: { 0: powered(0.95), 1: powered(0.95) } }),
       hours: 2,
     },
     {
@@ -69,13 +87,13 @@ test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration
     {
       quest: 4,
       grid: [{ type: 'data' }, { type: 'thermal' }, { type: 'residential' }, { type: 'factory' }, { type: 'residential' }],
-      tick: summary({ facilityPower: { 0: powered(0.6) } }),
+      tick: summary({ facilityPower: { 0: powered(0.95) } }),
       hours: 2,
     },
     {
       quest: 7,
       grid: [{ type: 'cooling' }, { type: 'data' }],
-      tick: summary({ facilityPower: { 0: powered(0.95) } }),
+      tick: summary({ facilityPower: { 0: powered(0.95), 1: powered(0.95) } }),
       hours: 2,
     },
   ];
@@ -83,8 +101,7 @@ test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration
   for (const item of cases) {
     const state = new GameState();
     state.questIndex = item.quest;
-    state.gridSize = 5;
-    state.grid = [...item.grid, ...Array(25 - item.grid.length).fill(null)].map((cell) => cell && ({ level: 1, priority: 'normal', ...cell }));
+    state.grid = [...item.grid, ...Array(19 - item.grid.length).fill(null)].map((cell) => cell && ({ level: 1, priority: 'normal', ...cell }));
     for (let hour = 0; hour < item.hours; hour++) applySimulationQuestProgress(state, item.tick);
     expect(state.questStatus, `quest ${item.quest}`).toBe('ready_to_claim');
   }
@@ -92,7 +109,7 @@ test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration
   const separated = new GameState();
   separated.questIndex = 3;
   separated.grid[0] = { type: 'factory', level: 1 };
-  separated.grid[24] = { type: 'thermal', level: 1 };
+  separated.grid[18] = { type: 'thermal', level: 1 };
   const factoryTick = summary({ facilityPower: { 0: powered(1) }, facilityEconomy: { 0: { operationRatio: 1, income: 1 } } });
   applySimulationQuestProgress(separated, factoryTick);
   applySimulationQuestProgress(separated, factoryTick);
@@ -115,22 +132,24 @@ test('quest 9 requires a renewable battery route in each of three hours and 8E c
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quest 10 requires an adjacent green home and resets consecutive profit on a loss', () => {
+test('quest 11 requires an adjacent green home and resets three-hour profit on a loss', () => {
   const state = new GameState();
-  state.questIndex = 10;
+  state.questIndex = 11;
   state.grid[0] = { type: 'residential', level: 1 };
-  state.grid[1] = { type: 'green', level: 1 };
+  state.grid[neighborIndices(0, createHexCoordinates(2))[0]] = { type: 'green', level: 1 };
   applySimulationQuestProgress(state, summary({ netCredits: 1 }));
   applySimulationQuestProgress(state, summary({ netCredits: -0.1 }));
   expect(state.questProgress.consecutiveHours).toBe(0);
   applySimulationQuestProgress(state, summary({ netCredits: 1 }));
   applySimulationQuestProgress(state, summary({ netCredits: 1 }));
+  expect(state.questStatus).toBe('active');
+  applySimulationQuestProgress(state, summary({ netCredits: 1 }));
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quest 11 only counts extreme heat and quest 12 only counts the 19-23 night window', () => {
+test('quest 12 only counts extreme heat and quest 13 only counts the 19-23 night window', () => {
   const heat = new GameState();
-  heat.questIndex = 11;
+  heat.questIndex = 12;
   heat.grid[0] = { type: 'residential', level: 1 };
   const heatTick = summary({ facilityPower: { 0: powered(0.95) } });
   applySimulationQuestProgress(heat, heatTick);
@@ -140,32 +159,52 @@ test('quest 11 only counts extreme heat and quest 12 only counts the 19-23 night
   expect(heat.questStatus).toBe('ready_to_claim');
 
   const night = new GameState();
-  night.questIndex = 12;
-  night.simulationHour = 18;
-  applySimulationQuestProgress(night, summary());
+  night.questIndex = 13;
+  applySimulationQuestProgress(night, summary({ hour: 18 }));
   expect(night.questProgress.consecutiveHours || 0).toBe(0);
   for (const hour of [19, 20, 21]) {
-    night.simulationHour = hour;
-    applySimulationQuestProgress(night, summary());
+    applySimulationQuestProgress(night, summary({ hour }));
   }
   expect(night.questStatus).toBe('ready_to_claim');
 });
 
-test('quiz quests become claimable only after a passing result', () => {
-  for (const questIndex of [5, 8, 15]) {
-    const state = new GameState();
-    state.questIndex = questIndex;
-    markQuestQuizResult(state, false);
-    expect(state.questStatus).toBe('active');
-    markQuestQuizResult(state, true);
-    expect(state.questStatus).toBe('ready_to_claim');
-  }
+test('the final quiz and integrated quest 8 become claimable only after complete requirements pass', () => {
+  const final = new GameState();
+  final.questIndex = 15;
+  markQuestQuizResult(final, false);
+  expect(final.questStatus).toBe('active');
+  markQuestQuizResult(final, true);
+  expect(final.questStatus).toBe('ready_to_claim');
+  const solar = new GameState();
+  solar.questIndex = 8;
+  solar.grid[0] = { type: 'solar', level: 2 };
+  markQuestQuizResult(solar, true);
+  expect(solar.questStatus).toBe('active');
+  solar.research.completedIds.add('solar2');
+  expect(evaluateCurrentQuest(solar).ready).toBe(true);
+});
+
+test('quests 8 and 10 require their research and upgraded renewable facility together', () => {
+  const solar = new GameState();
+  solar.questIndex = 8;
+  solar.questProgress.quizPassed = true;
+  solar.research.completedIds.add('solar2');
+  expect(evaluateCurrentQuest(solar).ready).toBe(false);
+  solar.grid[0] = { type: 'solar', level: 2 };
+  expect(evaluateCurrentQuest(solar).ready).toBe(true);
+
+  const wind = new GameState();
+  wind.questIndex = 10;
+  wind.grid[0] = { type: 'wind', level: 2 };
+  expect(evaluateCurrentQuest(wind).ready).toBe(false);
+  wind.research.completedIds.add('wind2');
+  expect(evaluateCurrentQuest(wind).ready).toBe(true);
 });
 
 test('all fifteen rewards follow the approved unlock, permit, credit, and completion sequence', () => {
   const state = new GameState();
   const expectedUnlocks = ['thermal', 'factory', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'wind', 'green'];
-  const expectedCredits = [4, 5, 6, 8, 8, 24, 6, 6, 8, 8, 10, 10, 10, 12, 0];
+  const expectedCredits = [4, 5, 6, 8, 8, 14, 6, 8, 8, 10, 10, 10, 12, 14, 0];
   const initialCredits = state.credits;
   let earned = 0;
 
@@ -177,7 +216,8 @@ test('all fifteen rewards follow the approved unlock, permit, credit, and comple
     expect(state.credits).toBe(initialCredits + earned);
     if (questIndex <= expectedUnlocks.length) expect(state.unlockedFacilities.has(expectedUnlocks[questIndex - 1])).toBe(true);
     if (questIndex === 6) expect(result.expandGrid).toBe(true);
-    if (questIndex === 10) expect(state.upgradePermitLevel).toBe(2);
+    if (questIndex === 4) expect(state.researchMenuUnlocked).toBe(true);
+    if (questIndex === 7) expect(state.upgradePermitLevel).toBe(2);
     if (questIndex === 13) expect(state.upgradePermitLevel).toBe(3);
   }
 

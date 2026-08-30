@@ -1,6 +1,7 @@
-import { GAME, SIMULATION, STAGES } from './Constants.js';
+import { BOARD, GAME, STAGES, TIME } from './Constants.js';
+import { roundCredits } from './Money.js';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 5;
 
 export class GameState {
   constructor() {
@@ -13,8 +14,8 @@ export class GameState {
     this.turn = 0;
     this.selectedFacility = 'residential';
     this.selectedCell = null;
-    this.gridSize = GAME.INITIAL_GRID_SIZE;
-    this.grid = Array(GAME.INITIAL_GRID_SIZE * GAME.INITIAL_GRID_SIZE).fill(null); // {type, level}
+    this.boardRadius = BOARD.INITIAL_RADIUS;
+    this.grid = Array(BOARD.INITIAL_CELLS).fill(null); // {type, level}
     this.metrics = null;
     this.baseline = null;
     this.firstCitySnapshot = null;
@@ -30,14 +31,10 @@ export class GameState {
 
     this.diagnosisFound = new Set();
     this.diagnosisHintUsed = false;
-
-    this.badges = new Set();
+    this.diagnosisScannerActive = true;
 
     this.sound = true;
     this.musicEnabled = false;
-
-    this.advisorQuestions = 0;
-    this.transcripts = { execution: [], redesign: [] };
 
     this.expandedCells = new Set();
 
@@ -48,13 +45,28 @@ export class GameState {
     this.unlockedFacilities = new Set(['residential']);
     this.upgradePermitLevel = 1;
     this.campaignComplete = false;
-    this.simulationHour = SIMULATION.START_HOUR;
-    this.simulationDay = 1;
+    this.elapsedGameHours = 0;
+    this.timeScale = TIME.DEFAULT_SCALE;
+    this.lastSettlementDelta = 0;
     this.tickIndex = 0;
     this.lastTickSummary = null;
     this.climateAlert = 'normal';
     this.consecutiveEssentialOutageHours = 0;
     this.emergencySupportUsedQuestIds = new Set();
+    this.onboardingVersionSeen = 0;
+    this.tutorialStep = 'build-button';
+    this.tutorialComplete = false;
+    this.researchMenuUnlocked = false;
+    this.research = {
+      jobs: {},
+      completedIds: new Set(),
+      techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0 },
+      quizAccelerationBankHours: 0,
+    };
+    this.carbonCrisisHours = 0;
+    this.carbonWarningMilestones = new Set();
+    this.gameOver = false;
+    this.gameOverReason = null;
     this.simulationTotals = {
       hours: 0,
       netCredits: 0,
@@ -72,12 +84,6 @@ export class GameState {
     return this.stage === STAGES.EXECUTION || this.stage === STAGES.REDESIGN;
   }
 
-  logTranscript(bucket, question, answer) {
-    const list = this.transcripts[bucket];
-    if (!list) return;
-    list.push({ q: question, a: answer, ts: Date.now() });
-  }
-
   // --- persistence (see systems/SaveSystem.js for localStorage I/O) ---
 
   serialize() {
@@ -87,7 +93,8 @@ export class GameState {
       credits: this.credits,
       turn: this.turn,
       selectedFacility: this.selectedFacility,
-      gridSize: this.gridSize,
+      selectedCell: this.selectedCell,
+      boardRadius: this.boardRadius,
       grid: this.grid,
       baseline: this.baseline,
       firstCitySnapshot: this.firstCitySnapshot,
@@ -100,11 +107,9 @@ export class GameState {
       quizResults: this.quizResults,
       diagnosisFound: [...this.diagnosisFound],
       diagnosisHintUsed: this.diagnosisHintUsed,
-      badges: [...this.badges],
+      diagnosisScannerActive: this.diagnosisScannerActive,
       sound: this.sound,
       musicEnabled: this.musicEnabled,
-      advisorQuestions: this.advisorQuestions,
-      transcripts: this.transcripts,
       questIndex: this.questIndex,
       questStatus: this.questStatus,
       questProgress: this.questProgress,
@@ -112,13 +117,28 @@ export class GameState {
       unlockedFacilities: [...this.unlockedFacilities],
       upgradePermitLevel: this.upgradePermitLevel,
       campaignComplete: this.campaignComplete,
-      simulationHour: this.simulationHour,
-      simulationDay: this.simulationDay,
+      elapsedGameHours: this.elapsedGameHours,
+      timeScale: this.timeScale,
+      lastSettlementDelta: this.lastSettlementDelta,
       tickIndex: this.tickIndex,
       lastTickSummary: this.lastTickSummary,
       climateAlert: this.climateAlert,
       consecutiveEssentialOutageHours: this.consecutiveEssentialOutageHours,
       emergencySupportUsedQuestIds: [...this.emergencySupportUsedQuestIds],
+      onboardingVersionSeen: this.onboardingVersionSeen,
+      tutorialStep: this.tutorialStep,
+      tutorialComplete: this.tutorialComplete,
+      researchMenuUnlocked: this.researchMenuUnlocked,
+      research: {
+        jobs: Object.fromEntries(Object.entries(this.research.jobs).map(([id, job]) => [id, { ...job }])),
+        completedIds: [...this.research.completedIds],
+        techLevels: { ...this.research.techLevels },
+        quizAccelerationBankHours: this.research.quizAccelerationBankHours,
+      },
+      carbonCrisisHours: this.carbonCrisisHours,
+      carbonWarningMilestones: [...this.carbonWarningMilestones],
+      gameOver: this.gameOver,
+      gameOverReason: this.gameOverReason,
       simulationTotals: this.simulationTotals,
     };
   }
@@ -127,10 +147,11 @@ export class GameState {
     if (!data || data.v !== SAVE_VERSION) return false;
     try {
       this.stage = data.stage ?? this.stage;
-      this.credits = data.credits ?? this.credits;
+      this.credits = roundCredits(data.credits ?? this.credits);
       this.turn = data.turn ?? this.turn;
       this.selectedFacility = data.selectedFacility ?? this.selectedFacility;
-      this.gridSize = data.gridSize ?? this.gridSize;
+      this.selectedCell = data.selectedCell ?? null;
+      this.boardRadius = data.boardRadius ?? this.boardRadius;
       this.grid = Array.isArray(data.grid) ? data.grid.map(normalizeCell) : this.grid;
       this.baseline = data.baseline ?? this.baseline;
       this.firstCitySnapshot = data.firstCitySnapshot ?? this.firstCitySnapshot;
@@ -143,11 +164,9 @@ export class GameState {
       this.quizResults = data.quizResults ?? {};
       this.diagnosisFound = new Set(data.diagnosisFound || []);
       this.diagnosisHintUsed = !!data.diagnosisHintUsed;
-      this.badges = new Set(data.badges || []);
+      this.diagnosisScannerActive = data.diagnosisScannerActive ?? true;
       this.sound = data.sound ?? true;
       this.musicEnabled = !!data.musicEnabled;
-      this.advisorQuestions = data.advisorQuestions ?? 0;
-      this.transcripts = data.transcripts ?? { execution: [], redesign: [] };
       this.questIndex = data.questIndex ?? 1;
       this.questStatus = data.questStatus ?? 'active';
       this.questProgress = data.questProgress ?? {};
@@ -155,13 +174,33 @@ export class GameState {
       this.unlockedFacilities = new Set(data.unlockedFacilities || ['residential']);
       this.upgradePermitLevel = data.upgradePermitLevel ?? 1;
       this.campaignComplete = !!data.campaignComplete;
-      this.simulationHour = data.simulationHour ?? SIMULATION.START_HOUR;
-      this.simulationDay = data.simulationDay ?? 1;
+      this.elapsedGameHours = data.elapsedGameHours ?? 0;
+      this.timeScale = data.timeScale ?? TIME.DEFAULT_SCALE;
+      this.lastSettlementDelta = data.lastSettlementDelta ?? 0;
       this.tickIndex = data.tickIndex ?? 0;
       this.lastTickSummary = data.lastTickSummary ?? null;
       this.climateAlert = data.climateAlert ?? 'normal';
       this.consecutiveEssentialOutageHours = data.consecutiveEssentialOutageHours ?? 0;
       this.emergencySupportUsedQuestIds = new Set(data.emergencySupportUsedQuestIds || []);
+      this.onboardingVersionSeen = data.onboardingVersionSeen ?? 0;
+      this.tutorialStep = data.tutorialStep ?? 'build-button';
+      this.tutorialComplete = !!data.tutorialComplete;
+      this.researchMenuUnlocked = !!data.researchMenuUnlocked;
+      this.research = {
+        jobs: Object.fromEntries(Object.entries(data.research?.jobs || {}).map(([id, job]) => [id, { ...job }])),
+        completedIds: new Set(data.research?.completedIds || []),
+        techLevels: {
+          solar: data.research?.techLevels?.solar ?? 1,
+          wind: data.research?.techLevels?.wind ?? 1,
+          battery: data.research?.techLevels?.battery ?? 1,
+          tidal: data.research?.techLevels?.tidal ?? 0,
+        },
+        quizAccelerationBankHours: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+      };
+      this.carbonCrisisHours = Math.max(0, Number(data.carbonCrisisHours) || 0);
+      this.carbonWarningMilestones = new Set(data.carbonWarningMilestones || []);
+      this.gameOver = !!data.gameOver;
+      this.gameOverReason = data.gameOverReason ?? null;
       this.simulationTotals = { ...this.simulationTotals, ...(data.simulationTotals || {}) };
       return true;
     } catch (err) {
