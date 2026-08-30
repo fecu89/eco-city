@@ -32,7 +32,7 @@ export function blindBuild() {
   if (gameState.stage !== STAGES.EXECUTION) return { ok: false, reason: 'wrong_stage' };
   const emptyIndex = gameState.grid.findIndex((c) => c === null);
   if (emptyIndex === -1) return { ok: false, reason: 'grid_full' };
-  const affordable = AI_BLIND_SUGGESTION_ORDER.find((key) => FACILITIES[key].cost <= gameState.credits);
+  const affordable = AI_BLIND_SUGGESTION_ORDER.find((key) => gameState.unlockedFacilities.has(key) && FACILITIES[key].cost <= gameState.credits);
   if (!affordable) return { ok: false, reason: 'insufficient_credits' };
 
   gameState.selectedFacility = affordable;

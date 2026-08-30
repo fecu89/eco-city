@@ -2,6 +2,15 @@ import { eventBus, Events } from '../core/EventBus.js';
 
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
+  eventBus.on(Events.QUEST_READY, ({ quest }) => {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '퀘스트 완료 조건 달성',
+      text: `${quest.index}. ${quest.title} · 보상을 받을 수 있습니다.`,
+      priority: true,
+    });
+    eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
+  });
+
   eventBus.on(Events.BADGE_UNLOCKED, ({ badge }) => {
     eventBus.emit(Events.TOAST_SHOW, {
       title: '성취 해금',
@@ -22,18 +31,7 @@ export function initFeedbackBridge() {
     });
   });
 
-  eventBus.on(Events.EVIDENCE_SAVED, ({ good, entry }) => {
-    eventBus.emit(Events.TOAST_SHOW, {
-      title: good ? '근거 기록' : '근거 보완 필요',
-      text: `${entry.facility} ↔ ${entry.conceptLabel}`,
-    });
-  });
-
-  eventBus.on(Events.REFLECTION_SAVED, () => {
-    eventBus.emit(Events.TOAST_SHOW, { title: '성찰 저널 저장됨', text: '' });
-  });
-
   eventBus.on(Events.BOARD_EXPANDED, ({ settled }) => {
-    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '영토 확장 + 재설계 예산', text: '5×5 → 6×6 · +11칸 · Lv.3 해금' });
+    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '저탄소 부지 확장', text: '5×5 → 6×6 · 새 대지 11칸 확보' });
   });
 }

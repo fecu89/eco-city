@@ -2,7 +2,12 @@ export const Events = {
   // Game lifecycle
   GAME_RESET: 'game:reset',
   GAME_LOADED: 'game:loaded',
-  STAGE_CHANGED: 'stage:changed',
+  SIMULATION_TICKED: 'simulation:ticked',
+  SIMULATION_PAUSE_CHANGED: 'simulation:pauseChanged',
+  QUEST_PROGRESSED: 'quest:progressed',
+  QUEST_READY: 'quest:ready',
+  QUEST_CLAIMED: 'quest:claimed',
+  FACILITY_PRIORITY_CHANGED: 'facility:priorityChanged',
 
   // Board
   BOARD_PLACED: 'board:placed',
@@ -26,18 +31,10 @@ export const Events = {
   // Quiz / concepts
   QUIZ_ANSWERED: 'quiz:answered',
   QUIZ_FINISHED: 'quiz:finished',
-  REFLECTION_SAVED: 'reflection:saved',
 
   // Diagnosis
   DIAGNOSIS_TILE_FOUND: 'diagnosis:tileFound',
   DIAGNOSIS_COMPLETE: 'diagnosis:complete',
-
-  // Redesign
-  EVIDENCE_SAVED: 'evidence:saved',
-  REDESIGN_VALIDATED: 'redesign:validated',
-
-  // Report / bonus
-  BONUS_ROUND_STARTED: 'report:bonusStarted',
 
   // Achievements
   BADGE_UNLOCKED: 'badge:unlocked',
@@ -45,7 +42,6 @@ export const Events = {
   // UI
   TOAST_SHOW: 'toast:show',
   HUD_PANEL_CHANGED: 'hud:panelChanged',
-  STAGE_READY: 'stage:ready',
   THEME_CHANGED: 'theme:changed',
   MODAL_OPEN: 'modal:open',
   MODAL_CLOSE: 'modal:close',

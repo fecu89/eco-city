@@ -36,6 +36,13 @@ test.describe('mobile city controls', () => {
     await buttons.filter({ hasText: '건설' }).click();
     const buildSheet = page.locator('#buildPanel');
     await expect(buildSheet).toHaveClass(/hud-panel-active/);
+    await expect(page.locator('#questTracker')).toBeVisible();
+    const questIsTopmost = await page.locator('#questTracker').evaluate((quest) => {
+      const rect = quest.getBoundingClientRect();
+      const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + 12);
+      return quest.contains(topmost);
+    });
+    expect(questIsTopmost).toBe(true);
     const sheetBox = await buildSheet.boundingBox();
     expect(sheetBox.x).toBeLessThanOrEqual(5);
     expect(sheetBox.width).toBeGreaterThanOrEqual(380);

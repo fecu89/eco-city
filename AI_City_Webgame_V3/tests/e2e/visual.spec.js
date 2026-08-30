@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
-import { buildStarterCity, clickHudAction } from '../helpers/playthrough.js';
+import { buildStarterCity } from '../helpers/playthrough.js';
 
 const FACILITY_TYPES = [
   'residential', 'factory', 'data', 'thermal', 'nuclear',
@@ -69,9 +69,16 @@ test.describe('visual', () => {
   });
 
   test('crisis modal', async ({ gamePage: page }) => {
-    await buildStarterCity(page);
-    await clickHudAction(page, 'menu', '#advanceBtn');
-    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 4;
+      state.questStatus = 'ready_to_claim';
+      state.metrics = { reliableSupply: 10, demand: 8, balance: 2, carbon: 7, water: 5 };
+      state.lastTickSummary = { deliveredPower: 10, demand: 8, hourlyCarbon: 7, hourlyWater: 5, routes: [] };
+      window.__refreshGameForTest();
+    });
+    await page.locator('#questClaimBtn').click();
+    await page.locator('#questRewardClose').click();
     await expect(page.locator('.modal-card')).toHaveScreenshot('crisis-modal.png', { maxDiffPixels: 4000 });
   });
 

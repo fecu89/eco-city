@@ -17,7 +17,7 @@ export function renderDock() {
   }
   dockEl.innerHTML = '';
   Object.entries(FACILITIES).forEach(([key, f]) => {
-    if (gameState.stage < f.unlockStage) return; // 해금 전에는 완전히 숨김
+    if (!gameState.unlockedFacilities.has(key)) return;
     const locked = !gameState.isEditable;
     const unaffordable = gameState.credits < f.cost;
     const btn = document.createElement('button');
@@ -27,7 +27,7 @@ export function renderDock() {
       + (unaffordable ? ' unaffordable' : '');
     btn.disabled = locked || unaffordable;
     btn.title = locked
-      ? `${f.name} — 현재 단계에서는 건설할 수 없습니다.`
+      ? `${f.name} — 현재 퀘스트에서는 건설할 수 없습니다.`
       : unaffordable
         ? `${f.name} — ${f.cost - gameState.credits}C 부족`
         : `${f.name} — 보드에서 선택하면 인접 보너스/갈등 구역이 표시됩니다.`;

@@ -15,6 +15,8 @@ import {
   initCityAssets,
 } from '../level/CityAssetLoader.js';
 import { createCameraController } from '../systems/CameraController.js';
+import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
+import { getWorldPhase } from '../systems/ClimateSystem.js';
 
 // 모든 레이어는 씬 수명 동안 유지된다. 상태 갱신은 instance matrix/color/count만 바꾸므로
 // 시설 선택 미리보기나 연속 배치 때 WebGL 버퍼를 생성·삭제하지 않는다.
@@ -24,19 +26,13 @@ const TILE_BASE_COLOR = 0x0d1f31;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
 const SUPPLEMENT_TYPES = FACILITY_TYPES.filter((type) => CITY_ASSETS[type].supplement);
 const ENERGY_SOURCE_TYPES = new Set(CITY_AMBIENT.ENERGY_SOURCES);
-const ENERGY_TARGET_TYPES = new Set(CITY_AMBIENT.ENERGY_TARGETS);
 const RENEWABLE_SOURCE_TYPES = new Set(['solar', 'wind']);
 const MAX_ENERGY_LINKS = MAX_CELLS * CITY_AMBIENT.MAX_NEIGHBORS_PER_CELL;
 const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
-  + MAX_CELLS * CITY_AMBIENT.BIRDS_PER_GREEN_CELL
+  + 3
 );
-const ORTHOGONAL_DIRECTIONS = [
-  [-1, 0],
-  [1, 0],
-  [0, -1],
-  [0, 1],
-];
+const BIRD_POOL_SIZE = 3;
 
 const TILE_COLORS = {
   base: new THREE.Color(TILE_BASE_COLOR),
@@ -88,6 +84,9 @@ let energyBlinkTimer = null;
 let energyBlinkRestoreTimer = null;
 let residentAgentCount = 0;
 let birdCount = 0;
+let birdPoolStart = 0;
+let birdVisit = null;
+let birdVisitController = null;
 
 let groundMesh;
 let tileMesh;
@@ -113,6 +112,8 @@ const facilityMeshes = new Map();
 const supplementMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
 const energyLinks = [];
+let currentPowerRoutes = [];
+let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
 const greenIndices = [];
 const activeMotions = new Map();
@@ -132,8 +133,30 @@ function applyWorldTheme({ theme, schema } = {}) {
     hemisphereLight.groundColor.setHex(world.hemisphereGround);
   }
   rimLight?.color.setHex(world.rim);
+  applyWorldPhase(worldPhase, true);
   if (tileMesh && currentConfigs.length) updateTileInstances(currentConfigs, currentSize);
   needsRender = true;
+}
+
+const WORLD_LIGHTING = Object.freeze({
+  dawn: { sun: 0.78, hemisphere: 0.92, rim: 0.38, sunColor: 0xffcf9c },
+  day: { sun: 1.35, hemisphere: 1.15, rim: 0.28, sunColor: 0xffffff },
+  dusk: { sun: 0.42, hemisphere: 0.68, rim: 0.48, sunColor: 0xff9d78 },
+  night: { sun: 0.12, hemisphere: 0.42, rim: 0.58, sunColor: 0x8db6ff },
+});
+
+function applyWorldPhase(nextPhase, force = false) {
+  if (!force && nextPhase === worldPhase) return false;
+  worldPhase = WORLD_LIGHTING[nextPhase] ? nextPhase : 'day';
+  const lighting = WORLD_LIGHTING[worldPhase];
+  if (sunLight) {
+    sunLight.intensity = lighting.sun;
+    sunLight.color.setHex(lighting.sunColor);
+  }
+  if (hemisphereLight) hemisphereLight.intensity = lighting.hemisphere;
+  if (rimLight) rimLight.intensity = lighting.rim;
+  needsRender = true;
+  return true;
 }
 
 function ownGeometry(geometry) {
@@ -435,19 +458,6 @@ function worldZ(index, size) {
   return Math.floor(index / size) - (size - 1) / 2;
 }
 
-function orthogonalNeighbors(index, size) {
-  const row = Math.floor(index / size);
-  const column = index % size;
-  const neighbors = [];
-  ORTHOGONAL_DIRECTIONS.forEach(([rowDelta, columnDelta]) => {
-    const nextRow = row + rowDelta;
-    const nextColumn = column + columnDelta;
-    if (nextRow < 0 || nextRow >= size || nextColumn < 0 || nextColumn >= size) return;
-    neighbors.push(nextRow * size + nextColumn);
-  });
-  return neighbors;
-}
-
 function rebuildAmbientTopology() {
   energyLinks.length = 0;
   residentialIndices.length = 0;
@@ -457,19 +467,39 @@ function rebuildAmbientTopology() {
     if (!config || config.empty || !config.type) return;
     if (config.type === 'residential') residentialIndices.push(index);
     if (config.type === 'green') greenIndices.push(index);
-    if (!ENERGY_SOURCE_TYPES.has(config.type)) return;
+  });
 
-    orthogonalNeighbors(index, currentSize).forEach((targetIndex) => {
-      const target = currentConfigs[targetIndex];
-      if (!target || target.empty || !ENERGY_TARGET_TYPES.has(target.type)) return;
-      energyLinks.push({
-        sourceIndex: index,
-        targetIndex,
-        color: RENEWABLE_SOURCE_TYPES.has(config.type)
-          ? CITY_AMBIENT.COLORS.renewableEnergy
-          : CITY_AMBIENT.COLORS.conventionalEnergy,
-      });
-    });
+  applyPowerRoutes(currentPowerRoutes);
+
+  energyPacketCount = 0;
+  residentAgentCount = residentialIndices.length * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL;
+  birdCount = 0;
+  birdVisit = null;
+  updateStaticAmbientInstances();
+}
+
+function pushEnergySegment(sourceIndex, targetIndex, color) {
+  if (energyLinks.length >= MAX_ENERGY_LINKS) return;
+  const source = currentConfigs[sourceIndex];
+  const target = currentConfigs[targetIndex];
+  if (!source || source.empty || !target || target.empty) return;
+  energyLinks.push({ sourceIndex, targetIndex, color });
+}
+
+function applyPowerRoutes(routes = []) {
+  energyLinks.length = 0;
+  routes.forEach((route) => {
+    const source = currentConfigs[route.from];
+    if (!source || !ENERGY_SOURCE_TYPES.has(source.type)) return;
+    const color = RENEWABLE_SOURCE_TYPES.has(source.type)
+      ? CITY_AMBIENT.COLORS.renewableEnergy
+      : CITY_AMBIENT.COLORS.conventionalEnergy;
+    if (route.via != null && route.via !== route.from && route.via !== route.to) {
+      pushEnergySegment(route.from, route.via, color);
+      pushEnergySegment(route.via, route.to, color);
+    } else {
+      pushEnergySegment(route.from, route.to, color);
+    }
   });
 
   energyLinks.forEach((link, linkIndex) => {
@@ -493,11 +523,14 @@ function rebuildAmbientTopology() {
   energyLines.geometry.attributes.color.needsUpdate = true;
 
   energyLinkCount = energyLinks.length;
-  energyPacketCount = 0;
-  residentAgentCount = residentialIndices.length * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL;
-  birdCount = greenIndices.length * CITY_AMBIENT.BIRDS_PER_GREEN_CELL;
-  updateStaticAmbientInstances();
   syncEnergyBlinkTimer();
+  needsRender = true;
+}
+
+function handleSimulationTick(payload) {
+  currentPowerRoutes = Array.isArray(payload?.power?.routes) ? payload.power.routes.map((route) => ({ ...route })) : [];
+  applyPowerRoutes(currentPowerRoutes);
+  applyWorldPhase(getWorldPhase(payload?.summary?.hour ?? 12));
 }
 
 function updateStaticAmbientInstances() {
@@ -555,29 +588,70 @@ function updateStaticAmbientInstances() {
     agentCount++;
   });
 
-  greenIndices.forEach((cellIndex) => {
-    const centerX = worldX(cellIndex, currentSize);
-    const centerZ = worldZ(cellIndex, currentSize);
-    for (let bird = 0; bird < CITY_AMBIENT.BIRDS_PER_GREEN_CELL; bird++) {
-      const angle = cellIndex * CITY_AMBIENT.BIRD_ANGLE_PER_CELL + bird * Math.PI;
-      const [birdScaleX, birdScaleY, birdScaleZ] = CITY_AMBIENT.BIRD_SCALE;
-      setAmbientInstance(
-        ambientAgentMesh,
-        agentCount,
-        centerX + Math.cos(angle) * CITY_AMBIENT.BIRD_ORBIT_RADIUS,
-        CITY_AMBIENT.BIRD_BASE_HEIGHT,
-        centerZ + Math.sin(angle) * CITY_AMBIENT.BIRD_ORBIT_RADIUS,
-        birdScaleX,
-        birdScaleY,
-        birdScaleZ,
-        -angle,
-      );
-      ambientAgentMesh.setColorAt(agentCount, _color.setHex(CITY_AMBIENT.COLORS.bird));
-      agentCount++;
-    }
-  });
+  birdPoolStart = agentCount;
+  for (let bird = 0; bird < BIRD_POOL_SIZE; bird++) {
+    setAmbientInstance(ambientAgentMesh, agentCount, 100, 100, 100, 0, 0, 0);
+    ambientAgentMesh.setColorAt(agentCount, _color.setHex(CITY_AMBIENT.COLORS.bird));
+    agentCount++;
+  }
   finishInstances(ambientAgentMesh, agentCount);
   ambientInstances = windIndices.length + agentCount;
+}
+
+function updateBirdVisit(now) {
+  if (!birdVisit) return false;
+  const progress = Math.min(1, Math.max(0, (now - birdVisit.startedAt) / birdVisit.durationMs));
+  const centerX = worldX(birdVisit.greenIndex, currentSize);
+  const centerZ = worldZ(birdVisit.greenIndex, currentSize);
+  const [scaleX, scaleY, scaleZ] = CITY_AMBIENT.BIRD_SCALE;
+  for (let bird = 0; bird < BIRD_POOL_SIZE; bird++) {
+    const instanceIndex = birdPoolStart + bird;
+    if (bird >= birdVisit.birdCount) {
+      setAmbientInstance(ambientAgentMesh, instanceIndex, 100, 100, 100, 0, 0, 0);
+      continue;
+    }
+    const lane = bird - (birdVisit.birdCount - 1) / 2;
+    const x = centerX - 0.7 + progress * 1.4;
+    const z = centerZ + lane * 0.18 + Math.sin(progress * Math.PI * 2 + bird) * 0.08;
+    const y = CITY_AMBIENT.BIRD_BASE_HEIGHT + Math.sin(progress * Math.PI) * 0.28 + bird * 0.04;
+    setAmbientInstance(ambientAgentMesh, instanceIndex, x, y, z, scaleX, scaleY, scaleZ, Math.PI / 2);
+  }
+  ambientAgentMesh.instanceMatrix.needsUpdate = true;
+  if (progress >= 1) finishBirdVisit();
+  return true;
+}
+
+export function triggerBirdVisit(greenIndex, requestedBirdCount = 2, durationMs = 2000) {
+  if (!greenIndices.includes(greenIndex)) return false;
+  birdCount = Math.max(2, Math.min(BIRD_POOL_SIZE, requestedBirdCount));
+  birdVisit = { greenIndex, birdCount, durationMs, startedAt: performance.now() };
+  updateBirdVisit(birdVisit.startedAt);
+  needsRender = true;
+  return true;
+}
+
+export function finishBirdVisit() {
+  birdVisit = null;
+  birdCount = 0;
+  if (!ambientAgentMesh) return;
+  for (let bird = 0; bird < BIRD_POOL_SIZE; bird++) {
+    setAmbientInstance(ambientAgentMesh, birdPoolStart + bird, 100, 100, 100, 0, 0, 0);
+  }
+  ambientAgentMesh.instanceMatrix.needsUpdate = true;
+  needsRender = true;
+}
+
+function pauseBirdVisits() {
+  birdVisitController?.pause('modal');
+}
+
+function resumeBirdVisits() {
+  birdVisitController?.resume('modal');
+}
+
+function handleBirdVisibility() {
+  if (document.hidden) birdVisitController?.pause('hidden');
+  else birdVisitController?.resume('hidden');
 }
 
 function clearEnergyBlinkTimers() {
@@ -860,11 +934,21 @@ export function initCityScene3D(container) {
 
   resizeObserver = new ResizeObserver(resizeToContainer);
   resizeObserver.observe(container);
-  eventBus.on(Events.STAGE_CHANGED, resetCameraForStage);
+  eventBus.on(Events.BOARD_EXPANDED, resetCameraForBoardExpansion);
   eventBus.on(Events.BOARD_PLACED, handlePlaced);
   eventBus.on(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.on(Events.BOARD_DEMOLISHED, handleDemolished);
   eventBus.on(Events.THEME_CHANGED, applyWorldTheme);
+  eventBus.on(Events.SIMULATION_TICKED, handleSimulationTick);
+  eventBus.on(Events.MODAL_OPEN, pauseBirdVisits);
+  eventBus.on(Events.MODAL_CLOSE, resumeBirdVisits);
+  document.addEventListener('visibilitychange', handleBirdVisibility);
+
+  birdVisitController = createBirdVisitController({
+    getGreenIndices: () => greenIndices,
+    onVisit: ({ greenIndex, birdCount: count, durationMs }) => triggerBirdVisit(greenIndex, count, durationMs),
+  });
+  birdVisitController.start();
 
   window.__clickCell = (index) => {
     const config = currentConfigs[index];
@@ -893,7 +977,8 @@ function resetCameraFromButton(event) {
   needsRender = true;
 }
 
-function resetCameraForStage() {
+function resetCameraForBoardExpansion({ settled } = {}) {
+  if (settled) return;
   cameraController?.reset(currentSize);
   needsRender = true;
 }
@@ -932,6 +1017,7 @@ function handlePointerClick(event) {
 
 function renderFrame(now) {
   let shouldRender = needsRender || !!cameraController?.update();
+  if (birdVisit && updateBirdVisit(now)) shouldRender = true;
   if (activeMotions.size) {
     updateInstances(currentConfigs, currentSize, now);
     if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentSize, now);
@@ -987,6 +1073,9 @@ export function getCityRendererStats() {
     energyBlinkCount,
     residentAgentCount,
     birdCount,
+    birdPoolSize: BIRD_POOL_SIZE,
+    worldPhase,
+    sunIntensity: sunLight?.intensity ?? 0,
     renderCount,
     pixelRatio: renderer?.getPixelRatio() ?? 0,
     theme: currentTheme,
@@ -999,11 +1088,17 @@ export function disposeCityScene3D() {
   clearEnergyBlinkTimers();
   resizeObserver?.disconnect();
   resizeObserver = null;
-  eventBus.off(Events.STAGE_CHANGED, resetCameraForStage);
+  eventBus.off(Events.BOARD_EXPANDED, resetCameraForBoardExpansion);
   eventBus.off(Events.BOARD_PLACED, handlePlaced);
   eventBus.off(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.off(Events.BOARD_DEMOLISHED, handleDemolished);
   eventBus.off(Events.THEME_CHANGED, applyWorldTheme);
+  eventBus.off(Events.SIMULATION_TICKED, handleSimulationTick);
+  eventBus.off(Events.MODAL_OPEN, pauseBirdVisits);
+  eventBus.off(Events.MODAL_CLOSE, resumeBirdVisits);
+  document.removeEventListener('visibilitychange', handleBirdVisibility);
+  birdVisitController?.dispose();
+  birdVisitController = null;
   cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('pointerup', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('click', resetCameraFromButton);
@@ -1020,6 +1115,7 @@ export function disposeCityScene3D() {
   ownedMaterials.clear();
   activeMotions.clear();
   energyLinks.length = 0;
+  currentPowerRoutes = [];
   residentialIndices.length = 0;
   greenIndices.length = 0;
   energyLinkCount = 0;
@@ -1027,6 +1123,7 @@ export function disposeCityScene3D() {
   energyBlinkCount = 0;
   residentAgentCount = 0;
   birdCount = 0;
+  birdVisit = null;
   ambientInstances = 0;
   cameraController = null;
   renderer = null;

@@ -24,10 +24,6 @@ export function initAchievementSystem() {
     checkSynergy(metrics);
   });
 
-  eventBus.on(Events.STAGE_CHANGED, ({ stage, from }) => {
-    if (from === 1 && stage === 2) unlock('crisis');
-  });
-
   eventBus.on(Events.BOARD_EXPANDED, () => unlock('expansion'));
 
   eventBus.on(Events.QUIZ_FINISHED, ({ passed }) => {
@@ -38,13 +34,9 @@ export function initAchievementSystem() {
     if (noHints) unlock('diagnosis');
   });
 
-  eventBus.on(Events.EVIDENCE_SAVED, () => {
-    const good = gameState.evidence.filter((e) => e.good).length;
-    if (good >= 3) unlock('evidence');
-  });
-
-  eventBus.on(Events.REDESIGN_VALIDATED, ({ allPassed, metrics }) => {
-    checkSynergy(metrics);
-    if (allPassed) unlock('mayor');
+  eventBus.on(Events.QUEST_CLAIMED, ({ quest }) => {
+    if (quest.index === 4) unlock('crisis');
+    if (quest.index === 13) unlock('low-carbon');
+    if (quest.index === 15) unlock('mayor');
   });
 }

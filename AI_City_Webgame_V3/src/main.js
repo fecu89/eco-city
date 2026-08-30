@@ -1,26 +1,27 @@
 import './style.css';
-import anime from 'animejs';
-
-import { LEVEL_VISUALS, STAGES, STAGE_INFO } from './core/Constants.js';
+import { LEVEL_VISUALS, STAGES } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
 import { placeFacility } from './systems/BoardSystem.js';
 import { initAchievementSystem } from './systems/AchievementSystem.js';
 import { ask, blindBuild } from './systems/AdvisorSystem.js';
-import { revealCrisis } from './systems/CrisisSystem.js';
-import { startQuiz } from './systems/ConceptsSystem.js';
-import { finishDiagnosis } from './systems/DiagnosisSystem.js';
 import { initSaveSystem, loadSavedGame, clearSavedGame } from './systems/SaveSystem.js';
+import { calculatePowerNetwork } from './systems/PowerNetworkSystem.js';
+import { settleEconomy } from './systems/EconomySystem.js';
+import { createHourSettler, createSimulationController } from './systems/SimulationSystem.js';
+import { applySimulationQuestProgress } from './systems/QuestSystem.js';
 
 import { initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera } from './ui/CityScene3D.js';
+import { finishBirdVisit, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, triggerBirdVisit } from './ui/CityScene3D.js';
 import { initDiagnosisView, renderDiagnosisGrid, handleUseHint } from './ui/DiagnosisView.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
-import { initAdvisorPanel, renderPromptChips, initBadgesPanel, initAchievementTabs, renderBadges, initEvidencePanel, renderEvidence } from './ui/PanelViews.js';
+import { initAdvisorPanel, renderPromptChips, initBadgesPanel, renderBadges } from './ui/PanelViews.js';
+import { initQuestView, renderQuest } from './ui/QuestView.js';
+import { initSimulationHudView, renderSimulationHud } from './ui/SimulationHudView.js';
 import { initChartView, requestChartResize, updateChart } from './ui/ChartView.js';
 import { initThreeBackground } from './ui/ThreeBackground.js';
 import { getWorldHudState, initWorldHud, syncWorldHud } from './ui/WorldHud.js';
@@ -32,10 +33,6 @@ import {
   openHelpModal,
   openFacilityInspectorModal,
   openCrisisModal,
-  openEnergyScaleModal,
-  renderQuizModal,
-  openRedesignCheckModal,
-  openBonusValidationModal,
   openReportModal,
   openResetConfirmModal,
 } from './ui/StageModals.js';
@@ -43,6 +40,8 @@ import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 
 const $ = (s) => document.querySelector(s);
+const settleHour = createHourSettler({ calculatePowerNetwork, settleEconomy, evaluateQuest: applySimulationQuestProgress });
+let simulationController = null;
 
 const els = {
   loading: $('#loadingScreen'),
@@ -68,7 +67,6 @@ const els = {
   energyCard: $('#energyCard'),
   carbonCard: $('#carbonCard'),
   waterCard: $('#waterCard'),
-  advanceBtn: $('#advanceBtn'),
   blindBuildBtn: $('#aiBlindBuildBtn'),
 
   boardSizeChip: $('#boardSizeChip'),
@@ -89,9 +87,19 @@ const els = {
   rightPanel: $('#rightPanel'),
   hudControls: $('#hudControls'),
   hudRail: $('#hudRail'),
-  evidenceBox: $('#evidenceBox'),
-  evidenceCount: $('#evidenceCount'),
-  evidenceList: $('#evidenceList'),
+  questTracker: $('#questTracker'),
+  questLevel: $('#questLevel'),
+  questTitle: $('#questTitle'),
+  questGoal: $('#questGoal'),
+  questProgressBar: $('#questProgressBar'),
+  questReward: $('#questReward'),
+  questClaimBtn: $('#questClaimBtn'),
+  questMapBtn: $('#questMapBtn'),
+  simTime: $('#simTime'),
+  simNet: $('#simNet'),
+  simPower: $('#simPower'),
+  simCarbon: $('#simCarbon'),
+  simAlert: $('#simAlert'),
 
   mobileBar: document.querySelector('.mobile-bar'),
   toastStack: $('#toastStack'),
@@ -109,8 +117,17 @@ function refreshAll() {
   if (isDiagnosis) renderDiagnosisGrid();
   else renderGrid();
   renderBadges();
-  renderEvidence();
+  renderQuest();
+  renderSimulationHud();
   updateChart();
+}
+
+function settleSimulationHour() {
+  const result = settleHour(gameState);
+  eventBus.emit(Events.SIMULATION_TICKED, result);
+  eventBus.emit(Events.SAVE_REQUESTED, {});
+  refreshAll();
+  return result;
 }
 
 function onCellClick(index) {
@@ -146,43 +163,6 @@ function onCellClick(index) {
   refreshAll();
 }
 
-function handleAdvance() {
-  switch (gameState.stage) {
-    case STAGES.EXECUTION: {
-      const { baseline } = revealCrisis();
-      els.boardOverlay.classList.remove('hidden');
-      anime({ targets: '.left-panel', translateX: [0, -7, 7, -4, 4, 0], duration: 500 });
-      anime({ targets: '.crisis-stamp', scale: [1.4, 1], opacity: [0, 1], duration: 400, easing: 'easeOutBack' });
-      openCrisisModal(baseline);
-      break;
-    }
-    case STAGES.CRISIS:
-      openCrisisModal(gameState.baseline);
-      break;
-    case STAGES.CONCEPTS:
-      if (!gameState.energyScaleSeen) openEnergyScaleModal();
-      else if (gameState.quizPool.length) renderQuizModal();
-      else {
-        startQuiz();
-        renderQuizModal();
-      }
-      break;
-    case STAGES.DIAGNOSIS:
-      finishDiagnosis();
-      refreshAll();
-      break;
-    case STAGES.REDESIGN:
-      if (gameState.bonusRound.active) openBonusValidationModal();
-      else openRedesignCheckModal();
-      break;
-    case STAGES.REPORT:
-    default:
-      openReportModal();
-      break;
-  }
-  refreshAll();
-}
-
 function handleBlindBuild() {
   const result = blindBuild();
   if (!result.ok) {
@@ -212,7 +192,6 @@ function handleReset() {
 
 function bindEvents() {
   els.blindBuildBtn.addEventListener('click', handleBlindBuild);
-  els.advanceBtn.addEventListener('click', handleAdvance);
   els.helpBtn.addEventListener('click', openHelpModal);
   els.resetBtn.addEventListener('click', handleReset);
 
@@ -265,17 +244,28 @@ function boot() {
   initHudView(els, syncWorldHud);
   initAdvisorPanel(els.advisorLog, els.promptChips, (type) => ask(type));
   initBadgesPanel(els.badges, els.badgeCount);
-  initAchievementTabs($('.achievement-tabs'), $('#badgePanel'), els.evidenceBox);
-  initEvidencePanel({
-    count: els.evidenceCount,
-    list: els.evidenceList,
-    hint: $('#evidenceHint'),
+  initQuestView({
+    root: els.questTracker,
+    level: els.questLevel,
+    title: els.questTitle,
+    goal: els.questGoal,
+    bar: els.questProgressBar,
+    reward: els.questReward,
+    claim: els.questClaimBtn,
+    map: els.questMapBtn,
+  }, (change) => {
+    refreshAll();
+    if (change?.phase !== 'reward_closed') return;
+    if (change.quest.index === 4) openCrisisModal(gameState.baseline);
+    if (change.quest.index === 15) openReportModal();
   });
+  initSimulationHudView({ time: els.simTime, net: els.simNet, power: els.simPower, carbon: els.simCarbon, alert: els.simAlert });
   initChartView(els.cityChart);
   initStageModals(refreshAll);
   initFeedbackBridge();
   initAchievementCelebration(els.achievementCelebration);
   initAchievementSystem();
+  eventBus.on(Events.DIAGNOSIS_TILE_FOUND, refreshAll);
   initSaveSystem();
   initAudioManager();
   initWorldHud({
@@ -285,12 +275,20 @@ function boot() {
     panelHost: els.rightPanel,
     panels: [...document.querySelectorAll('[data-hud-panel]')],
     buildTriggerSummary: $('#selectedFacilitySummary'),
-    evidenceBox: els.evidenceBox,
     onStatusOpened: requestChartResize,
   });
   initThreeBackground(els.threeBg);
 
   const loaded = loadSavedGame();
+
+  simulationController = createSimulationController({ settle: settleSimulationHour });
+  eventBus.on(Events.MODAL_OPEN, () => simulationController.pause('modal'));
+  eventBus.on(Events.MODAL_CLOSE, () => simulationController.resume('modal'));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) simulationController.pause('hidden');
+    else simulationController.resume('hidden');
+  });
+  simulationController.start();
 
   bindEvents();
   renderPromptChips();
@@ -319,16 +317,23 @@ window.__getCityRendererStats = () => getCityRendererStats();
 window.__getWorldHudState = () => getWorldHudState();
 window.__getTheme = () => getTheme();
 window.__renderCityForTest = () => renderGrid();
+window.__refreshGameForTest = () => refreshAll();
+window.__settleSimulationHour = () => settleSimulationHour();
+window.__getSimulationState = () => simulationController?.getState();
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
+window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVisit(greenIndex, birdCount);
+window.__finishBirdVisitForTest = () => finishBirdVisit();
 
 window.render_game_to_text = () => {
   const m = gameState.metrics;
-  const info = STAGE_INFO[gameState.stage];
   const payload = {
     coords: 'grid index 0..gridSize*gridSize-1, row-major, origin top-left',
     mode: 'playing',
     stage: gameState.stage,
-    stageLabel: info.label,
+    quest: gameState.questIndex,
+    questStatus: gameState.questStatus,
+    gameTime: { day: gameState.simulationDay, hour: gameState.simulationHour },
+    climateAlert: gameState.climateAlert,
     turn: gameState.turn,
     credits: gameState.credits,
     devScore: m ? m.dev : 0,
@@ -340,8 +345,14 @@ window.render_game_to_text = () => {
     selectedFacility: gameState.selectedFacility,
     selectedCell: gameState.selectedCell,
     badges: [...gameState.badges],
-    evidenceCount: gameState.evidence.length,
-    bonusRoundActive: gameState.bonusRound.active,
+    simulation: gameState.lastTickSummary,
+    netCreditsPerHour: gameState.lastTickSummary?.netCredits ?? 0,
+    deliveredPower: gameState.lastTickSummary?.deliveredPower ?? 0,
+    demand: gameState.lastTickSummary?.demand ?? 0,
+    lowCarbonPercent: gameState.lastTickSummary?.lowCarbonPercent ?? 0,
+    workforce: gameState.lastTickSummary?.workforce ?? 0,
+    jobs: gameState.lastTickSummary?.jobs ?? 0,
+    facilityPowerRatios: Object.fromEntries(Object.entries(gameState.lastTickSummary?.facilityPower || {}).map(([index, item]) => [index, item.ratio])),
   };
   return JSON.stringify(payload);
 };

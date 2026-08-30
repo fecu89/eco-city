@@ -166,7 +166,7 @@ export function calcMetrics(grid, size) {
 }
 
 export function stageLevelCap() {
-  return gameState.stage >= STAGES.REDESIGN ? 3 : 2;
+  return gameState.upgradePermitLevel;
 }
 
 export function upgradeCost(cell) {
@@ -178,6 +178,10 @@ export function investedCost(cell) {
   let sum = FACILITIES[cell.type].cost;
   for (let l = 1; l < cell.level; l++) sum += Math.ceil(FACILITIES[cell.type].cost * (l === 1 ? 1.0 : 1.45));
   return sum;
+}
+
+export function demolitionRefund(cell) {
+  return Math.floor(investedCost(cell) * 0.5);
 }
 
 export function refreshMetrics() {
@@ -195,7 +199,7 @@ export function placeFacility(index) {
   if (!gameState.isEditable) return { ok: false, reason: 'not_editable' };
   if (gameState.grid[index]) return { ok: false, reason: 'occupied' };
   const f = FACILITIES[gameState.selectedFacility];
-  if (!f || gameState.stage < f.unlockStage) return { ok: false, reason: 'locked' };
+  if (!f || !gameState.unlockedFacilities.has(gameState.selectedFacility)) return { ok: false, reason: 'locked' };
   if (gameState.credits < f.cost) return { ok: false, reason: 'insufficient_credits', facility: f };
 
   gameState.grid[index] = { type: gameState.selectedFacility, level: 1 };
@@ -229,7 +233,7 @@ export function demolishCell(index) {
   const cell = gameState.grid[index];
   if (!cell) return { ok: false, reason: 'empty' };
   if (!gameState.isEditable) return { ok: false, reason: 'not_editable' };
-  const refund = Math.ceil(investedCost(cell) * 0.5);
+  const refund = demolitionRefund(cell);
   const name = FACILITIES[cell.type].name;
   gameState.grid[index] = null;
   gameState.credits += refund;

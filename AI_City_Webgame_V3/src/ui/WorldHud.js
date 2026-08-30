@@ -138,7 +138,7 @@ export function initWorldHud(elements) {
       renderHudState();
     }
   });
-  eventBus.on(Events.STAGE_READY, () => {
+  eventBus.on(Events.QUEST_READY, () => {
     notifications.add('ready');
     renderHudState();
   });
@@ -146,7 +146,7 @@ export function initWorldHud(elements) {
     notifications.add('achievement');
     renderHudState();
   });
-  eventBus.on(Events.STAGE_CHANGED, () => {
+  eventBus.on(Events.QUEST_CLAIMED, () => {
     notifications.delete('ready');
     syncWorldHud();
   });

@@ -1,7 +1,6 @@
 import { GAME } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
-import { getCellSpatial } from '../systems/BoardSystem.js';
-import { scanTile, diagnosisProgress, useHint, problemTileIndices } from '../systems/DiagnosisSystem.js';
+import { scanTile, diagnosisProgress, diagnosisRiskAt, useHint, problemTileIndices } from '../systems/DiagnosisSystem.js';
 import { renderCityScene3D, setCellClickHandler } from './CityScene3D.js';
 
 let sizeChipEl = null;
@@ -22,10 +21,7 @@ function buildDiagnosisConfigs() {
     if (!cell) return { empty: true, disabled: true };
     const found = gameState.diagnosisFound.has(i);
     let diagnosisState = 'unknown';
-    if (found) {
-      const sp = getCellSpatial(snapshot, i, size);
-      diagnosisState = sp.warnings.length ? 'problem' : 'ok';
-    }
+    if (found) diagnosisState = diagnosisRiskAt(i) ? 'problem' : 'ok';
     return { empty: false, type: cell.type, level: cell.level, diagnosisState };
   });
 }
@@ -41,14 +37,12 @@ export function renderDiagnosisGrid() {
 function handleScan(index) {
   const result = scanTile(index);
   if (!result.ok) return;
-  renderDiagnosisGrid();
 }
 
 export function handleUseHint() {
   const index = useHint();
   if (index == null) return null;
   scanTile(index);
-  renderDiagnosisGrid();
   return index;
 }
 

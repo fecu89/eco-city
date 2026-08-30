@@ -44,7 +44,15 @@
 
         <div class="phase-pill" id="phasePill">
           <span class="phase-dot"></span>
-          <span id="phaseText">1단계 · 무지성 실행</span>
+          <span id="phaseText">LEVEL 1 / 15</span>
+        </div>
+
+        <div class="simulation-hud" id="simulationHud" aria-live="polite">
+          <span><b id="simTime">08:00</b><small>도시 시각</small></span>
+          <span><b id="simNet">±0C/h</b><small>순수익</small></span>
+          <span><b id="simPower">0/0E</b><small>공급/수요</small></span>
+          <span><b id="simCarbon">0%</b><small>저탄소</small></span>
+          <span class="climate-normal" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
         </div>
 
         <div class="resource-row">
@@ -56,13 +64,24 @@
         </div>
       </header>
 
+      <aside class="quest-tracker glass" id="questTracker" aria-live="polite">
+        <div class="quest-tracker-head">
+          <div><span class="eyebrow" id="questLevel">LEVEL 1 / 15</span><h2 id="questTitle">첫 시민</h2></div>
+          <button class="icon-btn" id="questMapBtn" type="button" title="전체 퀘스트">☰</button>
+        </div>
+        <p id="questGoal">주거지 2개를 건설하세요.</p>
+        <div class="quest-progress"><span id="questProgressBar"></span></div>
+        <div class="quest-reward" id="questReward">보상 4C · 화력발전 해금</div>
+        <button class="btn primary full" id="questClaimBtn" type="button" disabled>진행 중</button>
+      </aside>
+
       <div class="hud-controls" id="hudControls">
         <nav class="hud-rail" id="hudRail" aria-label="도시 제어">
           <span class="hud-rail-label" aria-hidden="true">CITY CONTROL</span>
           <button data-hud-target="build" aria-controls="buildPanel" aria-expanded="false" title="건설"><i data-lucide="hammer"></i><span>건설</span></button>
           <button data-hud-target="advisor" aria-controls="advisorPanel" aria-expanded="false" title="시장 보좌관"><i data-lucide="bot"></i><span>AI</span></button>
           <button data-hud-target="status" aria-controls="statusPanel" aria-expanded="false" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>도시</span></button>
-          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취와 근거"><i data-lucide="trophy"></i><span>성취</span></button>
+          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취"><i data-lucide="trophy"></i><span>성취</span></button>
           <button data-hud-target="menu" aria-controls="menuPanel" aria-expanded="false" title="도시 메뉴"><i data-lucide="map"></i><span>메뉴</span></button>
         </nav>
 
@@ -98,21 +117,12 @@
 
           <section class="glass panel-block badges-panel hud-panel" id="achievementsPanel" data-hud-panel="achievements">
             <div class="panel-title compact">
-              <h3>🏅 성취와 근거</h3>
+              <h3>🏅 성취</h3>
               <button class="icon-btn hud-close" type="button" data-hud-close title="성취 닫기"><i data-lucide="x"></i></button>
-            </div>
-            <div class="achievement-tabs" role="tablist" aria-label="성취 정보">
-              <button class="active" type="button" role="tab" data-achievement-tab="badges" aria-controls="badgePanel" aria-selected="true">배지</button>
-              <button type="button" role="tab" data-achievement-tab="evidence" aria-controls="evidenceBox" aria-selected="false">근거</button>
             </div>
             <div id="badgePanel">
               <div class="panel-title compact"><h3>성취</h3><span id="badgeCount">0 / 9</span></div>
               <div class="badges" id="badges"></div>
-            </div>
-            <div class="evidence-box hidden" id="evidenceBox">
-              <div class="panel-title compact"><h3>📚 근거</h3><span id="evidenceCount">0 / 3</span></div>
-              <p class="evidence-hint" id="evidenceHint">보드에서 시설을 클릭 → "근거 기록" 버튼으로 기록하세요.</p>
-              <div class="evidence-list" id="evidenceList"></div>
             </div>
           </section>
 
@@ -124,13 +134,13 @@
             <div class="mission-header">
               <div class="mission-copy">
                 <span class="eyebrow">MISSION</span>
-                <h2 id="missionTitle">AI의 조언만으로 도시를 성장시켜라</h2>
+                <h2 id="missionTitle">기후위기 생존 도시를 설계하라</h2>
               </div>
               <div class="turn-box"><span>행동</span><strong id="turnCount">0</strong></div>
             </div>
             <div class="teacher-note" id="teacherNote">
-              <i data-lucide="eye-off"></i>
-              <p><strong>1차시:</strong> 발전점수만 공개 · 숨은 비용은 완성 후 공개</p>
+              <i data-lucide="building-2"></i>
+              <p>도시 정착: 수익 시설도 전력·탄소 비용과 함께 설계하세요.</p>
             </div>
             <div class="top-actions">
               <button class="icon-btn" id="helpBtn" title="도움말"><i data-lucide="circle-help"></i></button>
@@ -139,9 +149,6 @@
               <button class="icon-btn" id="themeBtn" title="라이트 모드"><i data-lucide="sun"></i></button>
               <button class="icon-btn danger-soft" id="resetBtn" title="초기화"><i data-lucide="rotate-ccw"></i></button>
             </div>
-            <div class="main-buttons">
-              <button class="btn primary" id="advanceBtn"><span>1차 도시 완성</span><i data-lucide="arrow-right"></i></button>
-            </div>
           </section>
         </aside>
 
@@ -149,7 +156,7 @@
           <button data-hud-target="build" aria-controls="buildPanel" aria-expanded="false" title="건설"><i data-lucide="hammer"></i><span>건설</span></button>
           <button data-hud-target="advisor" aria-controls="advisorPanel" aria-expanded="false" title="AI 보좌관"><i data-lucide="bot"></i><span>AI</span></button>
           <button data-hud-target="status" aria-controls="statusPanel" aria-expanded="false" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>도시</span></button>
-          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취와 근거"><i data-lucide="trophy"></i><span>성취</span></button>
+          <button data-hud-target="achievements" aria-controls="achievementsPanel" aria-expanded="false" title="성취"><i data-lucide="trophy"></i><span>성취</span></button>
           <button data-hud-target="menu" aria-controls="menuPanel" aria-expanded="false" title="도시 메뉴"><i data-lucide="map"></i><span>메뉴</span></button>
         </nav>
       </div>

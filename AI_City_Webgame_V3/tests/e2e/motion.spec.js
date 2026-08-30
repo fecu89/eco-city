@@ -71,11 +71,15 @@ test.describe('3D city motion language', () => {
       state.grid[13] = { type: 'factory', level: 1 };
       state.grid[17] = { type: 'residential', level: 1 };
       window.__renderCityForTest();
+      window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, {
+        power: { routes: [{ kind: 'direct', from: 12, via: null, to: 17, delivered: 2, efficiency: 0.94 }] },
+        summary: { hour: 12 },
+      });
     });
 
     await page.waitForFunction(() => {
       const stats = window.__getCityRendererStats?.();
-      return stats?.energyLinkCount === 2;
+      return stats?.energyLinkCount === 1;
     });
     const before = await page.evaluate(() => window.__getCityRendererStats());
     expect(before.energyPacketCount).toBe(0);
@@ -89,7 +93,7 @@ test.describe('3D city motion language', () => {
     expect(after.energyBlinkCount).toBe(before.energyBlinkCount + 1);
   });
 
-  test('residential and green facilities add static people, cars, and birds', async ({ gamePage: page }) => {
+  test('residential agents stay static while the shared green bird pool stays hidden', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.grid[12] = { type: 'residential', level: 1 };
@@ -99,10 +103,36 @@ test.describe('3D city motion language', () => {
 
     await page.waitForFunction(() => {
       const stats = window.__getCityRendererStats?.();
-      return stats?.residentAgentCount === 2 && stats.ambientInstances >= 4;
+      return stats?.residentAgentCount === 2 && stats.ambientInstances >= 5;
     });
     const stats = await page.evaluate(() => window.__getCityRendererStats());
-    expect(stats.birdCount).toBe(2);
-    expect(stats.ambientInstances).toBeGreaterThanOrEqual(4);
+    expect(stats.birdCount).toBe(0);
+    expect(stats.birdPoolSize).toBe(3);
+    expect(stats.ambientInstances).toBeGreaterThanOrEqual(5);
+  });
+
+  test('game-hour phase changes update lighting without allocating scene resources', async ({ gamePage: page }) => {
+    const before = await page.evaluate(() => window.__getCityRendererStats());
+    await page.evaluate(() => {
+      window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, {
+        power: { routes: [] },
+        summary: { hour: 19 },
+      });
+    });
+    await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'dusk');
+    const dusk = await page.evaluate(() => window.__getCityRendererStats());
+    expect(dusk.resourceRevision).toBe(before.resourceRevision);
+    expect(dusk.sunIntensity).toBeLessThan(before.sunIntensity);
+
+    await page.evaluate(() => {
+      window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, {
+        power: { routes: [] },
+        summary: { hour: 23 },
+      });
+    });
+    await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'night');
+    const night = await page.evaluate(() => window.__getCityRendererStats());
+    expect(night.resourceRevision).toBe(before.resourceRevision);
+    expect(night.sunIntensity).toBeLessThan(dusk.sunIntensity);
   });
 });

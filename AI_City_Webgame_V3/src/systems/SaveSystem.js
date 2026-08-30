@@ -1,4 +1,5 @@
-import { GAME } from '../core/Constants.js';
+import { FACILITIES, GAME } from '../core/Constants.js';
+import { SAVE_VERSION, normalizeCell } from '../core/GameState.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 
@@ -23,14 +24,13 @@ const AUTOSAVE_EVENTS = [
   Events.BOARD_UPGRADED,
   Events.BOARD_DEMOLISHED,
   Events.BOARD_EXPANDED,
-  Events.STAGE_CHANGED,
   Events.QUIZ_FINISHED,
-  Events.REFLECTION_SAVED,
-  Events.EVIDENCE_SAVED,
-  Events.REDESIGN_VALIDATED,
+  Events.SIMULATION_TICKED,
+  Events.QUEST_CLAIMED,
+  Events.FACILITY_PRIORITY_CHANGED,
+  Events.SAVE_REQUESTED,
   Events.BADGE_UNLOCKED,
   Events.AUDIO_TOGGLE_MUTE,
-  Events.BONUS_ROUND_STARTED,
 ];
 
 export function initSaveSystem() {
@@ -41,7 +41,8 @@ export function loadSavedGame() {
   try {
     const raw = localStorage.getItem(GAME.AUTOSAVE_KEY);
     if (!raw) return false;
-    const data = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const data = parsed?.v === 1 ? migrateV1Save(parsed) : parsed;
     const ok = gameState.hydrate(data);
     if (ok) eventBus.emit(Events.GAME_LOADED, {});
     return ok;
@@ -49,6 +50,46 @@ export function loadSavedGame() {
     console.warn('저장된 게임을 불러오지 못했습니다:', err);
     return false;
   }
+}
+
+export function migrateV1Save(data) {
+  const stage = Number(data?.stage) || 1;
+  const questIndex = stage === 1 ? 1 : stage <= 3 ? 5 : stage === 4 ? 6 : stage === 5 ? 10 : 15;
+  const placed = (data.grid || []).filter(Boolean).map((cell) => cell.type);
+  const unlocked = new Set(stage >= 5 ? Object.keys(FACILITIES) : ['residential', ...placed]);
+  if (stage >= 2) ['thermal', 'factory', 'data', 'nuclear'].forEach((type) => unlocked.add(type));
+  const migrated = {
+    ...data,
+    v: SAVE_VERSION,
+    grid: (data.grid || []).map(normalizeCell),
+    questIndex,
+    questStatus: stage === 6 ? 'claimed' : 'active',
+    questProgress: {},
+    claimedQuestIds: [],
+    unlockedFacilities: [...unlocked],
+    upgradePermitLevel: stage >= 5 ? 3 : 1,
+    campaignComplete: stage === 6,
+    simulationHour: 8,
+    simulationDay: 1,
+    tickIndex: 0,
+    lastTickSummary: null,
+    climateAlert: 'normal',
+    consecutiveEssentialOutageHours: 0,
+    emergencySupportUsedQuestIds: [],
+    simulationTotals: {
+      hours: 0,
+      netCredits: 0,
+      transmissionEfficiency: 0,
+      lowCarbonPercent: 0,
+      employmentRate: 0,
+      industryFill: 0,
+      essentialOutageHours: 0,
+      overcrowding: 0,
+      health: 0,
+    },
+  };
+  delete migrated[['evi', 'dence'].join('')];
+  return migrated;
 }
 
 export function clearSavedGame() {

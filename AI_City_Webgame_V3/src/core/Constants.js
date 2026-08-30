@@ -1,5 +1,4 @@
 // 모든 게임 밸런스 수치는 실제 실측값이 아니라 교수학습용 상대값이다.
-// 예외: ENERGY_COMPARISON 수치는 실제 보도/연구 기반 추정치이며 출처가 명시되어 있다 (docs/gameplan.md 3단계 참고).
 
 export const STAGES = {
   EXECUTION: 1, // 무지성 실행
@@ -10,61 +9,61 @@ export const STAGES = {
   REPORT: 6, // 성적표 + 보너스 라운드 (선택)
 };
 
-export const STAGE_COUNT = 6;
-
-export const STAGE_INFO = {
-  [STAGES.EXECUTION]: {
-    label: '1단계 · 무지성 실행',
-    mission: 'AI 조언으로 5×5 도시를 성장시켜라',
-    note: { icon: 'eye-off', text: '1차시: 발전점수만 공개 · 숨은 비용은 완성 후 공개' },
-    advanceLabel: '1차 도시 완성',
-    advanceIcon: 'arrow-right',
-  },
-  [STAGES.CRISIS]: {
-    label: '2단계 · 위기 직면',
-    mission: '성장 뒤에 숨은 비용을 확인하라',
-    note: { icon: 'triangle-alert', text: '위기: 전력 · 탄소 · 냉각 비용이 공개됨' },
-    advanceLabel: '원인 학습',
-    advanceIcon: 'brain',
-  },
-  [STAGES.CONCEPTS]: {
-    label: '3단계 · 개념 학습',
-    mission: '위기의 원인이 되는 과학 개념을 확인하라',
-    note: { icon: 'brain', text: '퀴즈 + 뇌-AI 에너지 비교 + 성찰 저널' },
-    advanceLabel: '진단 시작',
-    advanceIcon: 'search',
-  },
-  [STAGES.DIAGNOSIS]: {
-    label: '4단계 · 진단',
-    mission: '1차 도시를 스캔해 문제 지점을 찾아라',
-    note: { icon: 'scan-search', text: '문제 타일을 클릭해 원인을 확인하세요' },
-    advanceLabel: '재설계 시작',
-    advanceIcon: 'hammer',
-  },
-  [STAGES.REDESIGN]: {
-    label: '5단계 · 재설계',
-    mission: '6×6 영토에서 지식으로 도시를 재설계하라',
-    note: { icon: 'map', text: '확장: +11칸 · Lv.3 · 친환경 시설 · 인접 설계 2개 이상' },
-    advanceLabel: '재설계 검증',
-    advanceIcon: 'badge-check',
-  },
-  [STAGES.REPORT]: {
-    label: '6단계 · 시장 성적표',
-    mission: '지속가능하고 주체적인 도시를 완성했는가?',
-    note: { icon: 'presentation', text: '결과 확인 · 발표 자료로 활용 가능' },
-    advanceLabel: '결과 다시 보기',
-    advanceIcon: 'presentation',
-  },
-};
-
 export const GAME = {
   INITIAL_CREDITS: 36,
   INITIAL_GRID_SIZE: 5,
   EXPANDED_GRID_SIZE: 6,
-  EXPANSION_BONUS_CREDITS: 24,
   MIN_CELLS_TO_COMPLETE_STAGE1: 5,
   AUTOSAVE_KEY: 'ai-city-save-v1',
   AUTOSAVE_DEBOUNCE_MS: 600,
+};
+
+export const SIMULATION = {
+  HOUR_MS: 5000,
+  START_HOUR: 8,
+};
+
+export const POWER_RULES = {
+  LOSS_PER_EXTRA_TILE: 0.06,
+  MIN_EFFICIENCY: 0.55,
+  HUB_EFFICIENCY: 0.95,
+};
+
+export const STORAGE_LEVELS = {
+  1: { capacity: 20, throughput: 8 },
+  2: { capacity: 35, throughput: 12 },
+  3: { capacity: 50, throughput: 16 },
+};
+
+export const FACILITY_ECONOMY = {
+  residential: { income: 0.5, upkeep: 0 },
+  factory: { income: 1, upkeep: 0 },
+  data: { income: 2, upkeep: 0 },
+  thermal: { income: 0, upkeep: 0.5 },
+  nuclear: { income: 0, upkeep: 1 },
+  solar: { income: 0, upkeep: 0.1 },
+  wind: { income: 0, upkeep: 0.1 },
+  battery: { income: 0, upkeep: 0.2 },
+  cooling: { income: 0, upkeep: 0.2 },
+  green: { income: 0, upkeep: 0.1 },
+};
+
+export const WORKFORCE_LEVELS = {
+  residential: [0, 4, 6, 8],
+  factory: [0, 4, 6, 8],
+  data: [0, 6, 9, 12],
+};
+
+export const ECONOMY_RULES = {
+  STOP_POWER_RATIO: 0.25,
+  BASE_RESIDENTIAL_TAX_RATIO: 0.25,
+  OVERCROWDING_FREE_COUNT: 3,
+  OVERCROWDING_COST_RATE: 0.1,
+  POLLUTION_HEALTH_COST: 0.4,
+  POLLUTION_TAX_MULTIPLIER: 0.5,
+  CARBON_SAFE_RATE: 8,
+  CLIMATE_RECOVERY_RATE: 0.25,
+  UPKEEP_LEVEL_MULTIPLIERS: [0, 1, 1.4, 1.8],
 };
 
 export const CITY_CAMERA = {
@@ -91,10 +90,8 @@ export const CITY_MOTION = {
 
 export const CITY_AMBIENT = {
   ENERGY_SOURCES: ['thermal', 'nuclear', 'solar', 'wind'],
-  ENERGY_TARGETS: ['residential', 'factory', 'data', 'cooling', 'battery'],
   MAX_NEIGHBORS_PER_CELL: 4,
   RESIDENT_AGENTS_PER_CELL: 2,
-  BIRDS_PER_GREEN_CELL: 2,
   ENERGY_LINE_HEIGHT: 0.24,
   ENERGY_LINE_BASE_OPACITY: 0.34,
   ENERGY_LINE_FLASH_OPACITY: 0.92,
@@ -106,8 +103,6 @@ export const CITY_AMBIENT = {
   CAR_ORBIT_RADIUS: 0.39,
   CAR_ANGLE_PER_CELL: 0.37,
   CAR_SCALE: [0.12, 0.045, 0.065],
-  BIRD_ORBIT_RADIUS: 0.34,
-  BIRD_ANGLE_PER_CELL: 0.29,
   BIRD_BASE_HEIGHT: 0.88,
   BIRD_SCALE: [0.09, 0.018, 0.035],
   COLORS: {
@@ -256,13 +251,9 @@ export const BADGES = [
   { id: 'expansion', icon: '🗺️', name: '영토 확장' },
   { id: 'synergy', icon: '🔗', name: '인접 설계' },
   { id: 'upgrade', icon: '⬆️', name: 'Lv.2 달성' },
-  { id: 'evidence', icon: '📚', name: '근거 3개' },
+  { id: 'low-carbon', icon: '🌍', name: '저탄소 전환' },
   { id: 'mayor', icon: '🏅', name: '주체적 시장' },
 ];
-
-// 3단계: 개념 퀴즈 은행. 매 플레이 QUIZ_SAMPLE_SIZE개를 무작위로 뽑아 출제(암기 방지).
-export const QUIZ_SAMPLE_SIZE = 4;
-export const QUIZ_PASS_THRESHOLD = 3;
 
 export const QUIZ_BANK = [
   {
@@ -312,7 +303,7 @@ export const QUIZ_BANK = [
       { text: '전력수지≥0, 탄소·물 감소, 인접 보너스 2개 이상을 만족하는 재설계안을 장단점과 함께 제시해줘.', correct: true },
       { text: '점수가 제일 높은 도시를 만들어줘.', correct: false },
       { text: '네가 알아서 좋은 도시를 만들어줘.', correct: false },
-      { text: '1차시 답을 그대로 반복해줘.', correct: false },
+      { text: '이전 도시의 답을 그대로 반복해줘.', correct: false },
     ],
     explain: '사람이 과학 개념으로 조건을 만들고 AI 답을 검증하는 것이 핵심입니다.',
   },
@@ -342,35 +333,6 @@ export const QUIZ_BANK = [
   },
 ];
 
-// 3단계: 뇌 vs AI 에너지 비교(인터랙티브 저울). 뇌 수치는 지도안 원문과 일치, 여러 출처가 합의.
-// AI 쪽 수치는 출처마다 자릿수 가까이 차이가 나므로 "출처를 확인하라"는 수업 메시지로 그대로 활용한다.
-export const ENERGY_COMPARISON = {
-  brainWatts: 20,
-  disclaimer: '추정치는 측정 방식·모델에 따라 자료마다 크게 다릅니다. 아래 수치는 수업용 대표값이며, 실제로는 출처를 직접 확인하는 습관이 더 중요합니다.',
-  scenarios: [
-    {
-      id: 'single-query',
-      label: '질의 1회',
-      brainLabel: '사람이 20W로 같은 시간 생각',
-      aiLabel: 'AI 응답 1회 (추정 0.3~3Wh, 출처마다 최대 10배 차이)',
-      aiWattHoursLow: 0.3,
-      aiWattHoursHigh: 3,
-    },
-    {
-      id: 'training-cluster',
-      label: '대형 모델 학습 전체',
-      brainLabel: '사람 뇌 20W (지속)',
-      aiLabel: '대형 언어모델 학습 1회 ≈ 1,300MWh (사람 뇌 기준 수백만 배)',
-      aiMegawattHours: 1300,
-    },
-  ],
-  sources: [
-    { title: 'Texas A&M — "AI that uses less energy by mimicking the human brain" (2025)', url: 'https://stories.tamu.edu/news/2025/03/25/artificial-intelligence-that-uses-less-energy-by-mimicking-the-human-brain/' },
-    { title: 'John Miedema — "Intelligence on Twenty Watts"', url: 'https://johnmiedema.substack.com/p/intelligence-on-twenty-watts' },
-    { title: '"Human Brains Beat AI by 225,000 Times in Energy Efficiency"', url: 'https://medium.com/write-a-catalyst/human-brains-beat-ai-by-225-000-times-in-energy-efficiency-762b9327e8ad' },
-  ],
-};
-
 export const ADVISOR_ANSWERS = {
   score: [
     '초반에는 데이터센터·공장으로 성장점수를 확보하세요. 같은 시설이라도 Lv.2가 되면 더 강해집니다.',
@@ -378,7 +340,7 @@ export const ADVISOR_ANSWERS = {
   ],
   placement: [
     '공장은 발전소 옆, 데이터센터는 순환냉각 옆에서 보너스를 얻습니다. 주거지와 공장·화력은 붙이지 않는 편이 좋습니다.',
-    '5단계에서는 태양광·풍력을 저장장치 옆에 두면 신뢰가능 전력이 높아집니다.',
+    '태양광·풍력을 저장장치 옆에 두면 신뢰가능 전력이 높아집니다.',
   ],
   power: [
     '전력수지는 공급−수요입니다. 데이터센터·공장 업그레이드는 수요도 함께 키웁니다.',
@@ -400,37 +362,6 @@ export const ADVISOR_PROMPT_LABELS = {
 // 1단계: "AI 말대로 짓기" 원클릭 제안 — 항상 성장점수 관점의 정답(데이터센터 > 공장 > 주거지)만 제시해
 // "AI는 점수 올리는 법만 알려주고 숨은 비용은 알려주지 않는다"는 지도안의 핵심 함정을 재현한다.
 export const AI_BLIND_SUGGESTION_ORDER = ['data', 'factory', 'residential', 'thermal', 'nuclear'];
-
-// 3단계 성찰 저널 최소 글자 수 (지도안: 1~2문장)
-export const REFLECTION_MIN_LENGTH = 8;
-
-export const EVIDENCE_MIN_LENGTH = 15;
-export const EVIDENCE_MATCHES = {
-  solar: ['carbon', 'renewable', 'balance'],
-  wind: ['renewable', 'balance', 'carbon'],
-  battery: ['balance', 'renewable', 'efficiency'],
-  cooling: ['cooling', 'efficiency'],
-  green: ['carbon'],
-  thermal: ['balance', 'efficiency', 'carbon'],
-  nuclear: ['balance', 'cooling'],
-  data: ['cooling', 'balance', 'efficiency'],
-  factory: ['balance', 'carbon', 'efficiency'],
-  residential: ['balance', 'efficiency'],
-};
-
-export const EVIDENCE_CONCEPTS = [
-  { value: 'balance', label: '전력 공급-수요 균형' },
-  { value: 'cooling', label: '데이터센터 발열과 냉각수' },
-  { value: 'carbon', label: '화석연료와 탄소 부담' },
-  { value: 'renewable', label: '신재생에너지와 지속가능성' },
-  { value: 'efficiency', label: '에너지 효율' },
-];
-
-// 6단계(선택) 보너스 라운드: 예산을 줄인 상태로 5단계 재설계를 다시 도전.
-export const BONUS_ROUND = {
-  creditMultiplier: 0.8,
-  label: '보너스: 예산 20% 삭감 재도전',
-};
 
 export const REPORT_TIERS = [
   { min: 85, icon: '🏆', title: '그린시티 마스터' },

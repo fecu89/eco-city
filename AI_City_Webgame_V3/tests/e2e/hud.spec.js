@@ -38,14 +38,19 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('[data-hud-target="menu"]').first().click();
     const menu = page.locator('#menuPanel');
 
-    for (const id of ['helpBtn', 'musicBtn', 'soundBtn', 'resetBtn', 'advanceBtn']) {
+    for (const id of ['helpBtn', 'musicBtn', 'soundBtn', 'resetBtn']) {
       await expect(menu.locator(`#${id}`)).toHaveCount(1);
     }
+    await expect(menu.locator('#advanceBtn')).toHaveCount(0);
     await expect(menu.locator('#aiAdviceBtn')).toHaveCount(0);
     await expect(page.locator('#advisorPanel #promptChips')).toHaveCount(1);
   });
 
   test('build palette stays open after selecting a facility', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__GAME_STATE__.unlockedFacilities.add('factory');
+      window.__refreshGameForTest();
+    });
     await page.locator('[data-hud-target="build"]').first().click();
     await page.locator('#facilityDock .facility-btn', { hasText: '공장' }).click();
 
@@ -55,7 +60,11 @@ test.describe('fullscreen world HUD', () => {
 
   test('facility buttons disable when the remaining credits cannot cover their cost', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
-    await page.evaluate(() => { window.__GAME_STATE__.credits = 3; });
+    await page.evaluate(() => {
+      window.__GAME_STATE__.credits = 3;
+      window.__GAME_STATE__.unlockedFacilities.add('factory');
+      window.__refreshGameForTest();
+    });
     await page.locator('#facilityDock .facility-btn', { hasText: '주거지' }).click();
 
     await expect(page.locator('#facilityDock .facility-btn', { hasText: '주거지' })).toBeEnabled();
@@ -67,6 +76,7 @@ test.describe('fullscreen world HUD', () => {
   test('closing the build palette clears placement benefit and conflict markers', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__GAME_STATE__.grid[5] = { type: 'thermal', level: 1 };
+      window.__GAME_STATE__.unlockedFacilities.add('factory');
       window.__renderCityForTest();
     });
     await page.locator('[data-hud-target="build"]').first().click();
@@ -88,13 +98,11 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#statusPanel')).toHaveCSS('pointer-events', 'auto');
   });
 
-  test('achievement drawer switches between badges and evidence', async ({ gamePage: page }) => {
+  test('achievement drawer contains achievements only', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="achievements"]').first().click();
-    await page.locator('[data-achievement-tab="evidence"]').click();
-
-    await expect(page.locator('#evidenceBox')).toBeVisible();
-    await expect(page.locator('#evidenceBox')).toContainText('5단계');
-    await expect(page.locator('#badgePanel')).toBeHidden();
+    await expect(page.locator('#badgePanel')).toBeVisible();
+    await expect(page.locator('[data-achievement-tab]')).toHaveCount(0);
+    await expect(page.locator('#evidenceBox')).toHaveCount(0);
   });
 
   test('empty land builds only while the build panel is open', async ({ gamePage: page }) => {
@@ -119,21 +127,19 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('[data-hud-target="build"]').first()).toHaveAttribute('aria-expanded', 'true');
   });
 
-  test('meeting the next-step condition raises one persistent menu cue', async ({ gamePage: page }) => {
+  test('meeting the quest condition raises one persistent quest cue', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 2; index++) {
       await page.evaluate((cell) => window.__clickCell(cell), index);
     }
 
-    await expect(page.locator('.toast', { hasText: '다음 단계 준비 완료' })).toHaveCount(1);
-    const menuTrigger = page.locator('[data-hud-target="menu"]').first();
-    await expect(menuTrigger).toHaveAttribute('data-notification', 'ready');
+    await expect(page.locator('.toast', { hasText: '퀘스트 완료 조건 달성' })).toHaveCount(1);
+    await expect(page.locator('#questTracker')).toHaveClass(/quest-ready/);
+    await expect(page.locator('[data-hud-target="menu"]').first()).toHaveAttribute('data-notification', 'ready');
 
-    await page.evaluate(() => window.__clickCell(5));
-    await expect(page.locator('.toast', { hasText: '다음 단계 준비 완료' })).toHaveCount(1);
-
-    await menuTrigger.click();
-    await expect(menuTrigger).not.toHaveAttribute('data-notification', 'ready');
+    await page.evaluate(() => window.__refreshGameForTest());
+    await page.waitForTimeout(150);
+    await expect(page.locator('.toast', { hasText: '퀘스트 완료 조건 달성' })).toHaveCount(1);
   });
 
   test('each unlocked achievement raises a celebration and a persistent achievement cue', async ({ gamePage: page }) => {
