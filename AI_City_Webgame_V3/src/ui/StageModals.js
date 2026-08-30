@@ -49,13 +49,14 @@ export function openHelpModal() {
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY</span><h2>기후 생존 도시 · 15레벨</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
     <div class="help-grid">
-      <article><span>01</span><h3>건설</h3><p>건설 버튼을 연 상태에서만 빈 대지에 시설을 배치합니다.</p></article>
+      <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 반투명 계획으로 올린 뒤, 하단의 N개 확정을 눌러 한꺼번에 건설합니다.</p></article>
       <article><span>02</span><h3>운영</h3><p>1초마다 1시간이 흐르며 수입·전력·탄소·물이 정산됩니다. 화면에는 날짜만 표시됩니다.</p></article>
       <article><span>03</span><h3>전력망</h3><p>거리가 멀수록 송전 손실이 커지고 저장장치는 중심과 인접한 6방향의 손실을 줄입니다.</p></article>
       <article><span>04</span><h3>퀘스트</h3><p>현재 퀘스트 조건을 유지한 뒤 직접 보상을 받아 다음 레벨로 갑니다.</p></article>
       <article><span>05</span><h3>기후 대응</h3><p>시간당 탄소 8을 넘긴 채 168시간이 지나면 도시가 중단됩니다. 기준 이하는 위험 시간을 회복합니다.</p></article>
       <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 50%입니다.</p></article>
     </div>
+    <div class="callout"><strong>시설 허가</strong><p>퀘스트 레벨마다 시설별 최대 수가 정해집니다. 카드의 현재/계획/최대 수를 확인하세요. 핵발전은 도시의 기반 전력을 위해 화력발전 1기 이상을 함께 유지해야 합니다.</p></div>
     <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_HOURS.CAPSTONE / RESEARCH_RULES.GAME_HOURS_PER_REAL_MINUTE}분이며, 퀴즈 정답마다 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간씩 단축되어 ${RESEARCH_RULES.QUIZ_QUESTION_COUNT}문제를 모두 맞히면 가장 긴 연구도 끝낼 수 있습니다.</p></div>
     <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값이며, 조력발전은 섬의 현재 최외곽에만 배치할 수 있습니다.</p></div>
   `);

@@ -1,5 +1,4 @@
 import { test, expect } from '../fixtures/game-test.js';
-import { clickCell } from '../helpers/playthrough.js';
 
 async function renderRepresentativeCity(page) {
   await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
@@ -61,10 +60,22 @@ test.describe('performance', () => {
   test('rapid sequential facility placement does not throw', async ({ gamePage: page }) => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 15;
+      state.credits = 100;
+      window.__refreshGameForTest();
+    });
     await page.locator('[data-hud-target="build"]').first().click();
     for (let i = 0; i < 10; i++) {
-      await clickCell(page, i);
+      await page.evaluate((index) => window.__clickCell(index), i);
     }
+    expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan.length)).toBe(10);
+    await page.locator('#confirmBuildBtn').click();
+    if (await page.locator('#confirmRiskyBuild').isVisible().catch(() => false)) {
+      await page.locator('#confirmRiskyBuild').click();
+    }
+    await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(10);
     await page.waitForTimeout(300);
     expect(errors).toEqual([]);
   });

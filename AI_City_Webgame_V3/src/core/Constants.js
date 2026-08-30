@@ -210,6 +210,42 @@ export const CITY_AMBIENT = {
   },
 };
 
+export const CITY_AMBIENT_MOTION = Object.freeze({
+  MIN_DELAY_MS: 4000,
+  MAX_DELAY_MS: 9000,
+  FRAME_INTERVAL_MS: 100,
+  MAX_ACTIVE_EFFECTS: 3,
+  MIN_DURATION_MS: 600,
+  MAX_DURATION_MS: 1600,
+  MAX_SMOKE_INSTANCES: 6,
+  MAX_STATUS_LIGHTS: BOARD.EXPANDED_CELLS * 2,
+  SMOKE_TYPES: Object.freeze(['factory', 'thermal', 'nuclear']),
+  SMOKE_PARTICLES_PER_EFFECT: 2,
+  STATUS_LIGHTS_PER_EFFECT: 2,
+  SMOKE_BASE_HEIGHT: 0.46,
+  SMOKE_RISE: 0.42,
+  SMOKE_BASE_SCALE: 0.055,
+  SMOKE_GROWTH: 0.055,
+  SMOKE_WANDER: 0.035,
+  STATUS_BASE_HEIGHT: 0.38,
+  STATUS_ORBIT_RADIUS: 0.25,
+  STATUS_SCALE: Object.freeze([0.035, 0.025, 0.02]),
+  WIND_TURNS_PER_EFFECT: 1.25,
+  SMOKE_COLORS: Object.freeze({
+    factory: 0x8d9aa3,
+    thermal: 0x68747c,
+    nuclear: 0xd8edf2,
+  }),
+  STATUS_COLORS: Object.freeze({
+    residential: 0xffd166,
+    data: 0x54e4ff,
+    solar: 0xffe08a,
+    battery: 0x71f5b4,
+    cooling: 0x70cfff,
+    tidal: 0x64ddff,
+  }),
+});
+
 export const UI_FEEDBACK = {
   TOAST_MS: 2800,
   QUEST_ALERT_MS: 7000,

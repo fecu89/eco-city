@@ -16,7 +16,7 @@ import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { finishBirdVisit, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit } from './ui/CityScene3D.js';
+import { finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
@@ -460,6 +460,8 @@ window.__setTimeScale = (scale) => {
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
 window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVisit(greenIndex, birdCount);
 window.__finishBirdVisitForTest = () => finishBirdVisit();
+window.__triggerFacilityAmbientForTest = (type, cellIndex, durationMs) => triggerFacilityAmbient(type, cellIndex, durationMs);
+window.__finishFacilityAmbientForTest = () => finishFacilityAmbientEffects();
 
 window.render_game_to_text = () => {
   const m = gameState.metrics;
@@ -485,6 +487,7 @@ window.render_game_to_text = () => {
     entities: gameState.grid
       .map((cell, index) => (cell ? { index, ...coords[index], type: cell.type, level: cell.level } : null))
       .filter(Boolean),
+    constructionPlan: gameState.constructionPlan.map(({ index, type }) => ({ index, type })),
     selectedFacility: gameState.selectedFacility,
     selectedCell: gameState.selectedCell,
     research: {

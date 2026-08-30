@@ -97,6 +97,7 @@ test.describe('construction and inspection', () => {
   test('unlocked factory placement preview marks a power-plant neighbor', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
+      state.questIndex = 5;
       state.grid[5] = { type: 'thermal', level: 1, priority: 'normal' };
       state.unlockedFacilities.add('factory');
       window.__refreshGameForTest();

@@ -127,6 +127,7 @@ test.describe('fullscreen world HUD', () => {
 
   test('build palette stays open after selecting a facility', async ({ gamePage: page }) => {
     await page.evaluate(() => {
+      window.__GAME_STATE__.questIndex = 5;
       window.__GAME_STATE__.unlockedFacilities.add('factory');
       window.__refreshGameForTest();
     });
@@ -166,6 +167,7 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('[data-hud-target="build"]').first().click();
     await page.evaluate(() => {
       window.__GAME_STATE__.credits = 3;
+      window.__GAME_STATE__.questIndex = 5;
       window.__GAME_STATE__.unlockedFacilities.add('factory');
       window.__refreshGameForTest();
     });
@@ -197,9 +199,10 @@ test.describe('fullscreen world HUD', () => {
 
   test('closing the build palette clears placement benefit and conflict markers', async ({ gamePage: page }) => {
     await page.evaluate(() => {
+      window.__GAME_STATE__.questIndex = 5;
       window.__GAME_STATE__.grid[5] = { type: 'thermal', level: 1 };
       window.__GAME_STATE__.unlockedFacilities.add('factory');
-      window.__renderCityForTest();
+      window.__refreshGameForTest();
     });
     await page.locator('[data-hud-target="build"]').first().click();
     await page.locator('#facilityDock .facility-btn', { hasText: '공장' }).click();
@@ -346,6 +349,7 @@ test.describe('fullscreen world HUD', () => {
   test('a build that would make hourly credits negative asks for centered confirmation', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
+      state.questIndex = 5;
       state.credits = 30;
       state.unlockedFacilities.add('thermal');
       window.__refreshGameForTest();

@@ -58,6 +58,10 @@ test('mixed facilities stay uncommitted until one atomic batch confirmation', as
     { index: 0, type: 'residential' },
     { index: 1, type: 'factory' },
   ]);
+  expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).constructionPlan)).toEqual([
+    { index: 0, type: 'residential' },
+    { index: 1, type: 'factory' },
+  ]);
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
 
   await page.locator('#confirmBuildBtn').click();

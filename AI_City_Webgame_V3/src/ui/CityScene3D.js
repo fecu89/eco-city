@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   BOARD,
   CITY_AMBIENT,
+  CITY_AMBIENT_MOTION,
   CITY_ASSETS,
   CITY_BUILDING_ORIENTATION,
   CITY_CAMERA,
@@ -22,6 +23,7 @@ import {
 } from '../level/CityAssetLoader.js';
 import { createCameraController } from '../systems/CameraController.js';
 import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
+import { createAmbientMotionController } from '../systems/CityAmbientMotionSystem.js';
 import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
 import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
 import { createCityEnvironment3D } from './CityEnvironment3D.js';
@@ -88,6 +90,8 @@ let birdCount = 0;
 let birdPoolStart = 0;
 let birdVisit = null;
 let birdVisitController = null;
+let ambientMotionController = null;
+let reducedMotionQuery = null;
 let cityEnvironment = null;
 let ghostMesh;
 let ghostMaterial;
@@ -104,6 +108,8 @@ let windRotorMesh;
 let ambientAgentMesh;
 let buildingLightMesh;
 let buildingLightMaterial;
+let smokeEffectMesh;
+let statusLightMesh;
 let facilityMaterial;
 let tileMaterial;
 let stateRingMaterial;
@@ -118,8 +124,12 @@ let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
 const greenIndices = [];
 const activeMotions = new Map();
+const activeAmbientEffects = new Map();
 const ownedGeometries = new Set();
 const ownedMaterials = new Set();
+let ambientEffectSequence = 0;
+let lastAmbientFrameAt = 0;
+let ambientFrameUpdateCount = 0;
 
 function applyWorldTheme({ theme, schema } = {}) {
   currentTheme = THEME_SCHEMAS[theme] ? theme : document.documentElement.dataset.theme || 'dark';
@@ -423,6 +433,32 @@ function createSceneLayers() {
     MAX_AMBIENT_AGENTS,
   );
   ambientAgentMesh.name = 'living-city-agents';
+
+  const smokeMaterial = ownMaterial(new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+  }));
+  smokeEffectMesh = makeInstancedMesh(
+    ownGeometry(new THREE.SphereGeometry(1, 6, 4)),
+    smokeMaterial,
+    CITY_AMBIENT_MOTION.MAX_SMOKE_INSTANCES,
+  );
+  smokeEffectMesh.name = 'facility-ambient-smoke';
+
+  const statusMaterial = ownMaterial(new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.88,
+    depthWrite: false,
+  }));
+  statusLightMesh = makeInstancedMesh(
+    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    statusMaterial,
+    CITY_AMBIENT_MOTION.MAX_STATUS_LIGHTS,
+  );
+  statusLightMesh.name = 'facility-ambient-status-lights';
   resourceRevision++;
 }
 
@@ -436,6 +472,8 @@ function prewarmGpuBuffers() {
     windRotorMesh,
     ambientAgentMesh,
     buildingLightMesh,
+    smokeEffectMesh,
+    statusLightMesh,
   ];
   instanceLayers.forEach((mesh) => {
     setInstance(mesh, 0, 100, 100, 100, 0.001);
@@ -514,6 +552,17 @@ function rebuildAmbientTopology() {
   residentialIndices.length = 0;
   greenIndices.length = 0;
 
+  const staleEffectIds = [...activeAmbientEffects.values()]
+    .filter((effect) => {
+      const config = currentConfigs[effect.cellIndex];
+      return !config || config.empty || config.type !== effect.type;
+    })
+    .map((effect) => effect.id);
+  staleEffectIds.forEach((id) => {
+    activeAmbientEffects.delete(id);
+    ambientMotionController?.complete(id);
+  });
+
   currentConfigs.forEach((config, index) => {
     if (!config || config.empty || !config.type) return;
     if (config.type === 'residential') residentialIndices.push(index);
@@ -524,15 +573,27 @@ function rebuildAmbientTopology() {
   birdCount = 0;
   birdVisit = null;
   updateStaticAmbientInstances();
+  if (staleEffectIds.length) updateAmbientEffectInstances();
 }
 
-function updateStaticAmbientInstances() {
-  const windIndices = typeCellIndices.get('wind');
-  const rotorIndices = windIndices;
+function ambientEffectForCell(cellIndex) {
+  return [...activeAmbientEffects.values()].find((effect) => effect.cellIndex === cellIndex) || null;
+}
+
+function ambientProgress(effect, now) {
+  return THREE.MathUtils.clamp((now - effect.startedAt) / effect.durationMs, 0, 1);
+}
+
+function updateWindRotorInstances(now = performance.now()) {
+  const rotorIndices = typeCellIndices.get('wind');
   rotorIndices.forEach((cellIndex, instanceIndex) => {
     const config = visualConfigAt(currentConfigs, cellIndex);
     const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
     const position = worldPosition(cellIndex);
+    const effect = ambientEffectForCell(cellIndex);
+    const animatedTurn = effect
+      ? ambientProgress(effect, now) * Math.PI * 2 * CITY_AMBIENT_MOTION.WIND_TURNS_PER_EFFECT
+      : 0;
     setRotatedInstance(
       windRotorMesh,
       instanceIndex,
@@ -540,11 +601,16 @@ function updateStaticAmbientInstances() {
       0.78 * level.scale,
       position.z + 0.015,
       level.scale,
-      cellIndex * 0.23,
+      cellIndex * 0.23 + animatedTurn,
     );
     windRotorMesh.setColorAt(instanceIndex, _color.setHex(facilityColorFor('wind', config.level)).lerp(MARKER_COLORS.good, 0.35));
   });
   finishInstances(windRotorMesh, rotorIndices.length);
+}
+
+function updateStaticAmbientInstances() {
+  const rotorIndices = typeCellIndices.get('wind');
+  updateWindRotorInstances();
 
   let agentCount = 0;
   residentialIndices.forEach((cellIndex) => {
@@ -592,6 +658,51 @@ function updateStaticAmbientInstances() {
   ambientInstances = rotorIndices.length + agentCount;
 }
 
+function updateAmbientEffectInstances(now = performance.now()) {
+  let smokeCount = 0;
+  let statusCount = 0;
+  activeAmbientEffects.forEach((effect) => {
+    const { x: centerX, z: centerZ } = worldPosition(effect.cellIndex);
+    const progress = ambientProgress(effect, now);
+    if (CITY_AMBIENT_MOTION.SMOKE_TYPES.includes(effect.type)) {
+      for (let particle = 0; particle < CITY_AMBIENT_MOTION.SMOKE_PARTICLES_PER_EFFECT; particle += 1) {
+        const particleProgress = (progress + particle * 0.36) % 1;
+        const scale = CITY_AMBIENT_MOTION.SMOKE_BASE_SCALE + particleProgress * CITY_AMBIENT_MOTION.SMOKE_GROWTH;
+        const x = centerX + Math.sin(particleProgress * Math.PI * 2 + effect.cellIndex) * CITY_AMBIENT_MOTION.SMOKE_WANDER;
+        const y = CITY_AMBIENT_MOTION.SMOKE_BASE_HEIGHT + particleProgress * CITY_AMBIENT_MOTION.SMOKE_RISE;
+        setAmbientInstance(smokeEffectMesh, smokeCount, x, y, centerZ, scale, scale, scale);
+        smokeEffectMesh.setColorAt(smokeCount, _color.setHex(CITY_AMBIENT_MOTION.SMOKE_COLORS[effect.type]));
+        smokeCount++;
+      }
+      return;
+    }
+    if (effect.type === 'wind') return;
+    const color = CITY_AMBIENT_MOTION.STATUS_COLORS[effect.type] ?? 0xffffff;
+    const [scaleX, scaleY, scaleZ] = CITY_AMBIENT_MOTION.STATUS_SCALE;
+    for (let light = 0; light < CITY_AMBIENT_MOTION.STATUS_LIGHTS_PER_EFFECT; light += 1) {
+      const phase = progress * Math.PI * 2 + light * Math.PI;
+      const radius = CITY_AMBIENT_MOTION.STATUS_ORBIT_RADIUS;
+      const pulse = 0.82 + Math.sin(phase * 2) * 0.18;
+      setAmbientInstance(
+        statusLightMesh,
+        statusCount,
+        centerX + Math.cos(phase) * radius,
+        CITY_AMBIENT_MOTION.STATUS_BASE_HEIGHT + light * scaleY,
+        centerZ + Math.sin(phase) * radius,
+        scaleX * pulse,
+        scaleY * pulse,
+        scaleZ * pulse,
+        -phase,
+      );
+      statusLightMesh.setColorAt(statusCount, _color.setHex(color));
+      statusCount++;
+    }
+  });
+  finishInstances(smokeEffectMesh, smokeCount);
+  finishInstances(statusLightMesh, statusCount);
+  updateWindRotorInstances(now);
+}
+
 function updateBirdVisit(now) {
   if (!birdVisit) return false;
   const progress = Math.min(1, Math.max(0, (now - birdVisit.startedAt) / birdVisit.durationMs));
@@ -634,17 +745,103 @@ export function finishBirdVisit() {
   needsRender = true;
 }
 
+function startFacilityAmbientEffect({ id, type, cellIndex, durationMs }) {
+  const config = currentConfigs[cellIndex];
+  if (
+    !config
+    || config.empty
+    || config.type !== type
+    || type === 'green'
+    || activeAmbientEffects.size >= CITY_AMBIENT_MOTION.MAX_ACTIVE_EFFECTS
+    || ambientEffectForCell(cellIndex)
+  ) return false;
+  const boundedDuration = THREE.MathUtils.clamp(
+    Number(durationMs) || CITY_AMBIENT_MOTION.MIN_DURATION_MS,
+    CITY_AMBIENT_MOTION.MIN_DURATION_MS,
+    CITY_AMBIENT_MOTION.MAX_DURATION_MS,
+  );
+  const effect = {
+    id: id || `city-ambient-manual-${++ambientEffectSequence}`,
+    type,
+    cellIndex,
+    durationMs: boundedDuration,
+    startedAt: performance.now(),
+  };
+  activeAmbientEffects.set(effect.id, effect);
+  lastAmbientFrameAt = effect.startedAt;
+  updateAmbientEffectInstances(effect.startedAt);
+  needsRender = true;
+  return true;
+}
+
+function stopFacilityAmbientEffect(id) {
+  const removed = activeAmbientEffects.delete(id);
+  if (!removed) return false;
+  updateAmbientEffectInstances();
+  needsRender = true;
+  return true;
+}
+
+export function triggerFacilityAmbient(type, cellIndex, durationMs = CITY_AMBIENT_MOTION.MIN_DURATION_MS) {
+  return startFacilityAmbientEffect({ type, cellIndex, durationMs });
+}
+
+export function finishFacilityAmbientEffects() {
+  const effectIds = [...activeAmbientEffects.keys()];
+  activeAmbientEffects.clear();
+  effectIds.forEach((id) => ambientMotionController?.complete(id));
+  if (smokeEffectMesh && statusLightMesh) updateAmbientEffectInstances();
+  needsRender = true;
+}
+
+function updateFacilityAmbientMotion(now) {
+  if (!activeAmbientEffects.size) return false;
+  if (now - lastAmbientFrameAt < CITY_AMBIENT_MOTION.FRAME_INTERVAL_MS) return false;
+  lastAmbientFrameAt = now;
+  ambientFrameUpdateCount++;
+  const completed = [];
+  activeAmbientEffects.forEach((effect) => {
+    if (now - effect.startedAt >= effect.durationMs) completed.push(effect.id);
+  });
+  completed.forEach((id) => {
+    activeAmbientEffects.delete(id);
+    ambientMotionController?.complete(id);
+  });
+  updateAmbientEffectInstances(now);
+  return true;
+}
+
 function pauseBirdVisits({ pausesSimulation } = {}) {
-  if (pausesSimulation) birdVisitController?.pause('modal');
+  if (!pausesSimulation) return;
+  birdVisitController?.pause('modal');
+  ambientMotionController?.pause('modal');
+  finishFacilityAmbientEffects();
 }
 
 function resumeBirdVisits({ pausesSimulation } = {}) {
-  if (pausesSimulation) birdVisitController?.resume('modal');
+  if (!pausesSimulation) return;
+  birdVisitController?.resume('modal');
+  ambientMotionController?.resume('modal');
 }
 
 function handleBirdVisibility() {
-  if (document.hidden) birdVisitController?.pause('hidden');
-  else birdVisitController?.resume('hidden');
+  if (document.hidden) {
+    birdVisitController?.pause('hidden');
+    ambientMotionController?.pause('hidden');
+    finishFacilityAmbientEffects();
+  } else {
+    birdVisitController?.resume('hidden');
+    ambientMotionController?.resume('hidden');
+  }
+}
+
+function handleReducedMotion(event) {
+  if (event.matches) {
+    ambientMotionController?.pause('reduced-motion');
+    finishFacilityAmbientEffects();
+  } else {
+    ambientMotionController?.resume('reduced-motion');
+  }
 }
 
 function easeOutBack(progress) {
@@ -921,6 +1118,21 @@ export function initCityScene3D(container) {
   });
   birdVisitController.start();
 
+  ambientMotionController = createAmbientMotionController({
+    getCandidates: () => currentConfigs
+      .filter((config) => config && !config.empty && config.type && config.type !== 'green')
+      .map((config) => ({ type: config.type, cellIndex: config.index })),
+    onStart: (effect) => {
+      if (startFacilityAmbientEffect(effect)) return;
+      queueMicrotask(() => ambientMotionController?.complete(effect.id));
+    },
+    onStop: (effect) => stopFacilityAmbientEffect(effect.id),
+  });
+  reducedMotionQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
+  if (reducedMotionQuery?.matches) ambientMotionController.pause('reduced-motion');
+  reducedMotionQuery?.addEventListener?.('change', handleReducedMotion);
+  ambientMotionController.start();
+
   window.__clickCell = (index) => {
     const config = currentConfigs[index];
     if (config?.disabled) return;
@@ -1066,6 +1278,7 @@ function handlePointerClick(event) {
 function renderFrame(now) {
   let shouldRender = needsRender || !!cameraController?.update();
   if (birdVisit && updateBirdVisit(now)) shouldRender = true;
+  if (updateFacilityAmbientMotion(now)) shouldRender = true;
   if (activeMotions.size) {
     updateInstances(currentConfigs, currentCoords, now);
     if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentCoords, now);
@@ -1145,7 +1358,7 @@ export function getCityRendererStats() {
     hexCellCount: currentCoords.length,
     facilityInstances,
     facilityVisualSamples,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 3,
+    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 6,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1155,6 +1368,14 @@ export function getCityRendererStats() {
     birdCount,
     birdPoolSize: BIRD_POOL_SIZE,
     windRotorCount: windRotorMesh?.count ?? 0,
+    ambientEffectCount: activeAmbientEffects.size,
+    ambientEffectKinds: [...activeAmbientEffects.values()].map((effect) => effect.type),
+    smokeEffectCount: smokeEffectMesh?.count ?? 0,
+    statusLightCount: statusLightMesh?.count ?? 0,
+    ambientFrameIntervalMs: CITY_AMBIENT_MOTION.FRAME_INTERVAL_MS,
+    ambientFrameUpdateCount,
+    ambientMotionPaused: ambientMotionController?.getState().paused ?? false,
+    ambientMotionScheduled: ambientMotionController?.getState().scheduled ?? false,
     worldPhase,
     sunIntensity: sunLight?.intensity ?? 0,
     renderCount,
@@ -1194,8 +1415,12 @@ export function disposeCityScene3D() {
   eventBus.off(Events.MODAL_OPEN, pauseBirdVisits);
   eventBus.off(Events.MODAL_CLOSE, resumeBirdVisits);
   document.removeEventListener('visibilitychange', handleBirdVisibility);
+  reducedMotionQuery?.removeEventListener?.('change', handleReducedMotion);
   birdVisitController?.dispose();
   birdVisitController = null;
+  ambientMotionController?.dispose();
+  ambientMotionController = null;
+  reducedMotionQuery = null;
   cityEnvironment?.dispose();
   cityEnvironment = null;
   cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
@@ -1215,6 +1440,7 @@ export function disposeCityScene3D() {
   ownedGeometries.clear();
   ownedMaterials.clear();
   activeMotions.clear();
+  activeAmbientEffects.clear();
   residentialIndices.length = 0;
   greenIndices.length = 0;
   residentAgentCount = 0;
@@ -1227,6 +1453,8 @@ export function disposeCityScene3D() {
   planGhostMaterial = null;
   buildingLightMesh = null;
   buildingLightMaterial = null;
+  smokeEffectMesh = null;
+  statusLightMesh = null;
   currentWorldHour = 8;
   currentSkyState = getSkyState(currentWorldHour);
   visualHourOverride = null;
@@ -1234,6 +1462,9 @@ export function disposeCityScene3D() {
   buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
   renderer = null;
   cameraInteractionReady = false;
+  ambientEffectSequence = 0;
+  lastAmbientFrameAt = 0;
+  ambientFrameUpdateCount = 0;
 }
 
 export function getCityCameraState() {
