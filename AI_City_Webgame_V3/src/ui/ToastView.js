@@ -1,5 +1,6 @@
 import anime from 'animejs';
 import { eventBus, Events } from '../core/EventBus.js';
+import { UI_FEEDBACK } from '../core/Constants.js';
 
 const MAX_VISIBLE_TOASTS = 3;
 
@@ -7,7 +8,7 @@ let stackEl = null;
 
 export function initToastView(el) {
   stackEl = el;
-  eventBus.on(Events.TOAST_SHOW, ({ title, text, priority = false }) => showToast(title, text, priority));
+  eventBus.on(Events.TOAST_SHOW, (options) => showToast(options));
 }
 
 function removeToast(div) {
@@ -35,7 +36,17 @@ function priorityAnimation(div, entering) {
     };
 }
 
-export function showToast(title, text = '', priority = false) {
+export function showToast({
+  title,
+  text = '',
+  meta = '',
+  kicker = '',
+  priority = false,
+  kind = '',
+  action = null,
+  actionLabel = '',
+  duration = UI_FEEDBACK.TOAST_MS,
+}) {
   if (!stackEl) return;
   // 짧은 시간에 토스트가 몰려도 화면을 뒤덮지 않도록 오래된 것부터 즉시 정리한다.
   // removeToast()의 제거는 애니메이션이 끝난 뒤(비동기) 일어나므로, 개수 제한은 반드시
@@ -44,12 +55,44 @@ export function showToast(title, text = '', priority = false) {
     stackEl.children[0].remove();
   }
   const div = document.createElement('div');
-  div.className = `toast${priority ? ' priority' : ''}`;
+  div.className = ['toast', priority ? 'priority' : '', kind].filter(Boolean).join(' ');
   div.setAttribute('role', priority ? 'alert' : 'status');
-  div.innerHTML = `<strong>${title}</strong>${text ? `<div>${text}</div>` : ''}`;
+  if (kicker) {
+    const kickerEl = document.createElement('span');
+    kickerEl.className = 'toast-kicker';
+    kickerEl.textContent = kicker;
+    div.appendChild(kickerEl);
+  }
+  const titleEl = document.createElement('strong');
+  titleEl.textContent = title;
+  div.appendChild(titleEl);
+  if (text) {
+    const textEl = document.createElement('div');
+    textEl.className = 'toast-text';
+    textEl.textContent = text;
+    div.appendChild(textEl);
+  }
+  if (meta) {
+    const metaEl = document.createElement('div');
+    metaEl.className = 'toast-meta';
+    metaEl.textContent = meta;
+    div.appendChild(metaEl);
+  }
+  if (action) {
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.className = 'btn secondary toast-action';
+    actionButton.dataset.toastAction = action;
+    actionButton.textContent = actionLabel || '열기';
+    actionButton.addEventListener('click', () => {
+      eventBus.emit(Events.HUD_PANEL_OPEN_REQUESTED, { name: action });
+      removeToast(div);
+    });
+    div.appendChild(actionButton);
+  }
   stackEl.appendChild(div);
   anime(priorityAnimation(div, true));
   setTimeout(() => {
     if (div.isConnected) removeToast(div);
-  }, 2800);
+  }, duration);
 }

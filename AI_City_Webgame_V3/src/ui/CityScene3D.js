@@ -32,9 +32,6 @@ const MAX_CELLS = BOARD.EXPANDED_CELLS;
 const TILE_BASE_COLOR = 0x0d1f31;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
 const SUPPLEMENT_TYPES = FACILITY_TYPES.filter((type) => CITY_ASSETS[type].supplement);
-const ENERGY_SOURCE_TYPES = new Set(CITY_AMBIENT.ENERGY_SOURCES);
-const RENEWABLE_SOURCE_TYPES = new Set(['solar', 'wind', 'tidal']);
-const MAX_ENERGY_LINKS = MAX_CELLS * CITY_AMBIENT.MAX_NEIGHBORS_PER_CELL;
 const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
   + 3
@@ -86,11 +83,6 @@ let needsRender = true;
 let renderCount = 0;
 let ambientInstances = 0;
 let currentTheme = 'dark';
-let energyLinkCount = 0;
-let energyPacketCount = 0;
-let energyBlinkCount = 0;
-let energyBlinkTimer = null;
-let energyBlinkRestoreTimer = null;
 let residentAgentCount = 0;
 let birdCount = 0;
 let birdPoolStart = 0;
@@ -99,8 +91,9 @@ let birdVisitController = null;
 let cityEnvironment = null;
 let ghostMesh;
 let ghostMaterial;
+let planGhostMaterial;
 let hoveredPreviewIndex = -1;
-let buildPreviewMode = { enabled: false, type: null, candidateIndex: null };
+let buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
 let currentWorldHour = 8;
 let currentSkyState = getSkyState(currentWorldHour);
 let visualHourOverride = null;
@@ -108,13 +101,9 @@ let visualHourOverride = null;
 let tileMesh;
 let stateRingMesh;
 let windRotorMesh;
-let energyLines;
-let energyLinePositions;
-let energyLineColors;
 let ambientAgentMesh;
 let buildingLightMesh;
 let buildingLightMaterial;
-let energyLineMaterial;
 let facilityMaterial;
 let tileMaterial;
 let stateRingMaterial;
@@ -122,10 +111,9 @@ let hemisphereLight;
 let sunLight;
 let rimLight;
 const facilityMeshes = new Map();
+const planGhostMeshes = new Map();
 const supplementMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
-const energyLinks = [];
-let currentPowerRoutes = [];
 let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
 const greenIndices = [];
@@ -364,6 +352,23 @@ function createSceneLayers() {
   ghostMesh.renderOrder = 8;
   scene.add(ghostMesh);
 
+  planGhostMaterial = ownMaterial(new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0x173e35,
+    emissiveIntensity: 0.35,
+    roughness: 0.54,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.46,
+    depthWrite: false,
+  }));
+  FACILITY_TYPES.forEach((type) => {
+    const mesh = makeInstancedMesh(getFacilityGeometry(type), planGhostMaterial, MAX_CELLS);
+    mesh.name = `facility-plan-ghost-${type}`;
+    mesh.renderOrder = 7;
+    planGhostMeshes.set(type, mesh);
+  });
+
   const supplementPlaceholder = ownGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 10));
   SUPPLEMENT_TYPES.forEach((type) => {
     const mesh = makeInstancedMesh(supplementPlaceholder, facilityMaterial, MAX_CELLS);
@@ -406,23 +411,6 @@ function createSceneLayers() {
   );
   buildingLightMesh.name = 'building-window-lights';
 
-  energyLinePositions = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
-  energyLineColors = new Float32Array(MAX_ENERGY_LINKS * 2 * 3);
-  const energyLineGeometry = ownGeometry(new THREE.BufferGeometry());
-  energyLineGeometry.setAttribute('position', new THREE.BufferAttribute(energyLinePositions, 3).setUsage(THREE.DynamicDrawUsage));
-  energyLineGeometry.setAttribute('color', new THREE.BufferAttribute(energyLineColors, 3).setUsage(THREE.DynamicDrawUsage));
-  energyLineGeometry.setDrawRange(0, 0);
-  energyLineMaterial = ownMaterial(new THREE.LineBasicMaterial({
-    transparent: true,
-    opacity: CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY,
-    vertexColors: true,
-    depthWrite: false,
-  }));
-  energyLines = new THREE.LineSegments(energyLineGeometry, energyLineMaterial);
-  energyLines.frustumCulled = false;
-  energyLines.name = 'energy-links';
-  scene.add(energyLines);
-
   const ambientAgentMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -442,6 +430,7 @@ function prewarmGpuBuffers() {
   const instanceLayers = [
     tileMesh,
     ...facilityMeshes.values(),
+    ...planGhostMeshes.values(),
     ...supplementMeshes.values(),
     stateRingMesh,
     windRotorMesh,
@@ -453,26 +442,17 @@ function prewarmGpuBuffers() {
     mesh.setColorAt(0, _color.setHex(0xffffff));
     finishInstances(mesh, 1);
   });
-  energyLinePositions[0] = 100;
-  energyLinePositions[1] = 100;
-  energyLinePositions[2] = 100;
-  energyLinePositions[3] = 101;
-  energyLinePositions[4] = 100;
-  energyLinePositions[5] = 100;
-  energyLines.geometry.setDrawRange(0, 2);
-  energyLines.geometry.attributes.position.needsUpdate = true;
-  energyLines.geometry.attributes.color.needsUpdate = true;
   camera.position.set(4, 6, 6);
   camera.lookAt(0, 0, 0);
   renderer.render(scene, camera);
   instanceLayers.forEach((mesh) => { mesh.count = 0; });
-  energyLines.geometry.setDrawRange(0, 0);
 }
 
 function refreshLoadedAssets() {
   FACILITY_TYPES.forEach((type) => {
     const mesh = facilityMeshes.get(type);
     mesh.geometry = getFacilityGeometry(type);
+    planGhostMeshes.get(type).geometry = getFacilityGeometry(type);
     const material = getFacilityMaterial(type);
     if (material) {
       const runtimeMaterial = material.clone();
@@ -499,6 +479,7 @@ function refreshLoadedAssets() {
   resourceRevision++;
   updateInstances(currentConfigs, currentCoords);
   updateStaticAmbientInstances();
+  syncPlanGhosts();
   syncBuildGhost();
   needsRender = true;
 }
@@ -517,6 +498,7 @@ function tileColorFor(config) {
 function markerColorFor(config) {
   if (config.diagnosisTarget) return MARKER_COLORS.selected;
   if (config.previewBad || config.diagnosisState === 'problem') return MARKER_COLORS.problem;
+  if (config.researchWarning) return MARKER_COLORS.warn;
   if (config.previewGood || config.newLand || config.diagnosisState === 'ok') return MARKER_COLORS.good;
   if (config.diagnosisState === 'unknown') return MARKER_COLORS.unknown;
   if (config.selected) return MARKER_COLORS.selected;
@@ -529,7 +511,6 @@ function worldPosition(index, coordinates = currentCoords) {
 }
 
 function rebuildAmbientTopology() {
-  energyLinks.length = 0;
   residentialIndices.length = 0;
   greenIndices.length = 0;
 
@@ -539,69 +520,10 @@ function rebuildAmbientTopology() {
     if (config.type === 'green') greenIndices.push(index);
   });
 
-  applyPowerRoutes(currentPowerRoutes);
-
-  energyPacketCount = 0;
   residentAgentCount = residentialIndices.length * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL;
   birdCount = 0;
   birdVisit = null;
   updateStaticAmbientInstances();
-}
-
-function pushEnergySegment(sourceIndex, targetIndex, color) {
-  if (energyLinks.length >= MAX_ENERGY_LINKS) return;
-  const source = currentConfigs[sourceIndex];
-  const target = currentConfigs[targetIndex];
-  if (!source || source.empty || !target || target.empty) return;
-  energyLinks.push({ sourceIndex, targetIndex, color });
-}
-
-function applyPowerRoutes(routes = []) {
-  energyLinks.length = 0;
-  routes.forEach((route) => {
-    const source = currentConfigs[route.from];
-    if (!source || !ENERGY_SOURCE_TYPES.has(source.type)) return;
-    const color = RENEWABLE_SOURCE_TYPES.has(source.type)
-      ? CITY_AMBIENT.COLORS.renewableEnergy
-      : CITY_AMBIENT.COLORS.conventionalEnergy;
-    if (route.via != null && route.via !== route.from && route.via !== route.to) {
-      pushEnergySegment(route.from, route.via, color);
-      pushEnergySegment(route.via, route.to, color);
-    } else {
-      pushEnergySegment(route.from, route.to, color);
-    }
-  });
-
-  energyLinks.forEach((link, linkIndex) => {
-    const offset = linkIndex * 6;
-    const sourcePosition = worldPosition(link.sourceIndex);
-    const targetPosition = worldPosition(link.targetIndex);
-    energyLinePositions[offset] = sourcePosition.x;
-    energyLinePositions[offset + 1] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
-    energyLinePositions[offset + 2] = sourcePosition.z;
-    energyLinePositions[offset + 3] = targetPosition.x;
-    energyLinePositions[offset + 4] = CITY_AMBIENT.ENERGY_LINE_HEIGHT;
-    energyLinePositions[offset + 5] = targetPosition.z;
-    _color.setHex(link.color);
-    for (let vertexOffset = 0; vertexOffset < 2; vertexOffset++) {
-      const colorOffset = offset + vertexOffset * 3;
-      energyLineColors[colorOffset] = _color.r;
-      energyLineColors[colorOffset + 1] = _color.g;
-      energyLineColors[colorOffset + 2] = _color.b;
-    }
-  });
-  energyLines.geometry.setDrawRange(0, energyLinks.length * 2);
-  energyLines.geometry.attributes.position.needsUpdate = true;
-  energyLines.geometry.attributes.color.needsUpdate = true;
-
-  energyLinkCount = energyLinks.length;
-  syncEnergyBlinkTimer();
-  needsRender = true;
-}
-
-function handleSimulationTick(payload) {
-  currentPowerRoutes = Array.isArray(payload?.power?.routes) ? payload.power.routes.map((route) => ({ ...route })) : [];
-  applyPowerRoutes(currentPowerRoutes);
 }
 
 function updateStaticAmbientInstances() {
@@ -723,36 +645,6 @@ function resumeBirdVisits({ pausesSimulation } = {}) {
 function handleBirdVisibility() {
   if (document.hidden) birdVisitController?.pause('hidden');
   else birdVisitController?.resume('hidden');
-}
-
-function clearEnergyBlinkTimers() {
-  if (energyBlinkTimer != null) window.clearTimeout(energyBlinkTimer);
-  if (energyBlinkRestoreTimer != null) window.clearTimeout(energyBlinkRestoreTimer);
-  energyBlinkTimer = null;
-  energyBlinkRestoreTimer = null;
-}
-
-function syncEnergyBlinkTimer() {
-  if (!energyLinkCount) {
-    clearEnergyBlinkTimers();
-    if (energyLineMaterial) energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY;
-    return;
-  }
-  if (energyBlinkTimer != null) return;
-  energyBlinkTimer = window.setTimeout(() => {
-    energyBlinkTimer = null;
-    if (!energyLinkCount || !energyLineMaterial) return;
-    energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_FLASH_OPACITY;
-    energyBlinkCount++;
-    needsRender = true;
-    energyBlinkRestoreTimer = window.setTimeout(() => {
-      energyBlinkRestoreTimer = null;
-      if (!energyLineMaterial) return;
-      energyLineMaterial.opacity = CITY_AMBIENT.ENERGY_LINE_BASE_OPACITY;
-      needsRender = true;
-    }, CITY_AMBIENT.ENERGY_BLINK_DURATION_MS);
-    syncEnergyBlinkTimer();
-  }, CITY_AMBIENT.ENERGY_BLINK_INTERVAL_MS);
 }
 
 function easeOutBack(progress) {
@@ -1019,7 +911,6 @@ export function initCityScene3D(container) {
   eventBus.on(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.on(Events.BOARD_DEMOLISHED, handleDemolished);
   eventBus.on(Events.THEME_CHANGED, applyWorldTheme);
-  eventBus.on(Events.SIMULATION_TICKED, handleSimulationTick);
   eventBus.on(Events.MODAL_OPEN, pauseBirdVisits);
   eventBus.on(Events.MODAL_CLOSE, resumeBirdVisits);
   document.addEventListener('visibilitychange', handleBirdVisibility);
@@ -1112,7 +1003,7 @@ function syncBuildGhost() {
   const index = buildPreviewMode.candidateIndex ?? hoveredPreviewIndex;
   const config = currentConfigs[index];
   const type = buildPreviewMode.type;
-  if (!buildPreviewMode.enabled || index == null || index < 0 || !type || !FACILITY_TYPES.includes(type) || !config?.empty) {
+  if (!buildPreviewMode.enabled || index == null || index < 0 || !type || !FACILITY_TYPES.includes(type) || !config?.empty || config.plannedType) {
     ghostMesh.visible = false;
     needsRender = true;
     return;
@@ -1130,9 +1021,37 @@ function syncBuildGhost() {
   needsRender = true;
 }
 
-export function setBuildPreviewMode({ enabled = false, type = null, candidateIndex = null } = {}) {
-  buildPreviewMode = { enabled: Boolean(enabled), type, candidateIndex };
+function syncPlanGhosts() {
+  if (!planGhostMeshes.size) return;
+  const plannedItems = buildPreviewMode.enabled ? buildPreviewMode.plannedItems || [] : [];
+  const invalid = new Set(buildPreviewMode.invalidIndices || []);
+  FACILITY_TYPES.forEach((type) => {
+    const mesh = planGhostMeshes.get(type);
+    const items = plannedItems.filter((item) => item.type === type);
+    let count = 0;
+    items.forEach(({ index }) => {
+      if (!currentConfigs[index]?.empty || !currentCoords[index]) return;
+      const { x, z } = worldPosition(index);
+      const level = LEVEL_VISUALS[1];
+      setInstance(mesh, count, x, 0.13, z, level.scale, 0, facilityRotationY(type, index));
+      mesh.setColorAt(count, invalid.has(index) ? MARKER_COLORS.problem : MARKER_COLORS.good);
+      count++;
+    });
+    finishInstances(mesh, count);
+  });
+  needsRender = true;
+}
+
+export function setBuildPreviewMode({ enabled = false, type = null, candidateIndex = null, plannedItems = [], invalidIndices = [] } = {}) {
+  buildPreviewMode = {
+    enabled: Boolean(enabled),
+    type,
+    candidateIndex,
+    plannedItems: plannedItems.map(({ index, type: plannedType }) => ({ index, type: plannedType })),
+    invalidIndices: [...invalidIndices],
+  };
   if (!buildPreviewMode.enabled) hoveredPreviewIndex = -1;
+  syncPlanGhosts();
   syncBuildGhost();
 }
 
@@ -1159,7 +1078,7 @@ function renderFrame(now) {
 }
 
 // cellConfigs: { empty, type, level, selected, newLand, previewGood, previewBad,
-// diagnosisState, linkMark, disabled } 배열이다.
+// diagnosisState, researchWarning, disabled } 배열이다.
 export function renderCityScene3D(cellConfigs, boardRadius) {
   if (!renderer) return;
   const nextCoords = createHexCoordinates(boardRadius);
@@ -1181,6 +1100,7 @@ export function renderCityScene3D(cellConfigs, boardRadius) {
   }
   updateInstances(currentConfigs, currentCoords);
   rebuildAmbientTopology();
+  syncPlanGhosts();
   syncBuildGhost();
   needsRender = true;
 }
@@ -1192,6 +1112,7 @@ export function setCellClickHandler(fn) {
 export function getCityRendererStats() {
   const facilityInstances = [...facilityMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
   const firstTileColor = tileMesh?.count ? tileMesh.getColorAt(0, _color).getHex() : null;
+  const planGhostCount = [...planGhostMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
   const facilityVisualSamples = {};
   const sampleMatrix = new THREE.Matrix4();
   const samplePosition = new THREE.Vector3();
@@ -1224,14 +1145,12 @@ export function getCityRendererStats() {
     hexCellCount: currentCoords.length,
     facilityInstances,
     facilityVisualSamples,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + 3,
+    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 3,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
     ambientInstances,
-    energyLinkCount,
-    energyPacketCount,
-    energyBlinkCount,
+    energyLineLayerPresent: false,
     residentAgentCount,
     birdCount,
     birdPoolSize: BIRD_POOL_SIZE,
@@ -1245,6 +1164,9 @@ export function getCityRendererStats() {
     environment: cityEnvironment?.getStats() ?? { state: 'idle' },
     ghostVisible: Boolean(ghostMesh?.visible),
     ghostCount: ghostMesh?.visible ? 1 : 0,
+    planGhostCount,
+    planGhostTypes: [...planGhostMeshes.entries()].filter(([, mesh]) => mesh.count > 0).map(([type]) => type).sort(),
+    planGhostLayerCount: planGhostMeshes.size,
     skyHour: currentWorldHour,
     skyTopColor: currentSkyState.topColor,
     skyBottomColor: currentSkyState.bottomColor,
@@ -1262,7 +1184,6 @@ export function getCityRendererStats() {
 
 export function disposeCityScene3D() {
   renderer?.setAnimationLoop(null);
-  clearEnergyBlinkTimers();
   resizeObserver?.disconnect();
   resizeObserver = null;
   eventBus.off(Events.BOARD_EXPANDED, resetCameraForBoardExpansion);
@@ -1270,7 +1191,6 @@ export function disposeCityScene3D() {
   eventBus.off(Events.BOARD_UPGRADED, handleUpgraded);
   eventBus.off(Events.BOARD_DEMOLISHED, handleDemolished);
   eventBus.off(Events.THEME_CHANGED, applyWorldTheme);
-  eventBus.off(Events.SIMULATION_TICKED, handleSimulationTick);
   eventBus.off(Events.MODAL_OPEN, pauseBirdVisits);
   eventBus.off(Events.MODAL_CLOSE, resumeBirdVisits);
   document.removeEventListener('visibilitychange', handleBirdVisibility);
@@ -1290,17 +1210,13 @@ export function disposeCityScene3D() {
   ownedMaterials.forEach((material) => material.dispose());
   renderer?.dispose();
   facilityMeshes.clear();
+  planGhostMeshes.clear();
   supplementMeshes.clear();
   ownedGeometries.clear();
   ownedMaterials.clear();
   activeMotions.clear();
-  energyLinks.length = 0;
-  currentPowerRoutes = [];
   residentialIndices.length = 0;
   greenIndices.length = 0;
-  energyLinkCount = 0;
-  energyPacketCount = 0;
-  energyBlinkCount = 0;
   residentAgentCount = 0;
   birdCount = 0;
   birdVisit = null;
@@ -1308,13 +1224,14 @@ export function disposeCityScene3D() {
   cameraController = null;
   ghostMesh = null;
   ghostMaterial = null;
+  planGhostMaterial = null;
   buildingLightMesh = null;
   buildingLightMaterial = null;
   currentWorldHour = 8;
   currentSkyState = getSkyState(currentWorldHour);
   visualHourOverride = null;
   hoveredPreviewIndex = -1;
-  buildPreviewMode = { enabled: false, type: null, candidateIndex: null };
+  buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
   renderer = null;
   cameraInteractionReady = false;
 }

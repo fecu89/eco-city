@@ -88,6 +88,9 @@ test.describe('mobile city controls', () => {
     await expect(panel.locator('#questPanelTitle')).toHaveText('2040, 첫 시민');
     await expect(panel.locator('#questPanelGoal')).toContainText('주거지 2개');
     await expect(panel.locator('#questPanelClaimBtn')).toBeVisible();
+    await expect(panel.locator('#questPanelDragHandle')).toHaveCount(0);
+    await expect(panel.locator('#questPanelPinBtn')).toHaveCount(1);
+    await expect(panel.locator('#questPanelPinBtn')).toBeHidden();
   });
 
   test('mobile claims a ready quest from the quest menu instead of the hidden tracker', async ({ gamePage: page }) => {

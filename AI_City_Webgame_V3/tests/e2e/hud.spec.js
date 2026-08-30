@@ -30,6 +30,33 @@ test.describe('fullscreen world HUD', () => {
       .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
   });
 
+  test('large HUD values use compact units while accessible labels keep exact values', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.credits = 1_250_000;
+      state.lastSettlementDelta = 12_500;
+      state.lastTickSummary = {
+        hourlyCarbon: 1_250,
+        deliveredPower: 12_500,
+        demand: 10_000,
+        lowCarbonPercent: 80,
+        hourlyWater: 1_200_000,
+        workforce: 12_500,
+        jobs: 11_000,
+      };
+      window.__refreshGameForTest();
+    });
+
+    await expect(page.locator('#credits')).toHaveText('1.25M');
+    await expect(page.locator('#simulationHud [data-metric="credit"]')).toHaveAttribute('title', /1,250,000\.00/);
+    await expect(page.locator('#simNet')).toHaveText('+12.5K/h');
+    await expect(page.locator('#simPower')).toHaveText('12.5K/10K E');
+    await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/h');
+    await expect(page.locator('#simWater')).toHaveText('1.2M/h');
+    await expect(page.locator('#simLabor')).toHaveText('12.5K/11K');
+    await expect(page.locator('#simPower').locator('xpath=..')).toHaveAttribute('aria-label', /12,500/);
+  });
+
   test('time navigation has one play-pause toggle and one 1x-4x speed toggle', async ({ gamePage: page }) => {
     const controls = page.locator('#timeControls');
     await expect(controls.locator('button')).toHaveCount(2);
@@ -152,6 +179,22 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('.toast', { hasText: '1.00 💰' })).toBeVisible();
   });
 
+  test('facility cards show quest permit counts and explain the next capacity increase', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.grid[0] = { type: 'residential', level: 1 };
+      state.grid[1] = { type: 'residential', level: 1 };
+      window.__refreshGameForTest();
+    });
+    await page.locator('[data-hud-target="build"]').first().click();
+    const residential = page.locator('[data-facility="residential"]');
+    await expect(residential.locator('.facility-limit')).toHaveText('2 / 2');
+    await expect(residential).toHaveAttribute('aria-disabled', 'true');
+    await expect(residential).toHaveAttribute('title', /퀘스트 2/);
+    await residential.click({ force: true });
+    await expect(page.locator('.toast', { hasText: '퀘스트 2' })).toBeVisible();
+  });
+
   test('closing the build palette clears placement benefit and conflict markers', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__GAME_STATE__.grid[5] = { type: 'thermal', level: 1 };
@@ -187,6 +230,71 @@ test.describe('fullscreen world HUD', () => {
     expect(Math.abs(titleBox.y - goalBox.y)).toBeLessThanOrEqual(4);
     await expect(page.locator('[data-hud-target="achievements"]')).toHaveCount(0);
     await expect(page.locator('#badgePanel, #evidenceBox')).toHaveCount(0);
+  });
+
+  test('desktop quest panel can be moved, pinned translucent, and kept beside the build palette', async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__setTimeScale(0));
+    await page.evaluate(() => {
+      localStorage.removeItem('ai-city-quest-panel-layout-v2');
+      localStorage.setItem('ai-city-quest-panel-layout', JSON.stringify({ pinned: true, x: -900, y: -900 }));
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__);
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      const storyNext = page.locator('#storyNext');
+      if (!await storyNext.isVisible().catch(() => false)) break;
+      await storyNext.click();
+    }
+    await page.locator('[data-hud-target="quest"]').first().click();
+    const panel = page.locator('#questPanel');
+    const pin = page.locator('#questPanelPinBtn');
+    await expect(page.locator('#questPanelDragHandle')).toHaveCount(0);
+    await expect(pin).toBeVisible();
+    await page.waitForTimeout(240);
+
+    const before = await panel.boundingBox();
+    const topHud = await page.locator('.world-status').boundingBox();
+    expect(before.x).toBeGreaterThan(page.viewportSize().width / 2);
+    expect(before.y).toBeGreaterThanOrEqual(topHud.y + topHud.height + 4);
+    await page.mouse.move(before.x + 24, before.y + 24);
+    await page.mouse.down();
+    await page.mouse.move(before.x - 110, before.y + 109, { steps: 5 });
+    await page.mouse.up();
+    const moved = await panel.boundingBox();
+    expect(Math.hypot(moved.x - before.x, moved.y - before.y)).toBeGreaterThan(60);
+    expect(moved.x).toBeGreaterThanOrEqual(7);
+    expect(moved.y).toBeGreaterThanOrEqual(7);
+    expect(moved.x + moved.width).toBeLessThanOrEqual(page.viewportSize().width - 7);
+    expect(moved.y + moved.height).toBeLessThanOrEqual(page.viewportSize().height - 7);
+
+    for (const control of [pin, panel.locator('[data-hud-close]')]) {
+      const controlBox = await control.boundingBox();
+      expect(controlBox.x).toBeGreaterThanOrEqual(moved.x);
+      expect(controlBox.y).toBeGreaterThanOrEqual(moved.y);
+      expect(controlBox.x + controlBox.width).toBeLessThanOrEqual(moved.x + moved.width);
+      expect(controlBox.y + controlBox.height).toBeLessThanOrEqual(moved.y + moved.height);
+    }
+
+    const positionBeforePin = await panel.boundingBox();
+    await pin.click();
+    await expect(pin).toHaveAttribute('aria-pressed', 'true');
+    await expect(panel).toHaveClass(/quest-panel-pinned/);
+    const positionAfterPin = await panel.boundingBox();
+    expect(Math.hypot(positionAfterPin.x - positionBeforePin.x, positionAfterPin.y - positionBeforePin.y)).toBeLessThan(2);
+    await page.locator('[data-hud-target="build"]').first().click();
+    await expect(panel).toHaveClass(/hud-panel-active/);
+    await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__ && document.getElementById('questPanel')?.classList.contains('quest-panel-pinned'));
+    const restored = await page.locator('#questPanel').boundingBox();
+    expect(Math.abs(restored.x - moved.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(restored.y - moved.y)).toBeLessThanOrEqual(2);
+
+    await page.locator('[data-hud-target="build"]').first().click();
+    await page.locator('#questPanel [data-hud-close]').click();
+    await expect(page.locator('#questPanel')).not.toHaveClass(/hud-panel-active/);
+    await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
   });
 
   test('empty land builds only while the build panel is open', async ({ gamePage: page }) => {

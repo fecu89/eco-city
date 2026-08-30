@@ -24,7 +24,7 @@ function realDurationLabel(hours) {
 }
 
 function jobStatus(job) {
-  if (job.status === 'underpowered') return '전력 부족 · 90% 필요';
+  if (job.status === 'underpowered') return '⚠ 전력 부족 · 연구 일시정지 · 90% 필요';
   if (job.dataCenterIndex == null) return '담당 시설 없음 · 재배정 필요';
   return `데이터센터 #${job.dataCenterIndex}`;
 }
@@ -33,7 +33,7 @@ function activeJobMarkup(job, dataCenterIndex) {
   const definition = RESEARCH[job.id];
   const assignedHere = job.dataCenterIndex === dataCenterIndex;
   return `
-    <article class="research-active" data-research-job="${job.id}">
+    <article class="research-active ${job.status === 'underpowered' ? 'underpowered' : ''}" data-research-job="${job.id}">
       <div><strong>${definition.name}</strong><span data-research-live-status>${jobStatus(job)}</span></div>
       <div class="research-progress"><span data-research-live-progress style="width:${progressFor(job)}%"></span></div>
       <small data-research-live-hours>${Math.round(job.elapsedEffectiveHours)} / ${definition.durationHours}시간</small>
@@ -93,6 +93,7 @@ export function refreshResearchPanelLive(root) {
       return;
     }
     const definition = RESEARCH[job.id];
+    article.classList.toggle('underpowered', job.status === 'underpowered');
     article.querySelector('[data-research-live-status]').textContent = jobStatus(job);
     article.querySelector('[data-research-live-progress]').style.width = `${progressFor(job)}%`;
     article.querySelector('[data-research-live-hours]').textContent = `${Math.round(job.elapsedEffectiveHours)} / ${definition.durationHours}시간`;

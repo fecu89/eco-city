@@ -82,6 +82,25 @@ export const QUEST_REQUIREMENTS = Object.freeze({
   FIRST_SOLAR_LOW_CARBON_PERCENT: 30,
 });
 
+// 각 퀘스트에서 허용되는 시설별 누적 최대치다. 빈 항목은 이전 퀘스트 값을 유지한다.
+export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
+  1: Object.freeze({ residential: 2 }),
+  2: Object.freeze({ residential: 3, thermal: 1 }),
+  3: Object.freeze({ residential: 4, factory: 2 }),
+  4: Object.freeze({ residential: 5, thermal: 2, data: 1 }),
+  5: Object.freeze({ nuclear: 1 }),
+  6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2 }),
+  7: Object.freeze({ residential: 7, solar: 2 }),
+  8: Object.freeze({ solar: 3, battery: 2 }),
+  9: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2 }),
+  10: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3, green: 3 }),
+  11: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
+  12: Object.freeze({ factory: 5, data: 4, cooling: 4, solar: 5, wind: 4, tidal: 2 }),
+  13: Object.freeze({ residential: 10, battery: 4, green: 6 }),
+  14: Object.freeze({ cooling: 5, solar: 6, wind: 5, green: 7, tidal: 3 }),
+  15: Object.freeze({}),
+});
+
 export const RESEARCH_RULES = Object.freeze({
   DATA_CENTER_SPEED: Object.freeze([0, 1, 1.25, 1.5]),
   POWER_THRESHOLD: 0.9,
@@ -175,14 +194,7 @@ export const CITY_MOTION = {
 };
 
 export const CITY_AMBIENT = {
-  ENERGY_SOURCES: ['thermal', 'nuclear', 'solar', 'wind', 'tidal'],
-  MAX_NEIGHBORS_PER_CELL: 4,
   RESIDENT_AGENTS_PER_CELL: 2,
-  ENERGY_LINE_HEIGHT: 0.24,
-  ENERGY_LINE_BASE_OPACITY: 0.34,
-  ENERGY_LINE_FLASH_OPACITY: 0.92,
-  ENERGY_BLINK_INTERVAL_MS: 5000,
-  ENERGY_BLINK_DURATION_MS: 180,
   PERSON_ORBIT_RADIUS: 0.35,
   PERSON_ANGLE_PER_CELL: 0.61,
   PERSON_SCALE: [0.045, 0.16, 0.045],
@@ -192,8 +204,6 @@ export const CITY_AMBIENT = {
   BIRD_BASE_HEIGHT: 0.88,
   BIRD_SCALE: [0.09, 0.018, 0.035],
   COLORS: {
-    conventionalEnergy: 0xffb45c,
-    renewableEnergy: 0x61f3c2,
     person: 0x8be9fd,
     car: 0xffd166,
     bird: 0xf1fbff,
@@ -201,9 +211,19 @@ export const CITY_AMBIENT = {
 };
 
 export const UI_FEEDBACK = {
+  TOAST_MS: 2800,
+  QUEST_ALERT_MS: 7000,
   QUEST_CELEBRATION_MS: 3200,
   QUEST_BURST_PARTICLES: 12,
 };
+
+export const QUEST_PANEL_LAYOUT = Object.freeze({
+  STORAGE_KEY: 'ai-city-quest-panel-layout-v2',
+  MOBILE_QUERY: '(max-width: 760px)',
+  EDGE_MARGIN: 8,
+  SAFE_GAP: 8,
+  KEYBOARD_STEP: 12,
+});
 
 export const THEME_STORAGE_KEY = 'ai-city-theme';
 export const THEME_SCHEMAS = {

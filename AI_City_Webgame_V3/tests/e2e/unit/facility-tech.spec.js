@@ -7,6 +7,7 @@ import {
   validateUpgrade,
   upgradeRequirementMessage,
   facilityUnlockMessage,
+  demolishCell,
   upgradeCell,
 } from '../../../src/systems/BoardSystem.js';
 import { evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
@@ -16,8 +17,35 @@ import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 
 test.beforeEach(() => gameState.reset());
 
+test('board placement enforces quest capacity and thermal reserve for nuclear', () => {
+  gameState.credits = 100;
+  gameState.grid[0] = { type: 'residential', level: 1 };
+  gameState.grid[1] = { type: 'residential', level: 1 };
+  expect(validatePlacement(gameState, 'residential', 2)).toMatchObject({
+    ok: false,
+    reason: 'facility_limit',
+  });
+
+  gameState.questIndex = 5;
+  gameState.unlockedFacilities.add('nuclear');
+  expect(validatePlacement(gameState, 'nuclear', 2)).toMatchObject({
+    ok: false,
+    reason: 'thermal_reserve_required',
+  });
+  gameState.grid[3] = { type: 'thermal', level: 1 };
+  expect(validatePlacement(gameState, 'nuclear', 2)).toMatchObject({ ok: true });
+});
+
+test('board demolition command preserves the last thermal reserve while nuclear remains', () => {
+  gameState.grid[0] = { type: 'thermal', level: 1 };
+  gameState.grid[1] = { type: 'nuclear', level: 1 };
+  expect(demolishCell(0)).toMatchObject({ ok: false, reason: 'last_thermal_supports_nuclear' });
+  expect(gameState.grid[0]?.type).toBe('thermal');
+});
+
 test('placement validator and placement command share tidal outer-ring rules and cost', () => {
   gameState.credits = 20;
+  gameState.questIndex = 11;
   gameState.unlockedFacilities.add('tidal');
   gameState.research.techLevels.tidal = 1;
   gameState.selectedFacility = 'tidal';

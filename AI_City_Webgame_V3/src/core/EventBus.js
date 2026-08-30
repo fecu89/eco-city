@@ -27,6 +27,10 @@ export const Events = {
   BOARD_DEMOLISHED: 'board:demolished',
   BOARD_FACILITY_SELECTED: 'board:facilitySelected',
   BOARD_EXPANDED: 'board:expanded',
+  BUILD_PLAN_CHANGED: 'buildPlan:changed',
+  BUILD_PLAN_CLEARED: 'buildPlan:cleared',
+  BUILD_PLAN_COMMIT_REQUESTED: 'buildPlan:commitRequested',
+  BUILD_PLAN_COMMITTED: 'buildPlan:committed',
 
   // 3D camera / assets / visual motion
   CAMERA_CHANGED: 'camera:changed',
@@ -47,6 +51,9 @@ export const Events = {
   // UI
   TOAST_SHOW: 'toast:show',
   HUD_PANEL_CHANGED: 'hud:panelChanged',
+  HUD_PANEL_OPEN_REQUESTED: 'hud:panelOpenRequested',
+  QUEST_PANEL_PIN_REQUESTED: 'questPanel:pinRequested',
+  QUEST_PANEL_PIN_CHANGED: 'questPanel:pinChanged',
   THEME_CHANGED: 'theme:changed',
   MODAL_OPEN: 'modal:open',
   MODAL_CLOSE: 'modal:close',

@@ -5,6 +5,7 @@ import { roundCredits } from '../core/Money.js';
 import { formatCredits } from '../core/Money.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { getFacilityPermit, validateDemolitionPermit } from './FacilityPermitSystem.js';
 import {
   createHexCoordinates,
   expandHexGrid,
@@ -208,27 +209,41 @@ const PLACEMENT_MESSAGES = Object.freeze({
   locked_quest: '퀘스트 보상으로 먼저 해금해야 합니다.',
   locked_research: '연구를 완료해야 해금됩니다.',
   outer_ring_only: '조력발전은 현재 도시의 최외곽 육각에만 건설할 수 있습니다.',
+  facility_limit: '현재 퀘스트의 시설 건설 허가 한도에 도달했습니다.',
+  thermal_reserve_required: '핵발전을 건설하려면 화력발전 예비력 1기가 필요합니다.',
   insufficient_credits: '건설 크레딧이 부족합니다.',
 });
 
-export function validatePlacement(state, facilityKey, index) {
+export function validatePlacement(state, facilityKey, index, {
+  grid = state.grid,
+  availableCredits = state.credits,
+  plan = [],
+  skipPermit = false,
+  requireNuclearReserve = true,
+} = {}) {
   const facility = FACILITIES[facilityKey];
   const coords = getBoardCoordinates(state);
   let reason = null;
+  let permit = null;
   if (!state.isEditable) reason = 'not_editable';
   else if (!Number.isInteger(index) || !coords[index]) reason = 'invalid_cell';
-  else if (state.grid[index]) reason = 'occupied';
+  else if (grid[index]) reason = 'occupied';
   else if (!facility) reason = 'locked_quest';
   else if (facilityKey === 'tidal' && (!state.unlockedFacilities.has('tidal') || (state.research?.techLevels?.tidal || 0) < 1)) reason = 'locked_research';
   else if (!state.unlockedFacilities.has(facilityKey)) reason = 'locked_quest';
   else if (facility.placement === 'outer_ring' && !isOuterRing(index, coords, state.boardRadius)) reason = 'outer_ring_only';
-  else if (state.credits < facility.cost) reason = 'insufficient_credits';
+  else if (!skipPermit && !(permit = getFacilityPermit(state, facilityKey, plan)).ok) reason = permit.reason;
+  else if (requireNuclearReserve && facilityKey === 'nuclear'
+    && !grid.some((cell) => cell?.type === 'thermal')
+    && !plan.some((item) => item?.type === 'thermal')) reason = 'thermal_reserve_required';
+  else if (availableCredits < facility.cost) reason = 'insufficient_credits';
   return {
     ok: !reason,
     reason,
     facility,
-    missingCredits: facility ? Math.max(0, Math.round((facility.cost - state.credits) * 10) / 10) : 0,
-    message: reason ? PLACEMENT_MESSAGES[reason] : '건설할 수 있습니다.',
+    permit,
+    missingCredits: facility ? Math.max(0, Math.round((facility.cost - availableCredits) * 10) / 10) : 0,
+    message: reason === 'facility_limit' ? permit.message : reason ? PLACEMENT_MESSAGES[reason] : '건설할 수 있습니다.',
   };
 }
 
@@ -316,6 +331,8 @@ export function demolishCell(index) {
   const cell = gameState.grid[index];
   if (!cell) return { ok: false, reason: 'empty' };
   if (!gameState.isEditable) return { ok: false, reason: 'not_editable' };
+  const permit = validateDemolitionPermit(gameState, index);
+  if (!permit.ok) return permit;
   const refund = demolitionRefund(cell);
   const name = FACILITIES[cell.type].name;
   gameState.grid[index] = null;

@@ -3,19 +3,23 @@ import { FACILITIES } from '../core/Constants.js';
 import { getBoardCoordinates, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { initCityScene3D, renderCityScene3D, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
-import { formatCredits, round1 } from './format.js';
+import { formatCompactNumber, formatCredits, round1 } from './format.js';
+import {
+  assessConstructionPlan,
+  clearConstructionPlan,
+  upsertPlannedFacility,
+} from '../systems/ConstructionPlanSystem.js';
 
 let sizeChipEl = null;
 let onCellClick = () => {};
 let sceneMounted = false;
 let placementPreviewVisible = false;
 let buildConfirmEls = null;
-let candidateIndex = null;
 
 function signed(value, digits = 1) {
   const rounded = digits === 2 ? Number(value.toFixed(2)) : round1(value);
   const prefix = rounded > 0 ? '+' : rounded < 0 ? '-' : '±';
-  return `${prefix}${Math.abs(rounded).toFixed(digits)}`;
+  return `${prefix}${formatCompactNumber(Math.abs(rounded), { fractionDigits: digits })}`;
 }
 
 function setForecastMetric(metric, value, delta) {
@@ -25,9 +29,11 @@ function setForecastMetric(metric, value, delta) {
   root.querySelector('[data-delta]').textContent = delta;
 }
 
-function syncForecastMetrics(validation) {
+function syncForecastMetrics(assessment) {
   if (!buildConfirmEls?.metrics) return;
-  const forecast = validation.ok ? buildConfirmEls.getForecast?.(candidateIndex) : null;
+  const forecast = assessment.items.length
+    ? buildConfirmEls.getForecast?.(assessment.projectedGrid)
+    : null;
   buildConfirmEls.metrics.classList.toggle('hidden', !forecast);
   if (!forecast) return;
   const { current, projected } = forecast;
@@ -41,24 +47,29 @@ function syncForecastMetrics(validation) {
   setForecastMetric('water', `${round1(projected.hourlyWater)}/h`, `Δ ${signed(projected.hourlyWater - current.hourlyWater)}`);
 }
 
-function clearCandidate({ clearSelection = true } = {}) {
-  if (clearSelection && gameState.selectedCell === candidateIndex) gameState.selectedCell = null;
-  candidateIndex = null;
+function clearPlan() {
+  const hadItems = gameState.constructionPlan.length > 0;
+  const assessment = clearConstructionPlan(gameState);
   buildConfirmEls?.root.classList.add('hidden');
+  if (hadItems) eventBus.emit(Events.BUILD_PLAN_CLEARED, assessment);
+  return assessment;
 }
 
 function syncBuildConfirm() {
-  if (!buildConfirmEls || candidateIndex == null || !placementPreviewVisible) {
+  const assessment = assessConstructionPlan(gameState);
+  if (!buildConfirmEls || !assessment.items.length || !placementPreviewVisible) {
     buildConfirmEls?.root.classList.add('hidden');
     return;
   }
-  const facility = FACILITIES[gameState.selectedFacility];
-  const validation = validatePlacement(gameState, gameState.selectedFacility, candidateIndex);
-  buildConfirmEls.text.textContent = validation.ok
-    ? `${facility.icon} ${facility.name} · ${formatCredits(facility.cost)} · ${candidateIndex + 1}번 대지`
-    : validation.message;
-  buildConfirmEls.confirm.disabled = !validation.ok;
-  syncForecastMetrics(validation);
+  const firstError = assessment.errors[0];
+  buildConfirmEls.text.textContent = `계획 ${assessment.items.length}개`;
+  buildConfirmEls.cost.textContent = formatCredits(assessment.totalCost, { compact: true });
+  buildConfirmEls.balance.textContent = `잔액 ${formatCredits(assessment.projectedCredits, { compact: true })}`;
+  buildConfirmEls.error.textContent = firstError?.message || '';
+  buildConfirmEls.error.classList.toggle('hidden', !firstError);
+  buildConfirmEls.confirm.textContent = `${assessment.items.length}개 건설 확정`;
+  buildConfirmEls.confirm.disabled = !assessment.ok;
+  syncForecastMetrics(assessment);
   buildConfirmEls.root.classList.remove('hidden');
 }
 
@@ -68,9 +79,9 @@ function handleSceneCellClick(index) {
     onCellClick(index);
     return;
   }
-  candidateIndex = index;
-  gameState.selectedCell = index;
-  syncBuildConfirm();
+  const assessment = upsertPlannedFacility(gameState, gameState.selectedFacility, index);
+  gameState.selectedCell = gameState.constructionPlan.some((item) => item.index === index) ? index : null;
+  eventBus.emit(Events.BUILD_PLAN_CHANGED, assessment);
   renderGrid();
 }
 
@@ -84,49 +95,61 @@ export function initGridView(gridElement, sizeChipElement, clickHandler, confirm
   }
   // 독에서 시설을 바꿔 고르면(같은 시설 다시 클릭해도) 미리보기가 즉시 갱신되도록 한다.
   eventBus.on(Events.BOARD_FACILITY_SELECTED, () => {
-    clearCandidate();
     if (gameState.isEditable) renderGrid();
   });
   eventBus.on(Events.HUD_PANEL_CHANGED, ({ activePanel }) => {
     const nextVisible = activePanel === 'build';
     if (placementPreviewVisible === nextVisible) return;
     placementPreviewVisible = nextVisible;
-    if (!nextVisible) clearCandidate();
+    if (!nextVisible) clearPlan();
     if (gameState.isEditable) renderGrid();
   });
   buildConfirmEls?.cancel.addEventListener('click', () => {
-    clearCandidate();
+    clearPlan();
     renderGrid();
   });
   buildConfirmEls?.confirm.addEventListener('click', () => {
-    if (candidateIndex == null) return;
-    const index = candidateIndex;
-    if (!validatePlacement(gameState, gameState.selectedFacility, index).ok) {
-      syncBuildConfirm();
-      return;
-    }
-    clearCandidate({ clearSelection: false });
-    onCellClick(index);
+    const assessment = assessConstructionPlan(gameState);
+    if (!assessment.ok) return syncBuildConfirm();
+    eventBus.emit(Events.BUILD_PLAN_COMMIT_REQUESTED, assessment);
   });
 }
 
 function buildCellConfigs() {
   const { grid, selectedCell, expandedCells, selectedFacility } = gameState;
+  const underpoweredResearchCenters = new Set(Object.values(gameState.research.jobs || {})
+    .filter((job) => job.status === 'underpowered' && Number.isInteger(job.dataCenterIndex))
+    .map((job) => job.dataCenterIndex));
   const coords = getBoardCoordinates(gameState);
+  const assessment = assessConstructionPlan(gameState);
+  const planByIndex = new Map(assessment.items.map((item) => [item.index, item]));
   const preview = gameState.isEditable && placementPreviewVisible
-    ? placementPreview(selectedFacility, grid, coords)
+    ? placementPreview(selectedFacility, assessment.projectedGrid, coords)
     : null;
 
   return grid.map((cell, i) => {
     const base = {
       selected: selectedCell === i,
       newLand: expandedCells.has(i),
+      researchWarning: underpoweredResearchCenters.has(i),
     };
     if (!cell) {
+      const planned = planByIndex.get(i);
+      const otherPlan = assessment.items.filter((item) => item.index !== i);
+      const reservedCost = otherPlan.reduce((sum, item) => sum + (FACILITIES[item.type]?.cost || 0), 0);
+      const validation = validatePlacement(gameState, selectedFacility, i, {
+        availableCredits: gameState.credits - reservedCost,
+        plan: otherPlan,
+      });
+      const plannedInvalid = Boolean(planned && assessment.errors.some((error) => error.index === i
+        || (error.index == null && error.type === planned.type)
+        || (error.index == null && error.type == null)));
       return {
         ...base,
         empty: true,
-        placementAllowed: validatePlacement(gameState, selectedFacility, i).ok,
+        placementAllowed: validation.ok,
+        plannedType: planned?.type || null,
+        plannedInvalid,
         previewGood: !!preview?.good.has(i),
         previewBad: !!preview?.bad.has(i),
       };
@@ -141,13 +164,16 @@ function buildCellConfigs() {
 }
 
 export function renderGrid() {
+  const assessment = assessConstructionPlan(gameState);
   setCellClickHandler(handleSceneCellClick);
   sizeChipEl.textContent = `육각 반경 ${gameState.boardRadius} · ${gameState.grid.length}칸`;
   renderCityScene3D(buildCellConfigs(), gameState.boardRadius);
   setBuildPreviewMode({
     enabled: gameState.isEditable && placementPreviewVisible,
     type: gameState.selectedFacility,
-    candidateIndex,
+    candidateIndex: null,
+    plannedItems: gameState.constructionPlan,
+    invalidIndices: assessment.errors.filter((error) => Number.isInteger(error.index)).map((error) => error.index),
   });
   syncBuildConfirm();
 }

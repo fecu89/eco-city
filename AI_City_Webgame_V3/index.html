@@ -68,13 +68,18 @@
           </section>
 
           <section class="glass panel-block hud-panel quest-panel" id="questPanel" data-hud-panel="quest">
-            <button class="icon-btn hud-close quest-panel-close" type="button" data-hud-close aria-label="퀘스트 닫기"><i data-lucide="x"></i></button>
             <div class="quest-panel-current" aria-live="polite">
-              <div class="quest-summary-line">
-                <span class="eyebrow" id="questPanelLevel">LEVEL 1 / 15</span>
-                <h2 id="questPanelTitle">2040, 첫 시민</h2>
-                <span class="quest-summary-divider" aria-hidden="true">—</span>
-                <p id="questPanelGoal">주거지 2개를 건설하세요.</p>
+              <div class="quest-panel-header" tabindex="0" aria-label="퀘스트 창. 방향키로 이동 가능">
+                <div class="quest-summary-line">
+                  <span class="eyebrow" id="questPanelLevel">LEVEL 1 / 15</span>
+                  <h2 id="questPanelTitle">2040, 첫 시민</h2>
+                  <span class="quest-summary-divider" aria-hidden="true">—</span>
+                  <p id="questPanelGoal">주거지 2개를 건설하세요.</p>
+                </div>
+                <div class="quest-panel-tools">
+                  <button class="icon-btn quest-panel-pin" id="questPanelPinBtn" type="button" aria-label="퀘스트 창 고정" aria-pressed="false" title="반투명하게 고정"><i data-lucide="pin"></i></button>
+                  <button class="icon-btn hud-close quest-panel-close" type="button" data-hud-close aria-label="퀘스트 닫기"><i data-lucide="x"></i></button>
+                </div>
               </div>
               <div class="quest-progress"><span id="questPanelProgressBar"></span></div>
               <div class="quest-reward" id="questPanelReward">보상 4.00 💰 · 화력발전 해금</div>
@@ -115,7 +120,11 @@
 
         <div class="build-confirm hidden" id="buildConfirm" role="group" aria-label="건설 후보 확정">
           <div class="build-confirm-main">
-            <strong id="buildConfirmText">시설 배치 확인</strong>
+            <div class="build-plan-summary">
+              <strong id="buildConfirmText">건설 계획</strong>
+              <span><b id="buildPlanCost">0.00 💰</b><em id="buildPlanBalance">잔액 0.00 💰</em></span>
+              <small id="buildPlanError" role="status"></small>
+            </div>
             <div class="build-confirm-metrics" id="buildConfirmMetrics" aria-label="건설 후 예상 도시 운영값">
               <span data-metric="credit" aria-label="예상 시간당 크레딧"><small>💰/h</small><b data-value>±0.00/h</b><em data-delta>±0.00</em></span>
               <span data-metric="power" aria-label="예상 전력 공급과 수요"><small>전력</small><b data-value>0/0E</b><em data-delta>±0E</em></span>
@@ -123,7 +132,7 @@
               <span data-metric="water" aria-label="예상 시간당 물"><small>물/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
             </div>
           </div>
-          <button class="btn secondary" id="cancelBuildBtn" type="button">취소</button>
+          <button class="btn secondary" id="cancelBuildBtn" type="button">계획 전체 취소</button>
           <button class="btn primary" id="confirmBuildBtn" type="button">건설 확정</button>
         </div>
 

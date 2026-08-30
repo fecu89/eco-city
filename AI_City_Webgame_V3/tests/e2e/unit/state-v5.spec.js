@@ -69,3 +69,14 @@ test('a saved legacy quest-six diagnosis session resumes in editable redesign mo
   expect(restored.stage).toBe(STAGES.REDESIGN);
   expect(restored.isEditable).toBe(true);
 });
+
+test('construction plans are transient across serialization and hydration', () => {
+  const source = new GameState();
+  source.constructionPlan = [{ index: 0, type: 'residential' }];
+  const saved = source.serialize();
+  expect(saved).not.toHaveProperty('constructionPlan');
+
+  const restored = new GameState();
+  expect(restored.hydrate(saved)).toBe(true);
+  expect(restored.constructionPlan).toEqual([]);
+});

@@ -1,23 +1,39 @@
 import { eventBus, Events } from '../core/EventBus.js';
-import { RESEARCH_RULES } from '../core/Constants.js';
+import { FACILITIES, RESEARCH_RULES, UI_FEEDBACK } from '../core/Constants.js';
+import { QUEST_COUNT } from '../core/QuestDefinitions.js';
+import { formatCredits } from '../core/Money.js';
+import { RESEARCH } from '../core/ResearchDefinitions.js';
+
+function questRewardText(quest) {
+  const parts = [];
+  if (quest.reward.credits) parts.push(formatCredits(quest.reward.credits));
+  if (quest.reward.unlockFacility) parts.push(`${FACILITIES[quest.reward.unlockFacility]?.name || quest.reward.unlockFacility} 해금`);
+  return `보상 ${parts.join(' · ') || '최종 성적표'}`;
+}
+
+function showQuestAlert(quest, ready = false) {
+  eventBus.emit(Events.TOAST_SHOW, {
+    kicker: ready ? '퀘스트 완료 조건 달성' : '새 퀘스트 시작',
+    title: `LEVEL ${quest.index} / ${QUEST_COUNT} · ${quest.title}`,
+    text: quest.goal,
+    meta: questRewardText(quest),
+    priority: true,
+    kind: 'quest-alert',
+    action: 'quest',
+    actionLabel: ready ? '보상 확인' : '퀘스트 열기',
+    duration: UI_FEEDBACK.QUEST_ALERT_MS,
+  });
+}
 
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
   eventBus.on(Events.QUEST_READY, ({ quest }) => {
-    eventBus.emit(Events.TOAST_SHOW, {
-      title: '퀘스트 완료 조건 달성',
-      text: `${quest.index}. ${quest.title} · 퀘스트 메뉴에서 보상을 받을 수 있습니다.`,
-      priority: true,
-    });
+    showQuestAlert(quest, true);
     eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
   });
 
   eventBus.on(Events.QUEST_STARTED, ({ quest }) => {
-    eventBus.emit(Events.TOAST_SHOW, {
-      title: '새 퀘스트 시작',
-      text: `${quest.index}. ${quest.title} · 퀘스트 메뉴에서 목표를 확인하세요.`,
-      priority: true,
-    });
+    showQuestAlert(quest);
   });
 
   eventBus.on(Events.BOARD_EXPANDED, ({ settled }) => {
@@ -31,6 +47,19 @@ export function initFeedbackBridge() {
       priority: true,
     });
     eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
+  });
+
+  eventBus.on(Events.RESEARCH_PROGRESS, ({ jobs = {} }) => {
+    Object.entries(jobs).forEach(([researchId, result]) => {
+      if (!result.becameUnderpowered) return;
+      eventBus.emit(Events.TOAST_SHOW, {
+        title: '연구 전력 부족',
+        text: `데이터센터 #${result.dataCenterIndex} · ${RESEARCH[researchId]?.name || researchId} 연구가 일시정지됐습니다.`,
+        meta: '전력 공급률을 90% 이상으로 회복하세요.',
+        priority: true,
+        kind: 'research-power-alert',
+      });
+    });
   });
 
   eventBus.on(Events.RESEARCH_ACCELERATED, ({ appliedJobs, bankedHours }) => {

@@ -74,7 +74,7 @@ test.describe('performance', () => {
     const before = await page.evaluate(() => window.__getCityRendererStats().renderCount);
     await page.waitForTimeout(300);
     const after = await page.evaluate(() => window.__getCityRendererStats().renderCount);
-    // 5초 전력선 점멸 구간과 겹치면 밝힘/복원 각 1프레임까지 허용한다.
+    // 1초 정산 경계와 겹치는 단발성 HUD 갱신까지 허용한다.
     expect(after - before).toBeLessThanOrEqual(2);
   });
 
@@ -92,7 +92,7 @@ test.describe('performance', () => {
     const before = await page.evaluate(() => window.__getCityRendererStats().renderCount);
     await page.waitForTimeout(1000);
     const after = await page.evaluate(() => window.__getCityRendererStats().renderCount);
-    // 5초 전력선 점멸의 밝힘/복원 구간과 겹쳐도 두 프레임만 발생해야 한다.
+    // 1초 정산 경계의 단발성 HUD 갱신까지 허용한다.
     expect(after - before).toBeLessThanOrEqual(2);
   });
 

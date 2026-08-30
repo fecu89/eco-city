@@ -1,6 +1,6 @@
 import { gameState } from '../core/GameState.js';
 import { refreshIcons } from './Modal.js';
-import { formatCredits } from './format.js';
+import { exactNumberLabel, formatCredits } from './format.js';
 
 let els = null;
 let onStageUiChanged = () => {};
@@ -25,7 +25,9 @@ export function initHudView(elements, stageUiChanged) {
 export function renderHud() {
   const guidance = guidanceForQuest(gameState.questIndex);
 
-  els.credits.textContent = formatCredits(gameState.credits, { suffix: false });
+  els.credits.textContent = formatCredits(gameState.credits, { suffix: false, compact: true });
+  const creditMetric = els.credits.closest('[data-metric="credit"]');
+  if (creditMetric) creditMetric.title = `보유 크레딧 ${exactNumberLabel(gameState.credits, 2)}`;
   els.turnCount.textContent = gameState.turn;
 
   els.phaseText.textContent = `복구 단계 ${gameState.questIndex} / 15`;

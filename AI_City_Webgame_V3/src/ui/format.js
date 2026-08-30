@@ -1,4 +1,4 @@
-export { formatCredits } from '../core/Money.js';
+export { exactNumberLabel, formatCompactNumber, formatCredits } from '../core/Money.js';
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));

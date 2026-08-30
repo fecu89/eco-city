@@ -20,6 +20,7 @@ import {
 import { handleResearchFacilityRemoved } from '../systems/ResearchSystem.js';
 import { bindResearchPanel, refreshResearchPanelLive, researchPanelMarkup } from './ResearchView.js';
 import * as Report from '../systems/ReportSystem.js';
+import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
 
 let refreshAll = () => {};
 let inspectorIndex = null;
@@ -117,7 +118,14 @@ export function openFacilityInspectorModal(index) {
     refreshAll();
     openFacilityInspectorModal(index);
   }));
-  $modal('#demolishBtn')?.addEventListener('click', () => openDemolitionConfirmModal(index));
+  $modal('#demolishBtn')?.addEventListener('click', () => {
+    const demolitionPermit = validateDemolitionPermit(gameState, index);
+    if (!demolitionPermit.ok) {
+      eventBus.emit(Events.TOAST_SHOW, { title: '철거 제한', text: demolitionPermit.message, priority: true });
+      return;
+    }
+    openDemolitionConfirmModal(index);
+  });
   $modal('#upgradeBtn')?.addEventListener('click', () => {
     const currentValidation = validateUpgrade(gameState, index);
     if (!currentValidation.ok) {
@@ -142,6 +150,11 @@ export function openFacilityInspectorModal(index) {
 function openDemolitionConfirmModal(index) {
   const cell = gameState.grid[index];
   if (!cell) return;
+  const demolitionPermit = validateDemolitionPermit(gameState, index);
+  if (!demolitionPermit.ok) {
+    eventBus.emit(Events.TOAST_SHOW, { title: '철거 제한', text: demolitionPermit.message, priority: true });
+    return;
+  }
   const facility = FACILITIES[cell.type];
   const investment = investedCost(cell);
   const refund = demolitionRefund(cell);
@@ -213,12 +226,13 @@ export function openResetConfirmModal(onConfirm) {
   $modal('#confirmReset').addEventListener('click', () => { closeModal(); onConfirm(); });
 }
 
-export function openConstructionRiskModal({ facility, currentEconomy, projectedEconomy, onConfirm }) {
+export function openConstructionRiskModal({ facility = null, planCount = 1, currentEconomy, projectedEconomy, onConfirm }) {
   const signedRate = (value) => `${value > 0 ? '+' : ''}${formatCredits(value)}/h`;
+  const subject = facility ? `${facility.icon} ${facility.name}` : `건설 계획 ${planCount}개`;
   setModal(`
     <div class="modal-head"><div><span class="eyebrow danger-label">OPERATING RISK</span><h2>운영 적자 경고</h2></div></div>
     <div class="demolition-warning construction-risk-warning">
-      <strong>${facility.icon} ${facility.name}을 지으면 시간당 크레딧이 감소합니다.</strong>
+      <strong>${subject}를 확정하면 시간당 크레딧이 감소합니다.</strong>
       <p>현재 생산량으로 운영비를 감당하기 어렵습니다. 수익 시설과 전력을 먼저 확보하면 파산 위험을 줄일 수 있습니다.</p>
     </div>
     <div class="construction-risk-comparison">

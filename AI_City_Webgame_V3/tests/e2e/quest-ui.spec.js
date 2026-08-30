@@ -147,8 +147,15 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#modalCard')).toContainText('연구도시의 씨앗 완료');
     await page.locator('#questRewardClose').click();
     await expect(page.locator('#modal')).toBeHidden();
-    await expect(page.locator('.toast', { hasText: '새 퀘스트 시작' })).toContainText('탄소 경계선');
+    const alert = page.locator('.toast.quest-alert');
+    await expect(alert).toContainText('LEVEL 5 / 15');
+    await expect(alert).toContainText('탄소 경계선');
+    await expect(alert).toContainText('핵발전을 가동해 CO₂ 8 이하와 흑자를 2시간 유지하세요.');
+    await expect(alert).toContainText('보상 8.00 💰 · 순환냉각 해금');
+    await expect(alert.locator('[data-toast-action="quest"]')).toHaveText('퀘스트 열기');
     await expect(page.locator('[data-hud-target="quest"]').first()).toHaveAttribute('data-notification', 'new');
+    await alert.locator('[data-toast-action="quest"]').click();
+    await expect(page.locator('#questPanel')).toHaveClass(/hud-panel-active/);
     await expect(page.locator('body')).not.toContainText('숨은 운영비');
   });
 

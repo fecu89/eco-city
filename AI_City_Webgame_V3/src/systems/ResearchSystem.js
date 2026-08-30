@@ -175,6 +175,7 @@ export function advanceResearchOneHour(state, facilityPower) {
   for (const active of [...activeResearchJobs(state)]) {
     const definition = RESEARCH[active.id];
     if (!definition) continue;
+    const previousStatus = active.status;
     if (!validDataCenter(state, active.dataCenterIndex)) {
       active.dataCenterIndex = null;
       active.status = 'unassigned';
@@ -184,7 +185,15 @@ export function advanceResearchOneHour(state, facilityPower) {
     const ratio = facilityPower?.[active.dataCenterIndex]?.ratio ?? 0;
     if (ratio < RESEARCH_RULES.POWER_THRESHOLD) {
       active.status = 'underpowered';
-      results[active.id] = { status: 'underpowered', advancedHours: 0, completed: false, ratio };
+      results[active.id] = {
+        status: 'underpowered',
+        advancedHours: 0,
+        completed: false,
+        ratio,
+        dataCenterIndex: active.dataCenterIndex,
+        becameUnderpowered: previousStatus !== 'underpowered',
+        recoveredPower: false,
+      };
       continue;
     }
     const dataCenterLevel = state.grid[active.dataCenterIndex]?.level || 1;
@@ -197,6 +206,9 @@ export function advanceResearchOneHour(state, facilityPower) {
         advancedHours,
         completed: false,
         ratio,
+        dataCenterIndex: active.dataCenterIndex,
+        becameUnderpowered: false,
+        recoveredPower: previousStatus === 'underpowered',
         elapsedEffectiveHours: active.elapsedEffectiveHours,
       };
       continue;

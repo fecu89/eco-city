@@ -1,10 +1,9 @@
 import './style.css';
-import { FACILITIES, LEVEL_VISUALS, TIME } from './core/Constants.js';
-import { formatCredits } from './core/Money.js';
+import { LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
-import { placeFacility, validatePlacement } from './systems/BoardSystem.js';
+import { assessConstructionPlan, commitConstructionPlan } from './systems/ConstructionPlanSystem.js';
 import { initSaveSystem, loadSavedGame, clearSavedGame } from './systems/SaveSystem.js';
 import { calculatePowerNetwork } from './systems/PowerNetworkSystem.js';
 import { settleEconomy } from './systems/EconomySystem.js';
@@ -29,6 +28,7 @@ import { getTheme, initThemeManager } from './ui/ThemeManager.js';
 import { getWorldLightingMode, initWorldLightingManager } from './ui/WorldLightingManager.js';
 import { initFeedbackBridge } from './ui/FeedbackBridge.js';
 import { initQuestCelebration } from './ui/QuestCelebration.js';
+import { initQuestPanelController } from './ui/QuestPanelController.js';
 import { getOnboardingState, initOnboardingView, openStory, syncTutorialHighlight } from './ui/OnboardingView.js';
 import {
   initStageModals,
@@ -81,6 +81,9 @@ const els = {
   buildConfirm: $('#buildConfirm'),
   buildConfirmText: $('#buildConfirmText'),
   buildConfirmMetrics: $('#buildConfirmMetrics'),
+  buildPlanCost: $('#buildPlanCost'),
+  buildPlanBalance: $('#buildPlanBalance'),
+  buildPlanError: $('#buildPlanError'),
   cancelBuildBtn: $('#cancelBuildBtn'),
   confirmBuildBtn: $('#confirmBuildBtn'),
 
@@ -90,6 +93,8 @@ const els = {
   hudControls: $('#hudControls'),
   hudRail: $('#hudRail'),
   questPanelMapBtn: $('#questPanelMapBtn'),
+  questPanel: $('#questPanel'),
+  questPanelPinBtn: $('#questPanelPinBtn'),
   questPanelLevel: $('#questPanelLevel'),
   questPanelTitle: $('#questPanelTitle'),
   questPanelGoal: $('#questPanelGoal'),
@@ -156,17 +161,26 @@ function setPlayerTimeScale(scale) {
   return gameState.timeScale;
 }
 
-function completeFacilityPlacement(index) {
-  const result = placeFacility(index);
+function completeConstructionPlan() {
+  const result = commitConstructionPlan(gameState);
   if (!result.ok) {
-    if (result.reason === 'insufficient_credits') {
-      eventBus.emit(Events.TOAST_SHOW, { title: '크레딧 부족', text: `${result.facility.name} 건설: ${formatCredits(result.facility.cost)}` });
-    } else eventBus.emit(Events.TOAST_SHOW, { title: result.message || '건설할 수 없습니다.' });
-    return;
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '건설 계획을 확정할 수 없습니다',
+      text: result.errors?.[0]?.message || '계획을 다시 확인하세요.',
+      priority: true,
+    });
+    refreshAll();
+    return result;
   }
-  eventBus.emit(Events.BOARD_PLACED, result);
+  result.placements.forEach((placement) => eventBus.emit(Events.BOARD_PLACED, {
+    ...placement,
+    metrics: result.metrics,
+    placedCount: result.placedCount,
+  }));
+  eventBus.emit(Events.BUILD_PLAN_COMMITTED, result);
   eventBus.emit(Events.AUDIO_SFX, { name: 'place' });
   refreshAll();
+  return result;
 }
 
 function forecastOperationsForGrid(grid) {
@@ -188,21 +202,35 @@ function forecastOperationsForGrid(grid) {
   };
 }
 
-function constructionForecastAt(index) {
-  const projectedGrid = gameState.grid.map((cell) => cell ? { ...cell } : null);
-  projectedGrid[index] = { type: gameState.selectedFacility, level: 1 };
+function constructionForecastForGrid(projectedGrid) {
   const current = forecastOperationsForGrid(gameState.grid);
   const projected = forecastOperationsForGrid(projectedGrid);
   return { current, projected };
 }
 
-function constructionRiskAt(index) {
-  const { current, projected } = constructionForecastAt(index);
+function constructionRiskForPlan(assessment) {
+  const { current, projected } = constructionForecastForGrid(assessment.projectedGrid);
   return {
     currentEconomy: current,
     projectedEconomy: projected,
     risky: projected.netCredits < 0 && projected.netCredits < current.netCredits,
   };
+}
+
+function confirmActiveConstructionPlan() {
+  const assessment = assessConstructionPlan(gameState);
+  if (!assessment.ok) return completeConstructionPlan();
+  const risk = constructionRiskForPlan(assessment);
+  if (risk.risky) {
+    openConstructionRiskModal({
+      planCount: assessment.items.length,
+      currentEconomy: risk.currentEconomy,
+      projectedEconomy: risk.projectedEconomy,
+      onConfirm: completeConstructionPlan,
+    });
+    return null;
+  }
+  return completeConstructionPlan();
 }
 
 function onCellClick(index) {
@@ -220,22 +248,10 @@ function onCellClick(index) {
     });
     return;
   }
-  const validation = validatePlacement(gameState, gameState.selectedFacility, index);
-  if (!validation.ok) {
-    completeFacilityPlacement(index);
-    return;
-  }
-  const risk = constructionRiskAt(index);
-  if (risk.risky) {
-    openConstructionRiskModal({
-      facility: FACILITIES[gameState.selectedFacility],
-      currentEconomy: risk.currentEconomy,
-      projectedEconomy: risk.projectedEconomy,
-      onConfirm: () => completeFacilityPlacement(index),
-    });
-    return;
-  }
-  completeFacilityPlacement(index);
+  eventBus.emit(Events.TOAST_SHOW, {
+    title: '대지를 다시 선택하세요',
+    text: '건설 패널이 열려 있으면 빈 대지를 눌러 계획에 추가할 수 있습니다.',
+  });
 }
 
 function handleReset() {
@@ -260,6 +276,7 @@ function resetAfterGameOver() {
 function bindEvents() {
   els.helpBtn.addEventListener('click', openHelpModal);
   els.resetBtn.addEventListener('click', handleReset);
+  eventBus.on(Events.BUILD_PLAN_COMMIT_REQUESTED, confirmActiveConstructionPlan);
   els.storyReplayBtn.addEventListener('click', () => openStory({ replay: true }));
   els.timeControls.addEventListener('click', (event) => {
     const button = event.target.closest('[data-time-action]');
@@ -311,9 +328,12 @@ function boot() {
     root: els.buildConfirm,
     text: els.buildConfirmText,
     metrics: els.buildConfirmMetrics,
+    cost: els.buildPlanCost,
+    balance: els.buildPlanBalance,
+    error: els.buildPlanError,
     cancel: els.cancelBuildBtn,
     confirm: els.confirmBuildBtn,
-    getForecast: constructionForecastAt,
+    getForecast: constructionForecastForGrid,
   });
   initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
   initDockView(els.facilityDock, els.facilityDetail);
@@ -348,6 +368,14 @@ function boot() {
     panelHost: els.rightPanel,
     panels: [...document.querySelectorAll('[data-hud-panel]')],
     onStatusOpened: requestChartResize,
+  });
+  initQuestPanelController({
+    panel: els.questPanel,
+    dragSurface: els.questPanel,
+    keyboardSurface: els.questPanel.querySelector('.quest-panel-header'),
+    pinButton: els.questPanelPinBtn,
+    topSafeElement: document.querySelector('.world-status'),
+    rightSafeElement: els.hudRail,
   });
   initThreeBackground(els.threeBg);
 

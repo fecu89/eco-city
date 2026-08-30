@@ -62,6 +62,35 @@ test('underpowered research pauses without stopping another powered center', () 
   expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(1.25);
 });
 
+test('research reports only real power-loss and recovery transitions', () => {
+  const state = stateWithDataCenter();
+  state.unlockedFacilities.add('solar');
+  startResearch(state, 'solar2', 3);
+
+  const firstLoss = advanceResearchOneHour(state, { 3: { ratio: 0.4 } });
+  expect(firstLoss.jobs.solar2).toMatchObject({
+    status: 'underpowered',
+    dataCenterIndex: 3,
+    becameUnderpowered: true,
+    recoveredPower: false,
+  });
+
+  const repeatedLoss = advanceResearchOneHour(state, { 3: { ratio: 0.4 } });
+  expect(repeatedLoss.jobs.solar2).toMatchObject({
+    status: 'underpowered',
+    becameUnderpowered: false,
+    recoveredPower: false,
+  });
+
+  const recovery = advanceResearchOneHour(state, { 3: { ratio: 1 } });
+  expect(recovery.jobs.solar2).toMatchObject({
+    status: 'running',
+    dataCenterIndex: 3,
+    becameUnderpowered: false,
+    recoveredPower: true,
+  });
+});
+
 test('demolishing one data center preserves only its job for reassignment', () => {
   const state = stateWithDataCenter({ index: 4 });
   state.grid[5] = { type: 'data', level: 1, priority: 'normal' };

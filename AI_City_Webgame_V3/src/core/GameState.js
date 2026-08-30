@@ -16,6 +16,7 @@ export class GameState {
     this.selectedCell = null;
     this.boardRadius = BOARD.INITIAL_RADIUS;
     this.grid = Array(BOARD.INITIAL_CELLS).fill(null); // {type, level}
+    this.constructionPlan = []; // 저장하지 않는 임시 건설안: { index, type }
     this.metrics = null;
     this.baseline = null;
     this.firstCitySnapshot = null;
@@ -153,6 +154,7 @@ export class GameState {
       this.selectedCell = data.selectedCell ?? null;
       this.boardRadius = data.boardRadius ?? this.boardRadius;
       this.grid = Array.isArray(data.grid) ? data.grid.map(normalizeCell) : this.grid;
+      this.constructionPlan = [];
       this.baseline = data.baseline ?? this.baseline;
       this.firstCitySnapshot = data.firstCitySnapshot ?? this.firstCitySnapshot;
       this.quizPool = data.quizPool ?? this.quizPool;

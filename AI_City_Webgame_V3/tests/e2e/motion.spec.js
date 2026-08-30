@@ -66,10 +66,11 @@ test.describe('3D city motion language', () => {
     expect(after.renderCount - before.renderCount).toBeLessThanOrEqual(1);
   });
 
-  test('energy producers use one shared line layer that flashes once every five seconds', async ({ gamePage: page }) => {
+  test('simulation power routes do not create a visible energy-line layer or blink timer', async ({ gamePage: page }) => {
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.evaluate(() => {
+      window.__setTimeScale(0);
       const state = window.__GAME_STATE__;
       state.grid[12] = { type: 'thermal', level: 1 };
       state.grid[13] = { type: 'factory', level: 1 };
@@ -80,21 +81,12 @@ test.describe('3D city motion language', () => {
         summary: { hour: 12 },
       });
     });
-
-    await page.waitForFunction(() => {
-      const stats = window.__getCityRendererStats?.();
-      return stats?.energyLinkCount === 1;
-    });
-    const before = await page.evaluate(() => window.__getCityRendererStats());
-    expect(before.energyPacketCount).toBe(0);
-    await page.waitForFunction(
-      (blinkCount) => window.__getCityRendererStats?.().energyBlinkCount > blinkCount,
-      before.energyBlinkCount,
-      { timeout: 6500 },
-    );
+    await page.waitForTimeout(250);
     const after = await page.evaluate(() => window.__getCityRendererStats());
     expect(pageErrors).toEqual([]);
-    expect(after.energyBlinkCount).toBe(before.energyBlinkCount + 1);
+    expect(after.energyLineLayerPresent).toBe(false);
+    expect(after.energyLinkCount ?? 0).toBe(0);
+    expect(after.energyBlinkCount ?? 0).toBe(0);
   });
 
   test('residential agents stay static while the shared green bird pool stays hidden', async ({ gamePage: page }) => {

@@ -9,6 +9,7 @@ let els = null;
 let mobileQuery = null;
 let resumeBuildAfterModal = false;
 let resumeBuildOpener = null;
+let questPinned = false;
 const notifications = new Set();
 
 function triggers() {
@@ -17,24 +18,25 @@ function triggers() {
 
 function renderHudState() {
   if (!els) return;
-  const hasOpenPanel = Boolean(activePanel) && !modalOpen;
+  const hasOpenPanel = (Boolean(activePanel) || questPinned) && !modalOpen;
 
   els.controls.setAttribute('aria-hidden', modalOpen ? 'true' : 'false');
   els.panelHost.classList.toggle('hud-open', hasOpenPanel);
-  els.panelHost.dataset.activePanel = hasOpenPanel ? activePanel : '';
+  els.panelHost.dataset.activePanel = hasOpenPanel ? (activePanel || 'quest') : '';
 
   els.panels.forEach((panel) => {
-    const isActive = hasOpenPanel && panel.dataset.hudPanel === activePanel;
+    const panelName = panel.dataset.hudPanel;
+    const isActive = !modalOpen && (panelName === activePanel || (panelName === 'quest' && questPinned));
     panel.classList.toggle('hud-panel-active', isActive);
     panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
   });
 
   triggers().forEach((trigger) => {
-    const isActive = hasOpenPanel && trigger.dataset.hudTarget === activePanel;
+    const target = trigger.dataset.hudTarget;
+    const isActive = !modalOpen && (target === activePanel || (target === 'quest' && questPinned));
     trigger.classList.toggle('active', isActive);
     trigger.setAttribute('aria-expanded', isActive ? 'true' : 'false');
     trigger.disabled = modalOpen;
-    const target = trigger.dataset.hudTarget;
     const notification = target === 'quest'
       ? notifications.has('ready') ? 'ready' : notifications.has('new') ? 'new' : ''
       : '';
@@ -87,6 +89,7 @@ export function syncWorldHud() {
 export function getWorldHudState() {
   return {
     activePanel,
+    questPinned,
     modalOpen,
     mobile: mobileQuery?.matches ?? false,
   };
@@ -104,7 +107,11 @@ export function initWorldHud(elements) {
     }
 
     const closeButton = event.target.closest('[data-hud-close]');
-    if (closeButton && els.controls.contains(closeButton)) closeHudPanel();
+    if (closeButton && els.controls.contains(closeButton)) {
+      if (closeButton.closest('[data-hud-panel="quest"]') && questPinned) {
+        eventBus.emit(Events.QUEST_PANEL_PIN_REQUESTED, { pinned: false, keepOpen: false });
+      } else closeHudPanel();
+    }
   });
 
   document.addEventListener('keydown', (event) => {
@@ -125,7 +132,11 @@ export function initWorldHud(elements) {
     resumeBuildAfterModal = activePanel === 'build';
     resumeBuildOpener = resumeBuildAfterModal ? openerEl : null;
     modalOpen = true;
-    closeHudPanel({ restoreFocus: false });
+    if (resumeBuildAfterModal) {
+      activePanel = null;
+      openerEl = null;
+      renderHudState();
+    } else closeHudPanel({ restoreFocus: false });
   });
   eventBus.on(Events.MODAL_CLOSE, () => {
     modalOpen = false;
@@ -153,6 +164,20 @@ export function initWorldHud(elements) {
   eventBus.on(Events.GAME_RESET, () => {
     notifications.clear();
     syncWorldHud();
+  });
+  eventBus.on(Events.HUD_PANEL_OPEN_REQUESTED, ({ name }) => {
+    const opener = triggers().find((trigger) => trigger.dataset.hudTarget === name);
+    openHudPanel(name, opener);
+  });
+  eventBus.on(Events.QUEST_PANEL_PIN_CHANGED, ({ pinned, keepOpen = true }) => {
+    questPinned = Boolean(pinned);
+    if (questPinned && activePanel === 'quest') activePanel = null;
+    if (!questPinned) {
+      if (keepOpen) activePanel = 'quest';
+      else if (activePanel === 'quest') activePanel = null;
+    }
+    renderHudState();
+    eventBus.emit(Events.HUD_PANEL_CHANGED, { activePanel });
   });
 
   mobileQuery.addEventListener('change', () => {
