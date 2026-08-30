@@ -4,14 +4,16 @@ import { openHudPanel } from '../helpers/playthrough.js';
 test.describe('3D city motion language', () => {
   test('placing a facility starts and completes a bounded entrance motion', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
+    await page.evaluate(() => window.__clickCell(0));
     const during = await page.evaluate(() => {
-      window.__clickCell(0);
+      document.getElementById('confirmBuildBtn').click();
       return window.__getCityRendererStats();
     });
     expect(during.activeMotions).toBe(1);
     expect(during.motionKinds).toContain('place');
 
-    await page.waitForFunction(() => window.__getCityRendererStats().activeMotions === 0, null, { timeout: 1200 });
+    // 병렬 WebGL 테스트의 CPU 경합을 허용하되 실제 모션 길이(480ms)는 별도 상수 테스트로 고정한다.
+    await page.waitForFunction(() => window.__getCityRendererStats().activeMotions === 0, null, { timeout: 3000 });
   });
 
   test('upgrading interpolates to the next distinct level treatment', async ({ gamePage: page }) => {

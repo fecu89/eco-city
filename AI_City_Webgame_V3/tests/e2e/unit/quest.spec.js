@@ -70,7 +70,71 @@ test('quest 5 replaces the quiz-only gate with two safe profitable nuclear hours
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration rules', () => {
+test('quest 6 completes when powered adjacent data cooling keeps water at the baseline', () => {
+  expect(QUESTS[5]).toMatchObject({
+    index: 6,
+    id: 'water-cycle',
+    title: '도시 물순환',
+    progressKind: 'hours',
+  });
+  const state = new GameState();
+  const coolingIndex = neighborIndices(0, createHexCoordinates(2))[0];
+  state.questIndex = 6;
+  state.baseline = { hourlyWater: 5 };
+  state.grid[0] = { type: 'data', level: 1 };
+  state.grid[coolingIndex] = { type: 'cooling', level: 1 };
+  const operating = summary({
+    hourlyWater: 5,
+    facilityPower: { 0: powered(0.95), [coolingIndex]: powered(0.95) },
+  });
+
+  applySimulationQuestProgress(state, operating);
+  expect(state.questStatus).toBe('active');
+  applySimulationQuestProgress(state, operating);
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 6 resets when cooling is separated, underpowered, or above the water baseline', () => {
+  const state = new GameState();
+  const coolingIndex = neighborIndices(0, createHexCoordinates(2))[0];
+  state.questIndex = 6;
+  state.baseline = { hourlyWater: 5 };
+  state.grid[0] = { type: 'data', level: 1 };
+  state.grid[coolingIndex] = { type: 'cooling', level: 1 };
+  applySimulationQuestProgress(state, summary({
+    hourlyWater: 6,
+    facilityPower: { 0: powered(0.95), [coolingIndex]: powered(0.95) },
+  }));
+  expect(state.questProgress.consecutiveHours).toBe(0);
+  applySimulationQuestProgress(state, summary({
+    hourlyWater: 5,
+    facilityPower: { 0: powered(0.95), [coolingIndex]: powered(0.5) },
+  }));
+  expect(state.questProgress.consecutiveHours).toBe(0);
+  state.grid[coolingIndex] = null;
+  state.grid[18] = { type: 'cooling', level: 1 };
+  applySimulationQuestProgress(state, summary({
+    hourlyWater: 5,
+    facilityPower: { 0: powered(0.95), 18: powered(0.95) },
+  }));
+  expect(state.questProgress.consecutiveHours).toBe(0);
+});
+
+test('quest 7 needs solar power delivered at a 30 percent low-carbon share for two hours', () => {
+  expect(QUESTS[6]).toMatchObject({ index: 7, id: 'first-solar', progressKind: 'hours' });
+  const state = new GameState();
+  state.questIndex = 7;
+  state.grid[0] = { type: 'solar', level: 1 };
+  const solarTick = summary({
+    lowCarbonPercent: 30,
+    routes: [{ from: 0, to: 1, delivered: 2, kind: 'direct' }],
+  });
+  applySimulationQuestProgress(state, solarTick);
+  applySimulationQuestProgress(state, solarTick);
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quests 2, 3 and 4 enforce their facility, adjacency, power and duration rules', () => {
   const cases = [
     {
       quest: 2,
@@ -88,12 +152,6 @@ test('quests 2, 3, 4 and 7 enforce their facility, adjacency, power and duration
       quest: 4,
       grid: [{ type: 'data' }, { type: 'thermal' }, { type: 'residential' }, { type: 'factory' }, { type: 'residential' }],
       tick: summary({ facilityPower: { 0: powered(0.95) } }),
-      hours: 2,
-    },
-    {
-      quest: 7,
-      grid: [{ type: 'cooling' }, { type: 'data' }],
-      tick: summary({ facilityPower: { 0: powered(0.95), 1: powered(0.95) } }),
       hours: 2,
     },
   ];

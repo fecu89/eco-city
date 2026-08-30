@@ -212,6 +212,13 @@ test('factory and thermal generation use different selected Kenney silhouettes',
   expect(FACILITY_ASSET_IDS.thermal[0]).not.toBe(FACILITY_ASSET_IDS.factory[0]);
 });
 
+test('factory-small is sourced from the pipe-and-stack Kenney building', async () => {
+  const selection = JSON.parse(await readFile(new URL('../../../assets-source/selection.json', import.meta.url), 'utf8'));
+  expect(selection.models.find((item) => item.id === 'industrial.factorySmall')).toMatchObject({
+    member: 'Models/GLB format/building-b.glb',
+  });
+});
+
 test('asset loader caches one URL promise and preserves every primitive', async () => {
   let requests = 0;
   const scene = new Group();

@@ -1,5 +1,5 @@
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { ECONOMY_RULES, STAGES } from '../core/Constants.js';
+import { ECONOMY_RULES, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
@@ -16,7 +16,6 @@ export function evaluateCurrentQuest(state) {
   const wasReady = state.questStatus === 'ready_to_claim';
   let ready = state.questStatus === 'ready_to_claim';
   if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
-  if (state.questIndex === 6) ready = state.diagnosisFound.size >= 3;
   if (state.questIndex === 8) ready = !!state.questProgress.quizPassed
     && state.research.completedIds.has('solar2')
     && facilities(state, 'solar').some((cell) => cell.level >= 2);
@@ -31,7 +30,6 @@ export function evaluateCurrentQuest(state) {
 
 function stageForQuest(questIndex) {
   if (questIndex <= 5) return STAGES.EXECUTION;
-  if (questIndex === 6) return STAGES.DIAGNOSIS;
   if (questIndex <= 14) return STAGES.REDESIGN;
   return STAGES.REPORT;
 }
@@ -103,12 +101,24 @@ export function applySimulationQuestProgress(state, summary) {
         && summary.hourlyCarbon <= ECONOMY_RULES.CARBON_SAFE_RATE
         && summary.netCredits > 0;
       break;
+    case 6: {
+      const baselineWater = Number.isFinite(state.baseline?.hourlyWater)
+        ? state.baseline.hourlyWater
+        : summary.hourlyWater;
+      condition = state.grid.some((cell, dataIndex) => cell?.type === 'data'
+        && (summary.facilityPower?.[dataIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
+        && neighborIndices(dataIndex, createHexCoordinates(state.boardRadius)).some((coolingIndex) => (
+          state.grid[coolingIndex]?.type === 'cooling'
+          && (summary.facilityPower?.[coolingIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
+        )))
+        && summary.hourlyWater <= baselineWater;
+      break;
+    }
     case 7:
-      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'cooling'
-        && hasAdjacent(state, Number(index), new Set(['data']))
-        && item.ratio >= 0.9
-        && neighborIndices(Number(index), createHexCoordinates(state.boardRadius))
-          .some((neighbor) => state.grid[neighbor]?.type === 'data' && (summary.facilityPower?.[neighbor]?.ratio ?? 0) >= 0.9));
+      condition = summary.lowCarbonPercent >= QUEST_REQUIREMENTS.FIRST_SOLAR_LOW_CARBON_PERCENT
+        && (summary.routes || []).some((route) => (
+          state.grid[route.from]?.type === 'solar' && route.delivered > 0
+        ));
       break;
     case 9: {
       const delivered = (summary.routes || [])
@@ -142,7 +152,7 @@ export function applySimulationQuestProgress(state, summary) {
       return evaluateCurrentQuest(state);
   }
   state.questProgress.consecutiveHours = condition ? (state.questProgress.consecutiveHours || 0) + 1 : 0;
-  if ([2, 3, 4, 5, 7].includes(state.questIndex)) required = 2;
+  if ([2, 3, 4, 5, 6, 7].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_HOURS;
   if (state.questIndex === 14) required = 4;
   const ready = state.questIndex === 9
     ? state.questProgress.hubEnergy >= 8

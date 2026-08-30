@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
-import { buildStarterCity } from '../helpers/playthrough.js';
+import { buildStarterCity, clickCell } from '../helpers/playthrough.js';
 
 const FACILITY_TYPES = [
   'residential', 'factory', 'data', 'thermal', 'nuclear',
@@ -77,7 +77,7 @@ test.describe('visual', () => {
   test('quest completion owns a clear celebration layer', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
     for (let index = 0; index < 2; index++) {
-      await page.evaluate((cell) => window.__clickCell(cell), index);
+      await clickCell(page, index);
     }
     await page.locator('[data-hud-target="quest"]').first().click();
     await page.locator('#questPanelClaimBtn').click();

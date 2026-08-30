@@ -168,6 +168,7 @@ export class GameState {
       this.sound = data.sound ?? true;
       this.musicEnabled = !!data.musicEnabled;
       this.questIndex = data.questIndex ?? 1;
+      if (this.questIndex === 6 && this.stage === STAGES.DIAGNOSIS) this.stage = STAGES.REDESIGN;
       this.questStatus = data.questStatus ?? 'active';
       this.questProgress = data.questProgress ?? {};
       this.claimedQuestIds = new Set(data.claimedQuestIds || []);

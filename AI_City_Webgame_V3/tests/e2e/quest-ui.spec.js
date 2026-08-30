@@ -101,26 +101,18 @@ test.describe('quest economy HUD', () => {
     expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].priority)).toBe('essential');
   });
 
-  test('quest 6 shows an actionable scanner toggle and highlights the next risk', async ({ gamePage: page }) => {
+  test('quest 6 presents the compact environmental water-cycle objective without a scanner', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.questIndex = 6;
-      state.stage = 4;
-      state.firstCitySnapshot = Array(19).fill(null);
-      state.firstCitySnapshot[0] = { type: 'thermal', level: 1 };
-      state.firstCitySnapshot[1] = { type: 'factory', level: 1 };
-      state.firstCitySnapshot[2] = { type: 'data', level: 1 };
+      state.stage = 3;
       window.__refreshGameForTest();
     });
-    await openQuestPanel(page);
-    await expect(page.locator('#questPanelContextAction')).toBeVisible();
-    await expect(page.locator('#questPanelContextAction')).toContainText('켜짐');
-    expect(await page.evaluate(() => window.__getCellVisual(0).diagnosisTarget)).toBe(true);
-    await page.locator('#questPanelContextAction').click();
-    await expect(page.locator('#questPanelContextAction')).toContainText('꺼짐');
-    await page.evaluate(() => window.__clickCell(0));
-    expect(await page.evaluate(() => window.__GAME_STATE__.diagnosisFound.size)).toBe(0);
-    await expect(page.locator('.toast', { hasText: '스캐너가 꺼져' })).toBeVisible();
+    const panel = await openQuestPanel(page);
+    await expect(panel.locator('#questPanelTitle')).toHaveText('도시 물순환');
+    await expect(panel.locator('#questPanelGoal')).toContainText('데이터센터와 순환냉각');
+    await expect(panel.locator('#questPanelContextAction')).toBeHidden();
+    await expect(page.locator('#diagnosisProgress, #diagnosisToggleBtn, #diagnosisHintBtn')).toBeHidden();
   });
 
   test('green spaces keep birds hidden until one pooled flock visits', async ({ gamePage: page }) => {

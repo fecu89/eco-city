@@ -159,6 +159,6 @@ export const FACILITY_ASSET_IDS = Object.freeze({
   wind: Object.freeze(['energy.windBase', 'energy.windBase', 'energy.windBase']),
   battery: Object.freeze(['industrial.storageTank', 'industrial.storageTank', 'industrial.storageTank']),
   cooling: Object.freeze(['industrial.storageTank', 'industrial.storageTank', 'industrial.storageTank']),
-  green: Object.freeze(['environment.tree1', 'environment.tree2', 'environment.tree3']),
+  green: Object.freeze(['environment.coast.forest', 'environment.tree2', 'environment.tree3']),
   tidal: Object.freeze(['industrial.storageTank', 'industrial.factoryMedium', 'industrial.factoryLarge']),
 });

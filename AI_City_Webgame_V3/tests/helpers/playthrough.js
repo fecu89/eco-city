@@ -3,6 +3,8 @@
 // window.__clickCell(index)로 클릭을 시뮬레이션하고, 레이캐스팅 자체는 별도의 마우스 좌표 테스트로 검증한다.
 export async function clickCell(page, index) {
   await page.evaluate((i) => window.__clickCell(i), index);
+  const confirm = page.locator('#confirmBuildBtn');
+  if (await confirm.isVisible().catch(() => false)) await confirm.click();
 }
 
 export async function openHudPanel(page, target) {

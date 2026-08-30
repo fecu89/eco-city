@@ -45,6 +45,13 @@ test.describe('City Kit asset pipeline', () => {
       expect(scales[1] - scales[0]).toBeGreaterThanOrEqual(0.12);
       expect(scales[2] - scales[1]).toBeGreaterThanOrEqual(0.12);
     }
+
+    for (const type of ['residential', 'factory', 'data', 'nuclear', 'green']) {
+      expect(new Set(samples[type].map((sample) => sample.rotationY)).size).toBeGreaterThan(1);
+    }
+    for (const type of ['thermal', 'solar', 'wind', 'battery', 'cooling', 'tidal']) {
+      expect(samples[type].every((sample) => sample.rotationY === 0)).toBe(true);
+    }
   });
 
   test('idle environment loads the fixed island without runtime roads', async ({ gamePage: page }) => {
@@ -92,12 +99,16 @@ test.describe('City Kit asset pipeline', () => {
     expect(after.textureUuid).toBe(before.textureUuid);
   });
 
-  test('relationship and level encodings no longer float above facilities', async ({ gamePage: page }) => {
+  test('original model textures carry facility detail without floating encodings', async ({ gamePage: page }) => {
     const stats = await page.evaluate(() => window.__getCityRendererStats());
     expect(stats.linkMarkerCount).toBe(0);
     expect(stats.levelSegmentCount).toBe(0);
-    expect(stats.facilityPaletteMode).toBe('level-solid');
-    expect(stats.facilityHasMap).toBe(false);
+    expect(stats.facilityPaletteMode).toBe('textured-tint');
+    expect(stats.facilityHasMap).toBe(true);
+    expect(stats.texturedFacilityTypes.sort()).toEqual([
+      'battery', 'cooling', 'data', 'factory', 'green', 'nuclear',
+      'residential', 'solar', 'thermal', 'tidal', 'wind',
+    ]);
     expect(stats.facilityUsesVertexColors).toBe(false);
     expect(stats.facilityMaterialType).toBe('MeshStandardMaterial');
   });

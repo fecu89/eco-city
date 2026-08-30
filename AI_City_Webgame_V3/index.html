@@ -22,12 +22,9 @@
   <main class="game-shell world-shell">
     <section class="left-panel glass">
       <div class="board-stage">
-        <div class="board-wrap">
-          <div class="board-size-chip" id="boardSizeChip">육각 반경 2 · 19칸</div>
-          <div class="diagnosis-progress hidden" id="diagnosisProgress"></div>
-          <button class="diagnosis-toggle hidden" id="diagnosisToggleBtn" type="button">스캐너 켜짐</button>
-          <button class="icon-btn diagnosis-hint hidden" id="diagnosisHintBtn" title="위험 지점 힌트"><i data-lucide="lightbulb"></i></button>
-          <div class="board-grid" id="cityGrid" aria-label="육각 도시 건설 대지"></div>
+          <div class="board-wrap">
+            <div class="board-size-chip" id="boardSizeChip">육각 반경 2 · 19칸</div>
+            <div class="board-grid" id="cityGrid" aria-label="육각 도시 건설 대지"></div>
           <div class="board-overlay hidden" id="boardOverlay"><div class="crisis-stamp">CLIMATE ALERT</div></div>
         </div>
       </div>
@@ -48,10 +45,8 @@
         </div>
 
         <div class="time-controls" id="timeControls" aria-label="시간 속도">
-          <button type="button" data-time-scale="0" title="일시정지">Ⅱ</button>
-          <button type="button" data-time-scale="1" class="active">1×</button>
-          <button type="button" data-time-scale="2">2×</button>
-          <button type="button" data-time-scale="4">4×</button>
+          <button type="button" id="toggleTimeBtn" data-time-action="toggle" aria-label="일시정지" title="일시정지"><i data-lucide="pause"></i></button>
+          <button type="button" id="fastForwardBtn" data-time-action="fast" aria-label="1배속과 4배속 전환" title="4배속">4×</button>
         </div>
         <span id="simCarbon" class="sr-only">저탄소 0%</span>
         <span class="sr-only climate-normal" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
@@ -73,18 +68,21 @@
           </section>
 
           <section class="glass panel-block hud-panel quest-panel" id="questPanel" data-hud-panel="quest">
-            <div class="panel-title"><div><span class="eyebrow">QUEST</span><h3>도시 전환 경로</h3></div><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div>
+            <button class="icon-btn hud-close quest-panel-close" type="button" data-hud-close aria-label="퀘스트 닫기"><i data-lucide="x"></i></button>
             <div class="quest-panel-current" aria-live="polite">
-              <div class="quest-tracker-head">
-                <div><span class="eyebrow" id="questPanelLevel">LEVEL 1 / 15</span><h2 id="questPanelTitle">2040, 첫 시민</h2></div>
+              <div class="quest-summary-line">
+                <span class="eyebrow" id="questPanelLevel">LEVEL 1 / 15</span>
+                <h2 id="questPanelTitle">2040, 첫 시민</h2>
+                <span class="quest-summary-divider" aria-hidden="true">—</span>
+                <p id="questPanelGoal">주거지 2개를 건설하세요.</p>
               </div>
-              <p id="questPanelGoal">주거지 2개를 건설하세요.</p>
               <div class="quest-progress"><span id="questPanelProgressBar"></span></div>
               <div class="quest-reward" id="questPanelReward">보상 4.00 💰 · 화력발전 해금</div>
-              <button class="btn secondary full hidden" id="questPanelContextAction" type="button">위험 스캐너 켜짐</button>
-              <button class="btn primary full" id="questPanelClaimBtn" type="button" disabled>진행 중</button>
+              <div class="quest-panel-actions">
+                <button class="btn primary" id="questPanelClaimBtn" type="button" disabled>진행 중</button>
+                <button class="btn secondary" id="questPanelMapBtn" type="button">전체 퀘스트</button>
+              </div>
             </div>
-            <button class="btn primary full" id="questPanelMapBtn" type="button">전체 퀘스트 보기</button>
           </section>
 
           <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
@@ -116,9 +114,17 @@
         </aside>
 
         <div class="build-confirm hidden" id="buildConfirm" role="group" aria-label="건설 후보 확정">
-          <div><span class="eyebrow">BUILD CANDIDATE</span><strong id="buildConfirmText">시설 배치 확인</strong></div>
+          <div class="build-confirm-main">
+            <strong id="buildConfirmText">시설 배치 확인</strong>
+            <div class="build-confirm-metrics" id="buildConfirmMetrics" aria-label="건설 후 예상 도시 운영값">
+              <span data-metric="credit" aria-label="예상 시간당 크레딧"><small>💰/h</small><b data-value>±0.00/h</b><em data-delta>±0.00</em></span>
+              <span data-metric="power" aria-label="예상 전력 공급과 수요"><small>전력</small><b data-value>0/0E</b><em data-delta>±0E</em></span>
+              <span data-metric="carbon" aria-label="예상 시간당 이산화탄소"><small>CO₂/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
+              <span data-metric="water" aria-label="예상 시간당 물"><small>물/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
+            </div>
+          </div>
           <button class="btn secondary" id="cancelBuildBtn" type="button">취소</button>
-          <button class="btn primary" id="confirmBuildBtn" type="button">건설</button>
+          <button class="btn primary" id="confirmBuildBtn" type="button">건설 확정</button>
         </div>
 
         <nav class="mobile-bar" aria-label="도시 제어">

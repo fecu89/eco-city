@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { SAVE_VERSION } from '../../../src/core/GameState.js';
+import { STAGES } from '../../../src/core/Constants.js';
+import { GameState, SAVE_VERSION } from '../../../src/core/GameState.js';
 import { migrateSaveData, migrateV4ToV5 } from '../../../src/systems/SaveSystem.js';
 
 function v4Save(overrides = {}) {
@@ -55,4 +56,16 @@ test('the complete migration chain ends at the current save version', () => {
   expect(SAVE_VERSION).toBe(5);
   expect(migrated.v).toBe(5);
   expect(migrated.upgradePermitLevel).toBe(1);
+});
+
+test('a saved legacy quest-six diagnosis session resumes in editable redesign mode', () => {
+  const source = new GameState();
+  const saved = source.serialize();
+  saved.questIndex = 6;
+  saved.stage = STAGES.DIAGNOSIS;
+
+  const restored = new GameState();
+  expect(restored.hydrate(saved)).toBe(true);
+  expect(restored.stage).toBe(STAGES.REDESIGN);
+  expect(restored.isEditable).toBe(true);
 });

@@ -3,6 +3,7 @@ import {
   BOARD,
   CITY_AMBIENT,
   CITY_ASSETS,
+  CITY_BUILDING_ORIENTATION,
   CITY_CAMERA,
   CITY_MOTION,
   facilityColorFor,
@@ -210,9 +211,9 @@ function ownMaterial(material) {
   return material;
 }
 
-function setInstance(mesh, instanceIndex, x, y, z, scale, rotationX = 0) {
+function setInstance(mesh, instanceIndex, x, y, z, scale, rotationX = 0, rotationY = 0) {
   _matrixObject.position.set(x, y, z);
-  _matrixObject.rotation.set(rotationX, 0, 0);
+  _matrixObject.rotation.set(rotationX, rotationY, 0);
   _matrixObject.scale.set(scale, scale, scale);
   _matrixObject.updateMatrix();
   mesh.setMatrixAt(instanceIndex, _matrixObject.matrix);
@@ -476,15 +477,13 @@ function refreshLoadedAssets() {
     if (material) {
       const runtimeMaterial = material.clone();
       if (runtimeMaterial.userData?.paletteBlackLift) {
-        // 512px 공용 팔레트의 순검정 구획은 작은 도시 카메라에서 모델 파편처럼 보인다.
-        // geometry는 그대로 사용하고 레벨별 instanceColor로 읽히도록 시설 렌더에서만 atlas를 뺀다.
-        runtimeMaterial.map = null;
-        runtimeMaterial.color.setHex(0xffffff);
-        runtimeMaterial.emissive.setHex(0x111a22);
-        runtimeMaterial.emissiveIntensity = 0.16;
-        runtimeMaterial.userData.facilityPaletteMode = 'level-solid';
-        runtimeMaterial.needsUpdate = true;
+        // 원본 팔레트의 창문·지붕·배관 디테일은 유지하되 순검정 영역만 살짝 들어 올린다.
+        runtimeMaterial.emissive.setHex(0x101820);
+        runtimeMaterial.emissiveIntensity = 0.18;
       }
+      runtimeMaterial.color.setHex(0xffffff);
+      runtimeMaterial.userData.facilityPaletteMode = runtimeMaterial.map ? 'textured-tint' : 'solid-tint';
+      runtimeMaterial.needsUpdate = true;
       mesh.material = ownMaterial(runtimeMaterial);
     }
   });
@@ -793,6 +792,13 @@ function visualYAt(index, now) {
   return 0.13 - motionProgress(motion, now) * 0.22;
 }
 
+function facilityRotationY(type, cellIndex) {
+  const offset = CITY_BUILDING_ORIENTATION.offsets[type];
+  if (offset == null) return 0;
+  const turn = (cellIndex + offset) % 6;
+  return turn * CITY_BUILDING_ORIENTATION.step;
+}
+
 function updateTileInstances(configs, coordinates) {
   const count = Math.min(coordinates.length, MAX_CELLS);
   for (let index = 0; index < count; index++) {
@@ -822,7 +828,7 @@ function updateFacilityInstances(configs, coordinates, now) {
       const { x, z } = worldPosition(cellIndex, coordinates);
       const visualScale = visualScaleAt(cellIndex, level.scale, now);
       const visualY = visualYAt(cellIndex, now);
-      setInstance(mesh, instanceIndex, x, visualY, z, visualScale);
+      setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex));
       const facilityColor = facilityColorFor(type, config.level);
       mesh.setColorAt(instanceIndex, _color.setHex(facilityColor));
 
@@ -1115,7 +1121,7 @@ function syncBuildGhost() {
   const { x, z } = worldPosition(index);
   const level = LEVEL_VISUALS[1];
   ghostMesh.position.set(x, 0.13, z);
-  ghostMesh.rotation.set(0, 0, 0);
+  ghostMesh.rotation.set(0, facilityRotationY(type, index), 0);
   ghostMesh.scale.setScalar(level.scale);
   const color = config.placementAllowed === false ? MARKER_COLORS.problem : MARKER_COLORS.good;
   ghostMaterial.color.copy(color);
@@ -1191,6 +1197,7 @@ export function getCityRendererStats() {
   const samplePosition = new THREE.Vector3();
   const sampleQuaternion = new THREE.Quaternion();
   const sampleScale = new THREE.Vector3();
+  const sampleEuler = new THREE.Euler();
   FACILITY_TYPES.forEach((type) => {
     const mesh = facilityMeshes.get(type);
     const cellIndices = typeCellIndices.get(type);
@@ -1198,10 +1205,12 @@ export function getCityRendererStats() {
     facilityVisualSamples[type] = Array.from({ length: mesh.count }, (_, instanceIndex) => {
       mesh.getMatrixAt(instanceIndex, sampleMatrix);
       sampleMatrix.decompose(samplePosition, sampleQuaternion, sampleScale);
+      sampleEuler.setFromQuaternion(sampleQuaternion, 'YXZ');
       return {
         level: currentConfigs[cellIndices[instanceIndex]]?.level || 1,
         color: mesh.getColorAt(instanceIndex, _color).getHex(),
         scale: Number(sampleScale.x.toFixed(3)),
+        rotationY: Number(sampleEuler.y.toFixed(3)),
       };
     });
   });
@@ -1244,6 +1253,7 @@ export function getCityRendererStats() {
     levelSegmentCount: 0,
     facilityPaletteMode: facilityMeshes.get('factory')?.material?.userData?.facilityPaletteMode || 'textured',
     facilityHasMap: Boolean(facilityMeshes.get('factory')?.material?.map),
+    texturedFacilityTypes: FACILITY_TYPES.filter((type) => Boolean(facilityMeshes.get(type)?.material?.map)),
     facilityMaterialType: facilityMeshes.get('factory')?.material?.type || null,
     facilityUsesVertexColors: Boolean(facilityMeshes.get('factory')?.material?.vertexColors),
     hemisphereIntensity: hemisphereLight?.intensity ?? 0,

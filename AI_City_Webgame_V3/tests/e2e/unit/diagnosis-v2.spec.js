@@ -39,7 +39,7 @@ test('scanner targets the next unresolved risk and refuses scans while toggled o
   expect(nextDiagnosisTarget()).toBe(1);
 });
 
-test('safe or empty scans do not advance quest 6, while the three targets do', () => {
+test('legacy diagnosis helper records only the three configured risk targets', () => {
   gameState.questIndex = 6;
   gameState.firstCitySnapshot = Array(25).fill(null);
   gameState.firstCitySnapshot[0] = { type: 'thermal', level: 1 };

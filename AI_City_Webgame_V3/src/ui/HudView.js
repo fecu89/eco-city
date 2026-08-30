@@ -8,7 +8,7 @@ let onStageUiChanged = () => {};
 const QUEST_GUIDANCE = [
   { through: 4, icon: 'building-2', text: '도시 정착: 수익 시설도 전력·탄소 비용과 함께 설계하세요.' },
   { through: 5, icon: 'leaf', text: '탄소 전환: 핵발전으로 CO₂를 낮추고 도시 흑자를 유지하세요.' },
-  { through: 6, icon: 'scan-search', text: '도시 진단: 탄소·냉각·송전 위험 지점 3곳을 찾으세요.' },
+  { through: 6, icon: 'recycle', text: '물순환 전환: 데이터센터의 폐열을 순환냉각으로 관리하세요.' },
   { through: 14, icon: 'leaf', text: '저탄소 전환: 저장 허브와 우선순위로 기후 충격을 버티세요.' },
   { through: 15, icon: 'users', text: '시민위원회: 운영 기록을 바탕으로 최종 판단을 내리세요.' },
 ];

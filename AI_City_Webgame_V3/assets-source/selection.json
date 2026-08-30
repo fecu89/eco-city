@@ -29,7 +29,7 @@
     { "id": "commercial.medium1", "source": "kenney-commercial", "member": "Models/GLB format/building-skyscraper-a.glb", "target": "buildings/commercial/commercial-01.glb" },
     { "id": "commercial.medium2", "source": "kenney-commercial", "member": "Models/GLB format/building-skyscraper-b.glb", "target": "buildings/commercial/commercial-02.glb" },
 
-    { "id": "industrial.factorySmall", "source": "kenney-industrial", "member": "Models/GLB format/building-a.glb", "target": "buildings/industrial/factory-small.glb" },
+    { "id": "industrial.factorySmall", "source": "kenney-industrial", "member": "Models/GLB format/building-b.glb", "target": "buildings/industrial/factory-small.glb" },
     { "id": "industrial.factoryMedium", "source": "kenney-industrial", "member": "Models/GLB format/building-m.glb", "target": "buildings/industrial/factory-medium.glb" },
     { "id": "industrial.factoryLarge", "source": "kenney-industrial", "member": "Models/GLB format/building-l.glb", "target": "buildings/industrial/factory-large.glb" },
     { "id": "industrial.chimney", "source": "kenney-industrial", "member": "Models/GLB format/chimney-large.glb", "target": "buildings/industrial/chimney.glb" },

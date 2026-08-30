@@ -53,7 +53,7 @@ export const ISLAND_LAYER_ELEVATIONS = Object.freeze({
 });
 
 export const COAST_PROP_ROTATION_OFFSETS = Object.freeze({
-  dock: -Math.PI / 2,
+  dock: -(Math.PI * 2) / 3,
 });
 
 export const SIMULATION = {
@@ -73,6 +73,13 @@ export const TIME = Object.freeze({
   BASE_HOUR_MS: 1000,
   ALLOWED_SCALES: Object.freeze([0, 1, 2, 4]),
   DEFAULT_SCALE: 1,
+  FAST_SCALE: 4,
+});
+
+export const QUEST_REQUIREMENTS = Object.freeze({
+  OPERATING_HOURS: 2,
+  WATER_CYCLE_POWER_RATIO: 0.9,
+  FIRST_SOLAR_LOW_CARBON_PERCENT: 30,
 });
 
 export const RESEARCH_RULES = Object.freeze({
@@ -254,17 +261,28 @@ export const LEVEL_VISUALS = [
 // 진단 상태는 타일 테두리로, 시설의 정체성과 레벨은 본체 색상·크기로 구분한다.
 // 각 배열은 [미사용, Lv.1, Lv.2, Lv.3] 순서다.
 export const FACILITY_LEVEL_COLORS = Object.freeze({
-  residential: Object.freeze([null, 0xc97963, 0xe99a72, 0xffbf8a]),
-  factory: Object.freeze([null, 0x9c633d, 0xc77942, 0xeea052]),
-  data: Object.freeze([null, 0x386998, 0x4b8fc7, 0x72b8e8]),
-  thermal: Object.freeze([null, 0x8e493f, 0xba5b45, 0xe17b55]),
-  nuclear: Object.freeze([null, 0x675196, 0x8569ba, 0xab91dd]),
-  solar: Object.freeze([null, 0xb88b24, 0xe2b733, 0xffdc59]),
-  wind: Object.freeze([null, 0x347c75, 0x48a99b, 0x70d3bf]),
-  battery: Object.freeze([null, 0x3f7450, 0x55a56b, 0x78ca87]),
-  cooling: Object.freeze([null, 0x438397, 0x5eabc4, 0x88d6e8]),
-  green: Object.freeze([null, 0x397640, 0x51a252, 0x76c86a]),
-  tidal: Object.freeze([null, 0x2d718f, 0x3d9fbe, 0x66cce0]),
+  residential: Object.freeze([null, 0xd9cfc9, 0xffe3d5, 0xfff0d1]),
+  factory: Object.freeze([null, 0xcbd0d3, 0xe3e0d7, 0xffddb0]),
+  data: Object.freeze([null, 0xc9d7e2, 0xd8ebfa, 0xe4f3ff]),
+  thermal: Object.freeze([null, 0xd8cbc4, 0xf0d7c9, 0xffd0af]),
+  nuclear: Object.freeze([null, 0xd2cbdf, 0xe6dcf4, 0xf0e6ff]),
+  solar: Object.freeze([null, 0xdcd6bd, 0xffefb9, 0xfff4cd]),
+  wind: Object.freeze([null, 0xc8d9d7, 0xd9f0eb, 0xe5fff7]),
+  battery: Object.freeze([null, 0xcbd8cf, 0xdff0e1, 0xecffeb]),
+  cooling: Object.freeze([null, 0xc9d9df, 0xd9eff5, 0xe8fbff]),
+  green: Object.freeze([null, 0xcbd8c8, 0xe1f0da, 0xedffe5]),
+  tidal: Object.freeze([null, 0xc9d7df, 0xd7edf5, 0xe3f8ff]),
+});
+
+export const CITY_BUILDING_ORIENTATION = Object.freeze({
+  step: Math.PI / 3,
+  offsets: Object.freeze({
+    residential: 0,
+    factory: 2,
+    data: 4,
+    nuclear: 1,
+    green: 3,
+  }),
 });
 
 export function facilityColorFor(type, level = 1) {

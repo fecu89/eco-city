@@ -1,6 +1,6 @@
 import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
-import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
+import { FACILITIES, QUEST_REQUIREMENTS, RESEARCH_RULES } from '../core/Constants.js';
 import { claimCurrentQuest, evaluateCurrentQuest, requestEmergencySupport } from '../systems/QuestSystem.js';
 import { markQuestQuizResult } from '../systems/QuestSystem.js';
 import {
@@ -13,7 +13,6 @@ import {
 import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
-import { setDiagnosisScannerActive } from '../systems/DiagnosisSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
 
 let els;
@@ -39,11 +38,6 @@ export function initQuestView(elements, changed) {
     onChanged({ phase: 'claimed', quest: completed, result });
     openRewardModal(completed, result, () => onChanged({ phase: 'reward_closed', quest: completed, result }));
   }));
-  eachNode(els.contextAction, (contextAction) => contextAction.addEventListener('click', () => {
-    if (gameState.questIndex !== 6) return;
-    setDiagnosisScannerActive(!gameState.diagnosisScannerActive);
-    onChanged();
-  }));
   const mapButtons = Array.isArray(els.map) ? els.map : [els.map];
   mapButtons.filter(Boolean).forEach((button) => button.addEventListener('click', openQuestMap));
 }
@@ -64,9 +58,11 @@ function rewardText(quest) {
 function progressForCurrent() {
   if (gameState.questStatus === 'ready_to_claim' || gameState.questStatus === 'claimed') return 100;
   if (gameState.questIndex === 1) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'residential').length * 50);
-  if (gameState.questIndex === 6) return Math.min(100, gameState.diagnosisFound.size / 3 * 100);
   const hours = gameState.questProgress.consecutiveHours || 0;
-  return Math.min(100, hours / 3 * 100);
+  const required = [2, 3, 4, 5, 6, 7].includes(gameState.questIndex)
+    ? QUEST_REQUIREMENTS.OPERATING_HOURS
+    : gameState.questIndex === 14 ? 4 : 3;
+  return Math.min(100, hours / required * 100);
 }
 
 export function renderQuest() {
@@ -87,9 +83,7 @@ export function renderQuest() {
   });
   eachNode(els.root, (node) => node.classList.toggle('quest-ready', evaluation.ready));
   eachNode(els.contextAction, (node) => {
-    node.classList.toggle('hidden', gameState.questIndex !== 6);
-    node.textContent = `위험 스캐너 ${gameState.diagnosisScannerActive ? '켜짐 · 표시된 칸 누르기' : '꺼짐 · 눌러서 켜기'}`;
-    node.setAttribute('aria-pressed', String(gameState.diagnosisScannerActive));
+    node.classList.add('hidden');
   });
 }
 

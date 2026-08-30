@@ -45,6 +45,7 @@ test.describe('boot and agent contract', () => {
     const box = await page.locator('.board-stage canvas').boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(250);
+    await page.locator('#confirmBuildBtn').click();
     expect((await gameStateSnapshot(page)).entities[0]).toMatchObject({ index: 0, q: 0, r: 0, type: 'residential', level: 1 });
   });
 });
@@ -106,21 +107,23 @@ test.describe('construction and inspection', () => {
   });
 });
 
-test.describe('quest diagnosis, celebration, reset, and save', () => {
-  test('quest 6 scanner exposes exactly three stable risks and makes the reward ready', async ({ gamePage: page }) => {
+test.describe('quest operations, celebration, reset, and save', () => {
+  test('quest 6 completes a powered adjacent data cooling loop at the water baseline', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.questIndex = 6;
-      state.stage = 4;
-      state.firstCitySnapshot = Array(19).fill(null);
-      state.firstCitySnapshot[0] = { type: 'thermal', level: 1 };
-      state.firstCitySnapshot[1] = { type: 'factory', level: 1 };
-      state.firstCitySnapshot[2] = { type: 'data', level: 1 };
-      state.firstCitySnapshot[3] = { type: 'residential', level: 1 };
+      state.stage = 3;
+      state.baseline = { hourlyWater: 5 };
+      state.grid = Array(19).fill(null);
+      state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+      state.grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
+      state.grid[2] = { type: 'nuclear', level: 1, priority: 'normal' };
       window.__refreshGameForTest();
     });
-    for (const index of [0, 1, 2]) await clickCell(page, index);
-    await expect(page.locator('#diagnosisProgress')).toContainText('3 / 3');
+    await page.evaluate(() => {
+      window.__settleSimulationHour();
+      window.__settleSimulationHour();
+    });
     await page.locator('[data-hud-target="quest"]').first().click();
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
   });
@@ -138,8 +141,11 @@ test.describe('quest diagnosis, celebration, reset, and save', () => {
     await openHudPanel(page, 'build');
     await clickCell(page, 0);
     await clickHudAction(page, 'settings', '#resetBtn');
-    await page.locator('#confirmReset').click();
-    const snapshot = await gameStateSnapshot(page);
+    // 초기화 이벤트와 상태 읽기를 같은 브라우저 작업에서 수행해 1초 시뮬레이션 틱과 경합하지 않는다.
+    const snapshot = await page.evaluate(() => {
+      document.getElementById('confirmReset').click();
+      return JSON.parse(window.render_game_to_text());
+    });
     expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, hour: 8 } });
     expect(snapshot.entities).toEqual([]);
   });

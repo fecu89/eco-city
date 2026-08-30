@@ -580,10 +580,10 @@
     {
       "id": "industrial.factorySmall",
       "source": "kenney-industrial",
-      "member": "Models/GLB format/building-a.glb",
+      "member": "Models/GLB format/building-b.glb",
       "target": "buildings/industrial/factory-small.glb",
-      "bytes": 176884,
-      "sha256": "62b0b9ffbcea8dd914a899cacd10b54629bf7013db7bd221f2708c7ba8b054ea",
+      "bytes": 211608,
+      "sha256": "b199574a95e26d10bfa55e1b6846f982876426e11deac401431607377d099752",
       "runtimePath": "/assets/buildings/industrial/factory-small.glb",
       "sidecars": [
         {
@@ -597,8 +597,8 @@
       "pack": "City Kit Industrial",
       "officialPage": "https://kenney.nl/assets/city-kit-industrial",
       "license": "CC0-1.0",
-      "optimizedBytes": 47820,
-      "optimizedSha256": "a1544edb3f266c4f89f339357b4f5d671b5c69b5f2583b982931e16ec83d0fcd",
+      "optimizedBytes": 53412,
+      "optimizedSha256": "3bbd9777adcf17bfd3305573f54246237eabc7b56d4de21502a0b57d93434d5e",
       "optimization": "gltf-transform optimize; meshopt medium; no simplify/flatten/join; textures <=1024"
     },
     {

@@ -17,12 +17,12 @@ test('maximum land is reserved from boot and surrounded by fixed instanced water
       shoreWaterSupport: -0.22,
       water: -0.12,
     },
-    coastalPropRotations: {
-      dock: [Math.PI / 2, -Math.PI / 2],
-    },
   });
 
   expect(before.layerElevations.shoreWaterSupport).toBeLessThan(before.layerElevations.shore);
+  expect(before.coastalPropRotations.dock).toHaveLength(2);
+  expect(before.coastalPropRotations.dock[0]).toBeCloseTo(Math.PI / 3);
+  expect(before.coastalPropRotations.dock[1]).toBeCloseTo(-(Math.PI * 2) / 3);
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;

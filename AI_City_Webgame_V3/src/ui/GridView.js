@@ -3,7 +3,7 @@ import { FACILITIES } from '../core/Constants.js';
 import { getBoardCoordinates, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { initCityScene3D, renderCityScene3D, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
-import { formatCredits } from './format.js';
+import { formatCredits, round1 } from './format.js';
 
 let sizeChipEl = null;
 let onCellClick = () => {};
@@ -12,8 +12,33 @@ let placementPreviewVisible = false;
 let buildConfirmEls = null;
 let candidateIndex = null;
 
-function usesTapConfirmation() {
-  return window.matchMedia?.('(pointer: coarse)').matches || window.matchMedia?.('(max-width: 760px)').matches;
+function signed(value, digits = 1) {
+  const rounded = digits === 2 ? Number(value.toFixed(2)) : round1(value);
+  const prefix = rounded > 0 ? '+' : rounded < 0 ? '-' : '±';
+  return `${prefix}${Math.abs(rounded).toFixed(digits)}`;
+}
+
+function setForecastMetric(metric, value, delta) {
+  const root = buildConfirmEls?.metrics?.querySelector(`[data-metric="${metric}"]`);
+  if (!root) return;
+  root.querySelector('[data-value]').textContent = value;
+  root.querySelector('[data-delta]').textContent = delta;
+}
+
+function syncForecastMetrics(validation) {
+  if (!buildConfirmEls?.metrics) return;
+  const forecast = validation.ok ? buildConfirmEls.getForecast?.(candidateIndex) : null;
+  buildConfirmEls.metrics.classList.toggle('hidden', !forecast);
+  if (!forecast) return;
+  const { current, projected } = forecast;
+  setForecastMetric('credit', `${signed(projected.netCredits, 2)}/h`, `Δ ${signed(projected.netCredits - current.netCredits, 2)}`);
+  setForecastMetric(
+    'power',
+    `${round1(projected.deliveredPower)}/${round1(projected.demand)}E`,
+    `공급 Δ ${signed(projected.deliveredPower - current.deliveredPower)}E`,
+  );
+  setForecastMetric('carbon', `CO₂ ${round1(projected.hourlyCarbon)}/h`, `Δ ${signed(projected.hourlyCarbon - current.hourlyCarbon)}`);
+  setForecastMetric('water', `${round1(projected.hourlyWater)}/h`, `Δ ${signed(projected.hourlyWater - current.hourlyWater)}`);
 }
 
 function clearCandidate({ clearSelection = true } = {}) {
@@ -33,12 +58,13 @@ function syncBuildConfirm() {
     ? `${facility.icon} ${facility.name} · ${formatCredits(facility.cost)} · ${candidateIndex + 1}번 대지`
     : validation.message;
   buildConfirmEls.confirm.disabled = !validation.ok;
+  syncForecastMetrics(validation);
   buildConfirmEls.root.classList.remove('hidden');
 }
 
 function handleSceneCellClick(index) {
   const occupied = Boolean(gameState.grid[index]);
-  if (!usesTapConfirmation() || !placementPreviewVisible || occupied) {
+  if (!placementPreviewVisible || occupied) {
     onCellClick(index);
     return;
   }

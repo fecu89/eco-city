@@ -1,5 +1,5 @@
 import './style.css';
-import { FACILITIES, LEVEL_VISUALS, STAGES } from './core/Constants.js';
+import { FACILITIES, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { formatCredits } from './core/Money.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
@@ -18,7 +18,6 @@ import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
 import { finishBirdVisit, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit } from './ui/CityScene3D.js';
-import { initDiagnosisView, renderDiagnosisGrid, handleUseHint } from './ui/DiagnosisView.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
@@ -54,6 +53,7 @@ const settleHour = createHourSettler({
 });
 let simulationController = null;
 let continuousClockView = null;
+let resumeTimeScale = TIME.DEFAULT_SCALE;
 
 const els = {
   loading: $('#loadingScreen'),
@@ -74,15 +74,13 @@ const els = {
   credits: $('#credits'),
 
   boardSizeChip: $('#boardSizeChip'),
-  diagnosisProgress: $('#diagnosisProgress'),
-  diagnosisHintBtn: $('#diagnosisHintBtn'),
-  diagnosisToggleBtn: $('#diagnosisToggleBtn'),
   cityGrid: $('#cityGrid'),
   boardOverlay: $('#boardOverlay'),
   facilityDock: $('#facilityDock'),
   facilityDetail: $('#facilityDetail'),
   buildConfirm: $('#buildConfirm'),
   buildConfirmText: $('#buildConfirmText'),
+  buildConfirmMetrics: $('#buildConfirmMetrics'),
   cancelBuildBtn: $('#cancelBuildBtn'),
   confirmBuildBtn: $('#confirmBuildBtn'),
 
@@ -119,14 +117,9 @@ const els = {
 };
 
 function refreshAll() {
-  const isDiagnosis = gameState.stage === STAGES.DIAGNOSIS;
-  els.diagnosisProgress.classList.toggle('hidden', !isDiagnosis);
-  els.diagnosisHintBtn.classList.toggle('hidden', !isDiagnosis);
-  els.diagnosisToggleBtn.classList.toggle('hidden', !isDiagnosis);
   renderHud();
   renderDock();
-  if (isDiagnosis) renderDiagnosisGrid();
-  else renderGrid();
+  renderGrid();
   renderQuest();
   renderSimulationHud();
   updateChart();
@@ -144,9 +137,23 @@ function settleSimulationHour() {
 }
 
 function refreshTimeControls() {
-  els.timeControls.querySelectorAll('[data-time-scale]').forEach((button) => {
-    button.classList.toggle('active', Number(button.dataset.timeScale) === gameState.timeScale);
-  });
+  const paused = gameState.timeScale === 0;
+  const toggle = els.timeControls.querySelector('#toggleTimeBtn');
+  const fast = els.timeControls.querySelector('#fastForwardBtn');
+  toggle.innerHTML = `<i data-lucide="${paused ? 'play' : 'pause'}"></i>`;
+  toggle.setAttribute('aria-label', paused ? '재생' : '일시정지');
+  toggle.title = paused ? '재생' : '일시정지';
+  fast.classList.toggle('active', (paused ? resumeTimeScale : gameState.timeScale) === TIME.FAST_SCALE);
+  refreshIcons();
+}
+
+function setPlayerTimeScale(scale) {
+  if (scale > 0) resumeTimeScale = scale;
+  gameState.timeScale = simulationController.setTimeScale(scale);
+  continuousClockView?.renderNow();
+  refreshTimeControls();
+  eventBus.emit(Events.SAVE_REQUESTED, {});
+  return gameState.timeScale;
 }
 
 function completeFacilityPlacement(index) {
@@ -162,7 +169,7 @@ function completeFacilityPlacement(index) {
   refreshAll();
 }
 
-function forecastEconomyForGrid(grid) {
+function forecastOperationsForGrid(grid) {
   const coords = createHexCoordinates(gameState.boardRadius);
   const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
   const power = calculatePowerNetwork({
@@ -173,18 +180,28 @@ function forecastEconomyForGrid(grid) {
     heatwave: gameState.climateAlert === 'extreme_heat',
     additionalDemandByIndex: researchDemandByIndex(gameState),
   });
-  return settleEconomy({ grid, coords, facilityPower: power.facilityPower, credits: gameState.credits });
+  const economy = settleEconomy({ grid, coords, facilityPower: power.facilityPower, credits: gameState.credits });
+  return {
+    ...economy,
+    deliveredPower: power.delivered,
+    demand: power.demand,
+  };
+}
+
+function constructionForecastAt(index) {
+  const projectedGrid = gameState.grid.map((cell) => cell ? { ...cell } : null);
+  projectedGrid[index] = { type: gameState.selectedFacility, level: 1 };
+  const current = forecastOperationsForGrid(gameState.grid);
+  const projected = forecastOperationsForGrid(projectedGrid);
+  return { current, projected };
 }
 
 function constructionRiskAt(index) {
-  const projectedGrid = gameState.grid.map((cell) => cell ? { ...cell } : null);
-  projectedGrid[index] = { type: gameState.selectedFacility, level: 1 };
-  const currentEconomy = forecastEconomyForGrid(gameState.grid);
-  const projectedEconomy = forecastEconomyForGrid(projectedGrid);
+  const { current, projected } = constructionForecastAt(index);
   return {
-    currentEconomy,
-    projectedEconomy,
-    risky: projectedEconomy.netCredits < 0 && projectedEconomy.netCredits < currentEconomy.netCredits,
+    currentEconomy: current,
+    projectedEconomy: projected,
+    risky: projected.netCredits < 0 && projected.netCredits < current.netCredits,
   };
 }
 
@@ -245,12 +262,14 @@ function bindEvents() {
   els.resetBtn.addEventListener('click', handleReset);
   els.storyReplayBtn.addEventListener('click', () => openStory({ replay: true }));
   els.timeControls.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-time-scale]');
+    const button = event.target.closest('[data-time-action]');
     if (!button) return;
-    gameState.timeScale = simulationController.setTimeScale(Number(button.dataset.timeScale));
-    continuousClockView?.renderNow();
-    refreshTimeControls();
-    eventBus.emit(Events.SAVE_REQUESTED, {});
+    if (button.dataset.timeAction === 'toggle') {
+      setPlayerTimeScale(gameState.timeScale === 0 ? resumeTimeScale : 0);
+      return;
+    }
+    const effectiveScale = gameState.timeScale === 0 ? resumeTimeScale : gameState.timeScale;
+    setPlayerTimeScale(effectiveScale === TIME.FAST_SCALE ? TIME.DEFAULT_SCALE : TIME.FAST_SCALE);
   });
 
   els.soundBtn.addEventListener('click', () => {
@@ -265,14 +284,6 @@ function bindEvents() {
     refreshIcons();
   });
 
-  els.diagnosisHintBtn.addEventListener('click', () => {
-    const index = handleUseHint();
-    if (index == null) {
-      eventBus.emit(Events.TOAST_SHOW, { title: '더 이상 힌트가 없습니다.' });
-      return;
-    }
-    eventBus.emit(Events.TOAST_SHOW, { title: '힌트 사용', text: '위험 지점 하나를 지도에 표시했습니다.' });
-  });
 }
 
 function simulateLoading() {
@@ -299,11 +310,12 @@ function boot() {
   initGridView(els.cityGrid, els.boardSizeChip, onCellClick, {
     root: els.buildConfirm,
     text: els.buildConfirmText,
+    metrics: els.buildConfirmMetrics,
     cancel: els.cancelBuildBtn,
     confirm: els.confirmBuildBtn,
+    getForecast: constructionForecastAt,
   });
   initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
-  initDiagnosisView(els.cityGrid, els.boardSizeChip, els.diagnosisProgress, els.diagnosisHintBtn, els.diagnosisToggleBtn);
   initDockView(els.facilityDock, els.facilityDetail);
   initHudView(els, syncWorldHud);
   initQuestView({
@@ -327,7 +339,6 @@ function boot() {
   initFeedbackBridge();
   initQuestCelebration(els.questCelebration);
   initOnboardingView();
-  eventBus.on(Events.DIAGNOSIS_TILE_FOUND, refreshAll);
   initSaveSystem();
   initAudioManager();
   initWorldHud({
@@ -341,6 +352,7 @@ function boot() {
   initThreeBackground(els.threeBg);
 
   loadSavedGame();
+  resumeTimeScale = gameState.timeScale || TIME.DEFAULT_SCALE;
 
   simulationController = createSimulationController({ settle: settleSimulationHour, getIntervalMs: intervalForTimeScale });
   simulationController.setTimeScale(gameState.timeScale);
@@ -413,11 +425,9 @@ window.__refreshGameForTest = () => refreshAll();
 window.__settleSimulationHour = () => settleSimulationHour();
 window.__getSimulationState = () => simulationController?.getState();
 window.__setTimeScale = (scale) => {
-  gameState.timeScale = simulationController.setTimeScale(scale);
-  continuousClockView?.renderNow();
-  refreshTimeControls();
+  const applied = setPlayerTimeScale(scale);
   refreshAll();
-  return gameState.timeScale;
+  return applied;
 };
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
 window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVisit(greenIndex, birdCount);

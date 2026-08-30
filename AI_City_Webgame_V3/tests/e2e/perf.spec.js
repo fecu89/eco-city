@@ -92,7 +92,8 @@ test.describe('performance', () => {
     const before = await page.evaluate(() => window.__getCityRendererStats().renderCount);
     await page.waitForTimeout(1000);
     const after = await page.evaluate(() => window.__getCityRendererStats().renderCount);
-    expect(after - before).toBeLessThanOrEqual(1);
+    // 5초 전력선 점멸의 밝힘/복원 구간과 겹쳐도 두 프레임만 발생해야 한다.
+    expect(after - before).toBeLessThanOrEqual(2);
   });
 
   test('state redraws reuse persistent GPU resources', async ({ gamePage: page }) => {

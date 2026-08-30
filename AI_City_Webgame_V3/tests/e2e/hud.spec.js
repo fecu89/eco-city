@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
+import { clickCell } from '../helpers/playthrough.js';
 
 test.describe('fullscreen world HUD', () => {
   test('top HUD uses the same compact credit, power, carbon, water, labor order as facility detail', async ({ gamePage: page }) => {
@@ -27,6 +28,29 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(5);
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
       .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
+  });
+
+  test('time navigation has one play-pause toggle and one 1x-4x speed toggle', async ({ gamePage: page }) => {
+    const controls = page.locator('#timeControls');
+    await expect(controls.locator('button')).toHaveCount(2);
+    const playPause = controls.locator('#toggleTimeBtn');
+    const speed = controls.locator('#fastForwardBtn');
+    await expect(playPause).toHaveAttribute('aria-label', '일시정지');
+    await expect(playPause.locator('svg')).toHaveCount(1);
+    await expect(speed).toHaveText('4×');
+
+    await playPause.click();
+    expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(0);
+    await expect(playPause).toHaveAttribute('aria-label', '재생');
+    await expect(playPause.locator('svg')).toHaveCount(1);
+    await playPause.click();
+    expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(1);
+
+    await speed.click();
+    expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(4);
+    await expect(speed).toHaveClass(/active/);
+    await speed.click();
+    expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(1);
   });
 
   test('opens one HUD panel at a time and restores focus on Escape', async ({ gamePage: page }) => {
@@ -155,7 +179,12 @@ test.describe('fullscreen world HUD', () => {
 
   test('quest panel replaces the removed achievement and evidence drawers', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="quest"]').first().click();
-    await expect(page.locator('#questPanel')).toBeVisible();
+    const panel = page.locator('#questPanel');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(':scope > .panel-title')).toHaveCount(0);
+    const titleBox = await panel.locator('#questPanelTitle').boundingBox();
+    const goalBox = await panel.locator('#questPanelGoal').boundingBox();
+    expect(Math.abs(titleBox.y - goalBox.y)).toBeLessThanOrEqual(4);
     await expect(page.locator('[data-hud-target="achievements"]')).toHaveCount(0);
     await expect(page.locator('#badgePanel, #evidenceBox')).toHaveCount(0);
   });
@@ -167,6 +196,9 @@ test.describe('fullscreen world HUD', () => {
 
     await page.locator('[data-hud-target="build"]').first().click();
     await page.evaluate(() => window.__clickCell(0));
+    expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).entities)).toHaveLength(0);
+    await expect(page.locator('#buildConfirm')).toBeVisible();
+    await page.locator('#confirmBuildBtn').click();
     expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).entities)).toHaveLength(1);
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
   });
@@ -174,6 +206,7 @@ test.describe('fullscreen world HUD', () => {
   test('facility inspection restores an active build panel after the modal closes', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
     await page.evaluate(() => window.__clickCell(0));
+    await page.locator('#confirmBuildBtn').click();
     await page.evaluate(() => window.__clickCell(0));
     await expect(page.locator('.facility-inspector-grid')).toBeVisible();
     await page.locator('.modal-card .close-modal').click();
@@ -212,6 +245,7 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('[data-hud-target="build"]').first().click();
     await page.locator('[data-facility="thermal"]').click();
     await page.evaluate(() => window.__clickCell(0));
+    await page.locator('#confirmBuildBtn').click();
 
     const modal = page.locator('#modalCard');
     await expect(modal).toContainText('운영 적자 경고');
@@ -229,7 +263,7 @@ test.describe('fullscreen world HUD', () => {
   test('meeting the quest condition raises one menu notification without a persistent quest card', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
     for (let index = 0; index < 2; index++) {
-      await page.evaluate((cell) => window.__clickCell(cell), index);
+      await clickCell(page, index);
     }
 
     await expect(page.locator('.toast', { hasText: '퀘스트 완료 조건 달성' })).toHaveCount(1);
@@ -244,7 +278,7 @@ test.describe('fullscreen world HUD', () => {
   test('claiming each completed quest raises the quest celebration and clears its cue', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
     for (let index = 0; index < 2; index++) {
-      await page.evaluate((cell) => window.__clickCell(cell), index);
+      await clickCell(page, index);
     }
     await page.locator('[data-hud-target="quest"]').first().click();
     await page.locator('#questPanelClaimBtn').click();

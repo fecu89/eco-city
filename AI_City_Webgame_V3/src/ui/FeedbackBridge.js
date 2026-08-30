@@ -20,17 +20,6 @@ export function initFeedbackBridge() {
     });
   });
 
-  eventBus.on(Events.DIAGNOSIS_TILE_FOUND, ({ isProblem }) => {
-    eventBus.emit(Events.AUDIO_SFX, { name: isProblem ? 'problem-found' : 'tile-ok' });
-  });
-
-  eventBus.on(Events.DIAGNOSIS_COMPLETE, ({ noHints }) => {
-    eventBus.emit(Events.TOAST_SHOW, {
-      title: '진단 완료',
-      text: noHints ? '힌트 없이 모든 문제를 찾았습니다!' : '문제 지점을 모두 확인했습니다.',
-    });
-  });
-
   eventBus.on(Events.BOARD_EXPANDED, ({ settled }) => {
     if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '저탄소 부지 확장', text: '육각 반경 2 → 3 · 새 대지 18칸 확보' });
   });
