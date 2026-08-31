@@ -50,6 +50,7 @@ test('a neighboring hex battery provides a local hub route and preserves low-car
   grid[7] = cell('solar');
   grid[0] = cell('battery', { batteryStoredLowCarbon: 10 });
   grid[1] = cell('data');
+  grid[11] = cell('thermal'); // powers battery controls; the nearby battery remains the best delivery route
 
   const result = calculatePowerNetwork({ grid, coords, hour: 23, tickIndex: 0, heatwave: false });
 
@@ -58,6 +59,41 @@ test('a neighboring hex battery provides a local hub route and preserves low-car
   expect(result.routes.find((route) => route.kind === 'battery' && route.to === 1).lowCarbonDelivered).toBeGreaterThan(0);
   expect(result.lowCarbonDelivered).toBeGreaterThan(0);
   expect(result.nextBatteries[0].lowCarbon).toBeLessThan(10);
+});
+
+for (const [level, expectedDemand] of [
+  [1, 1],
+  [2, 1.24],
+  [3, 1.45],
+]) {
+  test(`battery Lv.${level} contributes ${expectedDemand}E auxiliary demand before storage operation`, () => {
+    const coords = createHexCoordinates(2);
+    const grid = Array(19).fill(null);
+    grid[0] = cell('thermal');
+    grid[1] = cell('battery', { level });
+    grid[2] = cell('residential');
+
+    const result = calculatePowerNetwork({ grid, coords, hour: 12 });
+
+    expect(result.facilityPower[1].demand).toBeCloseTo(expectedDemand);
+    expect(result.facilityPower[1].ratio).toBe(1);
+    expect(result.demand).toBeCloseTo(2 + expectedDemand);
+    expect(result.batteryOperations[1].canOperate).toBe(true);
+  });
+}
+
+test('an unpowered battery cannot discharge or charge', () => {
+  const coords = createHexCoordinates(2);
+  const grid = Array(19).fill(null);
+  grid[0] = cell('battery', { batteryStoredLowCarbon: 5 });
+  grid[1] = cell('residential');
+
+  const result = calculatePowerNetwork({ grid, coords, hour: 12 });
+
+  expect(result.facilityPower[0]).toMatchObject({ demand: 1, delivered: 0, ratio: 0 });
+  expect(result.facilityPower[1].delivered).toBe(0);
+  expect(result.batteryOperations[0]).toMatchObject({ canOperate: false, charged: 0, discharged: 0 });
+  expect(result.nextBatteries[0]).toEqual({ lowCarbon: 5, fossil: 0 });
 });
 
 test('research demand is included in the assigned data center power ratio', () => {

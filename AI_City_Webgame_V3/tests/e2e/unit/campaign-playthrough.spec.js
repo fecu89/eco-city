@@ -47,7 +47,7 @@ function claim() {
   const completedIndex = gameState.questIndex;
   const result = claimCurrentQuest(gameState);
   expect(result.ok, `claim quest ${completedIndex}`).toBe(true);
-  if (result.expandGrid) expect(expandBoard(gameState).ok).toBe(true);
+  if (result.expandGrid) expect(expandBoard(gameState, 'east').ok).toBe(true);
   expect(gameState.credits).toBeGreaterThanOrEqual(0);
 }
 

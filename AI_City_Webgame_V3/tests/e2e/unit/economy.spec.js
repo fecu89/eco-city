@@ -104,6 +104,27 @@ test('cooling reduces water only for adjacent data centers and nuclear plants', 
   expect(settleEconomy({ grid: nuclearGrid, coords, facilityPower: fullyPowered(nuclearGrid), credits: 10 }).hourlyWater).toBe(3);
 });
 
+for (const [ratio, expectedDataWater] of [[1, 1], [0.5, 0.5], [0.2, 0.2], [0, 0]]) {
+  test(`cooled data center at ${ratio * 100}% power cannot cancel another facility's water`, () => {
+    const coords = createHexCoordinates(2);
+    const grid = Array(19).fill(null);
+    grid[0] = { type: 'data', level: 1, priority: 'normal' };
+    grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
+    grid[2] = { type: 'residential', level: 1, priority: 'essential' };
+    const facilityPower = {
+      0: { demand: 8, delivered: 8 * ratio, ratio },
+      1: { demand: 4, delivered: 4 * ratio, ratio },
+      2: { demand: 2, delivered: 2, ratio: 1 },
+    };
+
+    const result = settleEconomy({ grid, coords, facilityPower, credits: 10 });
+
+    expect(result.facilityEnvironment[0].water).toBe(expectedDataWater);
+    expect(result.facilityEnvironment[0].water).toBeGreaterThanOrEqual(0);
+    expect(result.hourlyWater).toBe(1 + expectedDataWater);
+  });
+}
+
 test('green space reduces live hourly carbon without making the city negative', () => {
   const poweredFactory = [
     { type: 'residential', level: 1, priority: 'essential' },

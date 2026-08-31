@@ -3,6 +3,7 @@ import { FACILITIES, UI_FEEDBACK } from '../core/Constants.js';
 import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
 import { formatCredits } from '../core/Money.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { OBJECTIVE_SETS } from '../core/ObjectiveDefinitions.js';
 
 function questRewardText(quest) {
   const parts = [];
@@ -22,7 +23,9 @@ function showQuestRewardAlert(quest, result) {
     kicker: result.campaignComplete ? '최종 퀘스트 완료' : '퀘스트 완료 · 보상 지급',
     title: `${quest.title} 완료`,
     text: questRewardText(quest),
-    meta: nextQuest
+    meta: result.expandGrid
+      ? '동부 또는 서부 9칸을 선택해 다음 운영 장을 시작하세요.'
+      : nextQuest
       ? `LEVEL ${nextQuest.index} / ${QUEST_COUNT} · ${nextQuest.title} — ${nextQuest.goal}`
       : '최종 운영 성적표가 열렸습니다.',
     priority: true,
@@ -49,6 +52,35 @@ function showQuestAlert(quest, ready = false) {
 
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
+  eventBus.on(Events.OBJECTIVE_READY, ({ set }) => {
+    eventBus.emit(Events.TOAST_SHOW, {
+      kicker: '선택 목표 달성',
+      title: `${set.title} 보상 준비 완료`,
+      text: `${set.required}/${set.cards.length}개 목표를 달성했습니다.`,
+      meta: '목표 창에서 보상을 받고 다음 운영 장으로 이동하세요.',
+      priority: true,
+      kind: 'quest-alert objective-alert',
+      action: 'quest',
+      actionLabel: '목표 열기',
+      duration: UI_FEEDBACK.QUEST_ALERT_MS,
+    });
+    eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
+  });
+
+  eventBus.on(Events.OBJECTIVE_CLAIMED, ({ setId, reward, nextSetId }) => {
+    eventBus.emit(Events.TOAST_SHOW, {
+      kicker: '운영 목표 보상 지급',
+      title: `${OBJECTIVE_SETS[setId]?.title || setId} 완료`,
+      text: `${formatCredits(reward.credits)} 획득`,
+      meta: nextSetId ? `다음 목표 · ${OBJECTIVE_SETS[nextSetId].title}` : '최종 스트레스 테스트가 준비되었습니다.',
+      priority: true,
+      kind: 'quest-alert quest-reward-alert',
+      action: nextSetId ? 'quest' : null,
+      actionLabel: nextSetId ? '다음 목표 열기' : '',
+      duration: UI_FEEDBACK.QUEST_ALERT_MS,
+    });
+  });
+
   eventBus.on(Events.QUEST_READY, ({ quest }) => {
     showQuestAlert(quest, true);
     eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
@@ -63,8 +95,8 @@ export function initFeedbackBridge() {
     showQuestAlert(quest);
   });
 
-  eventBus.on(Events.BOARD_EXPANDED, ({ settled }) => {
-    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '저탄소 부지 확장', text: '육각 반경 2 → 3 · 새 대지 18칸 확보' });
+  eventBus.on(Events.BOARD_EXPANDED, ({ settled, addedIndices = [] }) => {
+    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '도시 부지 확장', text: `새 대지 ${addedIndices.length || 9}칸 확보` });
   });
 
   eventBus.on(Events.RESEARCH_COMPLETED, ({ researchId }) => {

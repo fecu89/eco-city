@@ -17,3 +17,26 @@ test('radius 3 renders 37 unique pointy-top hex tile instances', async ({ gamePa
   expect(new Set(result.cells.map(({ x, z }) => `${x.toFixed(3)}:${z.toFixed(3)}`)).size).toBe(37);
   expect(result.cells[0]).toMatchObject({ index: 0, q: 0, r: 0, x: 0, z: 0 });
 });
+
+test('expansion choice opens only nine subtly zoned tiles without another draw-call layer', async ({ gamePage: page }) => {
+  const beforeLayers = await page.evaluate(() => window.__getCityRendererStats().instancedLayers);
+  await page.evaluate(() => window.__EVENT_BUS__.emit(window.__EVENTS__.EXPANSION_CHOICE_REQUESTED, {}));
+  await expect(page.locator('[data-expansion-side="east"]')).toBeVisible();
+  await expect(page.locator('[data-expansion-side="west"]')).toBeVisible();
+  await page.locator('[data-expansion-side="east"]').click();
+  await page.waitForTimeout(80);
+
+  const result = await page.evaluate(() => ({
+    expansion: window.__GAME_STATE__.expansion,
+    stats: window.__getCityRendererStats(),
+  }));
+  expect(result.expansion).toMatchObject({ phase: 1, firstChoice: 'east' });
+  expect(await page.evaluate(() => window.__GAME_STATE__.progression.objectiveSetId)).toBe('transition-choice');
+  expect(result.expansion.activeCellIndices).toHaveLength(28);
+  expect(result.stats).toMatchObject({
+    tileInstances: 37,
+    inactiveTileCount: 9,
+    zoneTileCounts: { solar: 5, residential: 4 },
+  });
+  expect(result.stats.instancedLayers).toBe(beforeLayers);
+});

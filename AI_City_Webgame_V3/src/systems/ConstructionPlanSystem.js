@@ -1,8 +1,9 @@
-import { FACILITIES } from '../core/Constants.js';
+import { FACILITIES, STRESS_TEST_RULES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
 import { calcMetrics, getBoardCoordinates, validatePlacement } from './BoardSystem.js';
 import { getFacilityPermitForCount, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
+import { constructionCostForCell } from './ZoneSystem.js';
 
 function copyPlan(plan) {
   return (plan || []).map(({ index, type }) => ({ index, type }));
@@ -33,7 +34,12 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
 
   items.forEach((item) => {
     const facility = FACILITIES[item.type];
-    if (facility) totalCost = roundCredits(totalCost + facility.cost);
+    if (facility) {
+      const stressMultiplier = state.stressTest?.status === 'running'
+        ? STRESS_TEST_RULES.CONSTRUCTION_COST_MULTIPLIER
+        : 1;
+      totalCost = roundCredits(totalCost + constructionCostForCell(state, item.index, item.type) * stressMultiplier);
+    }
     const validation = validatePlacement(state, item.type, item.index, {
       grid: projectedGrid,
       availableCredits: Number.POSITIVE_INFINITY,
@@ -44,7 +50,12 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
       errors.push({ index: item.index, type: item.type, ...validation });
       return;
     }
-    projectedGrid[item.index] = { type: item.type, level: 1 };
+    projectedGrid[item.index] = {
+      type: item.type,
+      level: 1,
+      operationMode: 'normal',
+      ...(item.type === 'battery' ? { batteryPolicy: 'auto' } : {}),
+    };
   });
 
   if (items.some((item) => item.type === 'nuclear')) {

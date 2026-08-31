@@ -1,10 +1,5 @@
-import {
-  ECONOMY_RULES,
-  FACILITIES,
-  FACILITY_ECONOMY,
-  LEVEL_MULTIPLIERS,
-} from '../core/Constants.js';
-import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
+import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
+import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
 
@@ -19,36 +14,30 @@ function topologyFor(grid, coords) {
   return [];
 }
 
-function adjacentTo(grid, index, coords, type) {
-  if (!coords.length) return false;
-  return neighborIndices(index, coords).some((neighbor) => grid[neighbor]?.type === type);
+function strongestCoolingSupport(grid, index, coords, facilityOperations) {
+  if (!coords.length) return 0;
+  return grid.reduce((strongest, cooler, coolerIndex) => {
+    if (cooler?.type !== 'cooling') return strongest;
+    const coolerLevel = safeLevel(cooler);
+    const tileDistance = hexDistance(coords[index], coords[coolerIndex]);
+    if (tileDistance !== 1 && !(tileDistance === 2 && coolerLevel >= 3)) return strongest;
+    const powerRatio = Math.max(0, Math.min(1, Number(facilityOperations[coolerIndex]?.powerRatio) || 0));
+    const levelBonus = coolerLevel >= 2 ? 1.25 : 1;
+    const rangeMultiplier = tileDistance === 2 ? 0.5 : 1;
+    return Math.max(strongest, powerRatio * levelBonus * rangeMultiplier);
+  }, 0);
 }
 
 export function facilityLevelStats(cell) {
-  const facility = FACILITIES[cell.type];
-  const economy = FACILITY_ECONOMY[cell.type];
-  const level = safeLevel(cell);
-  const carbon = facility.carbon || 0;
-  const water = facility.water || 0;
-  return {
-    dev: (facility.dev || 0) * LEVEL_MULTIPLIERS.output[level],
-    demand: (facility.demand || 0) * LEVEL_MULTIPLIERS.demand[level],
-    supply: (facility.supply || 0) * LEVEL_MULTIPLIERS.output[level],
-    income: (economy.income || 0) * LEVEL_MULTIPLIERS.output[level],
-    upkeep: (economy.upkeep || 0) * ECONOMY_RULES.UPKEEP_LEVEL_MULTIPLIERS[level],
-    carbon: carbon < 0
-      ? carbon * LEVEL_MULTIPLIERS.negative[level]
-      : carbon * LEVEL_MULTIPLIERS.impact[level],
-    // 순환냉각은 독립적인 음수 자원이 아니라 연결 대상의 물 부담을 줄인다.
-    water: cell.type === 'cooling'
-      ? 0
-      : water < 0
-        ? water * LEVEL_MULTIPLIERS.negative[level]
-        : water * LEVEL_MULTIPLIERS.impact[level],
-  };
+  return effectiveFacilityStats(cell);
 }
 
-export function calculateEnvironmentalOperations({ grid, coords = null, facilityOperations = {} }) {
+export function calculateEnvironmentalOperations({
+  grid,
+  coords = null,
+  facilityOperations = {},
+  modifierContext = null,
+}) {
   const boardCoords = topologyFor(grid, coords);
   const byFacility = {};
   let hourlyCarbon = 0;
@@ -56,7 +45,7 @@ export function calculateEnvironmentalOperations({ grid, coords = null, facility
 
   grid.forEach((cell, index) => {
     if (!cell) return;
-    const stats = facilityLevelStats(cell);
+    const stats = effectiveFacilityStats(cell, facilityModifierAt(modifierContext, index));
     const operation = facilityOperations[index] || {};
     const powerRatio = Math.max(0, Math.min(1, Number(operation.powerRatio) || 0));
     const operationRatio = Math.max(0, Math.min(1, Number(operation.operationRatio) || 0));
@@ -70,11 +59,20 @@ export function calculateEnvironmentalOperations({ grid, coords = null, facility
     let carbon = stats.carbon * carbonFactor;
     let water = stats.water * (stats.demand > 0 ? powerRatio : 1);
 
-    if (cell.type === 'data' && adjacentTo(grid, index, boardCoords, 'cooling')) {
-      water -= 4 * safeLevel(cell);
-    }
-    if (cell.type === 'nuclear' && adjacentTo(grid, index, boardCoords, 'cooling')) {
-      water -= 2 * safeLevel(cell);
+    if (['data', 'nuclear'].includes(cell.type)) {
+      const coolingSupport = strongestCoolingSupport(
+        grid,
+        index,
+        boardCoords,
+        facilityOperations,
+      );
+      const effectiveCoolingRatio = Math.min(powerRatio, coolingSupport);
+      const coolingEffectiveness = modifierContext?.city?.coolingEffectiveness ?? 1;
+      const reduction = (cell.type === 'data' ? 4 : 2)
+        * safeLevel(cell)
+        * effectiveCoolingRatio
+        * coolingEffectiveness;
+      water = Math.max(0, water - reduction);
     }
 
     carbon = round2(carbon);
@@ -90,4 +88,3 @@ export function calculateEnvironmentalOperations({ grid, coords = null, facility
     hourlyWater: Math.max(0, round2(hourlyWater)),
   };
 }
-

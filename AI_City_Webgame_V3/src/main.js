@@ -12,6 +12,7 @@ import { applySimulationQuestProgress } from './systems/QuestSystem.js';
 import { advanceResearchOneHour, researchDemandByIndex } from './systems/ResearchSystem.js';
 import { calendarAtElapsedHour, formatCalendar, intervalForTimeScale } from './systems/CalendarSystem.js';
 import { createHexCoordinates } from './systems/HexGridSystem.js';
+import { buildCityModifierContext } from './systems/CityModifierSystem.js';
 
 import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
@@ -39,10 +40,17 @@ import {
   openResetConfirmModal,
   openCarbonGameOverModal,
   openConstructionRiskModal,
+  openOperationalRiskModal,
+  openStressTestModal,
+  openStressResultModal,
 } from './ui/StageModals.js';
 import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 import { createContinuousClockView } from './ui/ContinuousClockView.js';
+import { currentObjectiveEvaluation } from './systems/ObjectiveSystem.js';
+import { CITY_EVENTS, STRESS_PHASES } from './core/EventDefinitions.js';
+import { initForecastView, renderForecast } from './ui/ForecastView.js';
+import { showEventResult } from './ui/EventResultView.js';
 
 const $ = (s) => document.querySelector(s);
 const settleHour = createHourSettler({
@@ -114,6 +122,7 @@ const els = {
   timeControls: $('#timeControls'),
   storyReplayBtn: $('#storyReplayBtn'),
   worldLightingControls: $('#worldLightingControls'),
+  forecastStrip: $('#forecastStrip'),
 
   mobileBar: document.querySelector('.mobile-bar'),
   toastStack: $('#toastStack'),
@@ -128,6 +137,7 @@ function refreshAll() {
   renderGrid();
   renderQuest();
   renderSimulationHud();
+  renderForecast();
   updateChart();
   refreshAudioControls();
 }
@@ -147,6 +157,22 @@ function settleSimulationHour() {
   if (result.research?.status !== 'idle') eventBus.emit(Events.RESEARCH_PROGRESS, result.research);
   result.carbonCrisis?.warnings?.forEach((hours) => eventBus.emit(Events.CARBON_WARNING, { hours, summary: result.summary }));
   if (result.carbonCrisis?.gameOverTransition) eventBus.emit(Events.GAME_OVER, { summary: result.summary });
+  result.operationalRisk?.warnings?.forEach((warning) => eventBus.emit(Events.OPERATIONAL_RISK_WARNING, {
+    warning,
+    risk: result.operationalRisk,
+  }));
+  if (result.operationalRisk?.pauseTransition) eventBus.emit(Events.OPERATIONAL_RISK_PAUSE, {
+    reason: result.operationalRisk.pauseTransition,
+  });
+  if (result.operationalRisk?.gameOverTransition) eventBus.emit(Events.GAME_OVER, {
+    summary: result.summary,
+    reason: gameState.gameOverReason,
+  });
+  if (result.cityEvent?.forecasted) eventBus.emit(Events.CITY_EVENT_FORECASTED, result.cityEvent.forecasted);
+  if (result.cityEvent?.started) eventBus.emit(Events.CITY_EVENT_STARTED, result.cityEvent.started);
+  if (result.cityEvent?.ended) eventBus.emit(Events.CITY_EVENT_ENDED, result.cityEvent.ended);
+  if (result.stressTest?.phaseEnded) eventBus.emit(Events.STRESS_PHASE_CHANGED, result.stressTest);
+  if (result.stressTest?.result) eventBus.emit(Events.STRESS_TEST_FINISHED, result.stressTest.result);
   eventBus.emit(Events.SIMULATION_TICKED, result);
   refreshAll();
   return result;
@@ -197,6 +223,7 @@ function completeConstructionPlan() {
 function forecastOperationsForGrid(grid) {
   const coords = createHexCoordinates(gameState.boardRadius);
   const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
+  const modifierContext = buildCityModifierContext({ ...gameState, grid }, { coords, calendar });
   const power = calculatePowerNetwork({
     grid,
     coords,
@@ -204,8 +231,16 @@ function forecastOperationsForGrid(grid) {
     tickIndex: gameState.tickIndex,
     heatwave: gameState.climateAlert === 'extreme_heat',
     additionalDemandByIndex: researchDemandByIndex(gameState),
+    batteryReserveUnlocked: gameState.claimedQuestIds?.has?.('storage-hub') === true,
+    modifierContext,
   });
-  const economy = settleEconomy({ grid, coords, facilityPower: power.facilityPower, credits: gameState.credits });
+  const economy = settleEconomy({
+    grid,
+    coords,
+    facilityPower: power.facilityPower,
+    credits: gameState.credits,
+    modifierContext,
+  });
   return {
     ...economy,
     deliveredPower: power.delivered,
@@ -374,9 +409,42 @@ function boot() {
     if (change?.phase === 'claimed' && change.result?.campaignComplete) openReportModal();
   });
   initSimulationHudView({ time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, water: els.simWater, labor: els.simLabor, carbon: els.simCarbon, alert: els.simAlert });
+  initForecastView(els.forecastStrip);
   initChartView(els.cityChart);
   initStageModals(refreshAll);
   initFeedbackBridge();
+  eventBus.on(Events.CITY_EVENT_FORECASTED, (cityEvent) => {
+    const definition = CITY_EVENTS[cityEvent.type];
+    eventBus.emit(Events.TOAST_SHOW, {
+      kicker: '6시간 기후 예보',
+      title: `${definition.label} 예보`,
+      text: `${definition.durationHours}시간 지속 · ${definition.description}`,
+      meta: '시설 모드와 전력 우선순위를 미리 조정하세요.',
+      priority: true,
+      kind: 'event-forecast-alert',
+      duration: 7000,
+    });
+  });
+  eventBus.on(Events.CITY_EVENT_STARTED, (cityEvent) => {
+    const definition = CITY_EVENTS[cityEvent.type];
+    eventBus.emit(Events.TOAST_SHOW, { title: `${definition.label} 시작`, text: definition.description, priority: true });
+  });
+  eventBus.on(Events.CITY_EVENT_ENDED, showEventResult);
+  eventBus.on(Events.STRESS_TEST_START_REQUESTED, () => openStressTestModal(refreshAll));
+  eventBus.on(Events.REPORT_OPEN_REQUESTED, openReportModal);
+  eventBus.on(Events.STRESS_PHASE_CHANGED, ({ phaseStarted }) => {
+    if (!phaseStarted) return;
+    eventBus.emit(Events.TOAST_SHOW, {
+      kicker: `최종 테스트 ${gameState.stressTest.phaseIndex + 1}/${STRESS_PHASES.length}`,
+      title: `${phaseStarted.label} 단계 시작`,
+      text: `${phaseStarted.durationHours}시간 동안 도시 운영을 조정하세요.`,
+      priority: true,
+    });
+  });
+  eventBus.on(Events.STRESS_TEST_FINISHED, (result) => openStressResultModal(result, {
+    onReport: openReportModal,
+    onClose: refreshAll,
+  }));
   initQuestCelebration(els.questCelebration);
   initOnboardingView();
   initSaveSystem();
@@ -440,6 +508,18 @@ function boot() {
       priority: true,
     });
   });
+  eventBus.on(Events.OPERATIONAL_RISK_WARNING, ({ warning, risk }) => {
+    const credit = warning.startsWith('credit');
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: credit ? '도시 재정 경고' : '필수시설 전력 경고',
+      text: credit
+        ? `연속 적자 ${risk.negativeCreditHours}/24시간`
+        : `필수시설 공급 5% 이하 ${risk.essentialBlackoutHours}/12시간`,
+      meta: '안전한 정산 1회마다 위험 시간이 1시간씩 회복됩니다.',
+      priority: true,
+    });
+  });
+  eventBus.on(Events.OPERATIONAL_RISK_PAUSE, ({ reason }) => openOperationalRiskModal({ reason }));
   eventBus.on(Events.GAME_OVER, ({ summary }) => {
     openCarbonGameOverModal({ hourlyCarbon: summary?.hourlyCarbon, onReset: resetAfterGameOver });
   });
@@ -506,6 +586,31 @@ window.render_game_to_text = () => {
     stage: gameState.stage,
     quest: gameState.questIndex,
     questStatus: gameState.questStatus,
+    progression: {
+      chapter: gameState.progression.chapter,
+      tutorialQuestIndex: gameState.progression.tutorialQuestIndex,
+      tutorialQuestStatus: gameState.progression.tutorialQuestStatus,
+      objectiveSetId: gameState.progression.objectiveSetId,
+      completedObjectiveSetIds: [...gameState.progression.completedObjectiveSetIds],
+      objectives: currentObjectiveEvaluation(gameState)?.cards.map(({ id, completed, value, target }) => ({
+        id, completed, value, target,
+      })) || [],
+    },
+    expansion: {
+      phase: gameState.expansion.phase,
+      firstChoice: gameState.expansion.firstChoice,
+      activeCellCount: gameState.expansion.activeCellIndices.length,
+    },
+    events: {
+      activeId: gameState.events.activeId,
+      next: gameState.events.schedule[0] || null,
+      completedCount: gameState.events.completed.length,
+    },
+    stressTest: {
+      status: gameState.stressTest.status,
+      phaseIndex: gameState.stressTest.phaseIndex,
+      phaseHour: gameState.stressTest.phaseHour,
+    },
     gameTime: { ...calendar, label: formatCalendar(calendar), timeScale: gameState.timeScale },
     visualGameTime: { ...visualCalendar, label: formatCalendar(visualCalendar) },
     climateAlert: gameState.climateAlert,
@@ -517,7 +622,14 @@ window.render_game_to_text = () => {
     metrics: m,
     boardRadius: gameState.boardRadius,
     entities: gameState.grid
-      .map((cell, index) => (cell ? { index, ...coords[index], type: cell.type, level: cell.level } : null))
+      .map((cell, index) => (cell ? {
+        index,
+        ...coords[index],
+        type: cell.type,
+        level: cell.level,
+        priority: cell.priority || 'normal',
+        operationMode: cell.operationMode || 'normal',
+      } : null))
       .filter(Boolean),
     constructionPlan: gameState.constructionPlan.map(({ index, type }) => ({ index, type })),
     selectedFacility: gameState.selectedFacility,

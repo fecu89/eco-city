@@ -3,6 +3,10 @@ import { createHexCoordinates } from './HexGridSystem.js';
 import { calendarAtElapsedHour } from './CalendarSystem.js';
 import { roundCredits } from '../core/Money.js';
 import { applyCarbonCrisis } from './CarbonCrisisSystem.js';
+import { applyAutomaticOperationModes, buildCityModifierContext } from './CityModifierSystem.js';
+import { advanceCityEvents } from './CityEventSystem.js';
+import { applyOperationalRisk } from './CityFailureSystem.js';
+import { advanceStressTest } from './StressTestSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -16,6 +20,12 @@ export function createHourSettler({
   return (state) => {
     const coords = createHexCoordinates(state.boardRadius);
     const calendar = calendarAtElapsedHour(state.elapsedGameHours);
+    const stressRunning = state.stressTest?.status === 'running';
+    const eventTransition = stressRunning
+      ? { forecasted: null, started: null, ended: null, result: null }
+      : advanceCityEvents(state);
+    const automaticModeChanges = applyAutomaticOperationModes(state);
+    const modifierContext = buildCityModifierContext(state, { coords, calendar });
     const additionalDemandByIndex = getResearchDemand(state);
     const power = calculatePowerNetwork({
       grid: state.grid,
@@ -24,6 +34,8 @@ export function createHourSettler({
       tickIndex: state.tickIndex,
       heatwave: state.climateAlert === 'extreme_heat',
       additionalDemandByIndex,
+      batteryReserveUnlocked: state.claimedQuestIds?.has?.('storage-hub') === true,
+      modifierContext,
     });
     Object.entries(power.nextBatteries).forEach(([index, stored]) => {
       const cell = state.grid[Number(index)];
@@ -36,11 +48,12 @@ export function createHourSettler({
       coords,
       facilityPower: power.facilityPower,
       credits: state.credits,
+      modifierContext,
     });
     const creditsBefore = state.credits;
     state.credits = roundCredits(economy.nextCredits);
     state.lastSettlementDelta = roundCredits(state.credits - creditsBefore);
-    const research = advanceResearch(state, power.facilityPower);
+    const research = advanceResearch(state, power.facilityPower, modifierContext);
     const summary = {
       hour: calendar.hour,
       day: calendar.day,
@@ -49,6 +62,8 @@ export function createHourSettler({
       hourlyCarbon: economy.hourlyCarbon,
       hourlyWater: economy.hourlyWater,
       lowCarbonPercent: power.lowCarbonPercent,
+      lowCarbonDelivered: power.lowCarbonDelivered,
+      lowCarbonSurplus: power.lowCarbonSurplus,
       deliveredPower: power.delivered,
       demand: power.demand,
       capacity: economy.labor.capacity,
@@ -61,17 +76,44 @@ export function createHourSettler({
       facilityEconomy: economy.facilityEconomy,
       facilityEnvironment: economy.facilityEnvironment,
       routes: power.routes,
+      batteryOperations: power.batteryOperations,
       batteryStored: round1(Object.values(power.nextBatteries).reduce((sum, item) => sum + item.lowCarbon + item.fossil, 0)),
       overcrowding: economy.overcrowding,
       health: economy.health,
+      expansionUpkeep: economy.expansionUpkeep,
+      modifiers: modifierContext,
+      waterLimit: modifierContext.city.waterLimit,
+      automaticModeChanges,
     };
     const deliveredOnRoutes = power.routes.reduce((sum, route) => sum + route.delivered, 0);
     const transmissionEfficiency = deliveredOnRoutes
       ? power.routes.reduce((sum, route) => sum + route.delivered * route.efficiency, 0) / deliveredOnRoutes * 100
       : 100;
-    const essentialOutage = state.grid.some((cell, index) => cell
-      && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type))
-      && (power.facilityPower[index]?.ratio ?? 1) < 0.9);
+    const essentialIndices = state.grid
+      .map((cell, index) => (cell
+        && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type)) ? index : null))
+      .filter((index) => index != null);
+    const essentialSupplyPercent = essentialIndices.length
+      ? essentialIndices.reduce((sum, index) => sum + (power.facilityPower[index]?.ratio ?? 0), 0) / essentialIndices.length * 100
+      : 0;
+    const essentialOutage = essentialIndices.some((index) => (power.facilityPower[index]?.ratio ?? 0) < 0.9);
+    summary.transmissionEfficiency = round1(transmissionEfficiency);
+    summary.essentialSupplyPercent = round1(essentialSupplyPercent);
+    const cityEvent = stressRunning
+      ? { active: null, forecast: null, forecasted: null, started: null, ended: null, result: null }
+      : advanceCityEvents(state, summary);
+    summary.cityEvent = {
+      active: cityEvent.active,
+      forecast: cityEvent.forecast,
+      forecasted: eventTransition.forecasted || cityEvent.forecasted,
+      started: eventTransition.started || cityEvent.started,
+      ended: eventTransition.ended || cityEvent.ended,
+      result: eventTransition.result || cityEvent.result,
+    };
+    const operationalRisk = stressRunning
+      ? { warnings: [], pauseTransition: null, gameOverTransition: false, risk: state.operationalRisk }
+      : applyOperationalRisk(state, summary);
+    summary.operationalRisk = operationalRisk;
     state.simulationTotals.hours += 1;
     state.simulationTotals.netCredits += economy.netCredits;
     state.simulationTotals.transmissionEfficiency += transmissionEfficiency / 100;
@@ -82,12 +124,14 @@ export function createHourSettler({
     state.simulationTotals.overcrowding += economy.overcrowding;
     state.simulationTotals.health += economy.health;
     state.lastTickSummary = summary;
-    evaluateQuest?.(state, summary);
+    if (!stressRunning) evaluateQuest?.(state, summary);
     const carbonCrisis = applyCarbonCrisis(state, summary.hourlyCarbon);
     summary.carbonCrisis = carbonCrisis;
+    const stressTest = stressRunning ? advanceStressTest(state, summary) : null;
+    summary.stressTest = stressTest;
     state.tickIndex += 1;
     state.elapsedGameHours += 1;
-    return { power, economy, research, carbonCrisis, summary };
+    return { power, economy, research, carbonCrisis, operationalRisk, cityEvent: summary.cityEvent, stressTest, summary };
   };
 }
 

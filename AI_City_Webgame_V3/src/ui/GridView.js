@@ -1,5 +1,4 @@
 import { gameState } from '../core/GameState.js';
-import { FACILITIES } from '../core/Constants.js';
 import { getBoardCoordinates, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { initCityScene3D, renderCityScene3D, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
@@ -9,6 +8,11 @@ import {
   clearConstructionPlan,
   upsertPlannedFacility,
 } from '../systems/ConstructionPlanSystem.js';
+import {
+  cellZoneTrait,
+  constructionCostForCell,
+  isExpansionCellActive,
+} from '../systems/ZoneSystem.js';
 
 let sizeChipEl = null;
 let onCellClick = () => {};
@@ -133,15 +137,20 @@ function buildCellConfigs() {
     : null;
 
   return grid.map((cell, i) => {
+    const active = isExpansionCellActive(gameState, i);
     const base = {
       selected: selectedCell === i,
       newLand: expandedCells.has(i),
       researchWarning: underpoweredResearchCenters.has(i),
+      disabled: !active,
+      zoneTrait: cellZoneTrait(gameState, i),
     };
     if (!cell) {
       const planned = planByIndex.get(i);
       const otherPlan = assessment.items.filter((item) => item.index !== i);
-      const reservedCost = otherPlan.reduce((sum, item) => sum + (FACILITIES[item.type]?.cost || 0), 0);
+      const reservedCost = otherPlan.reduce((sum, item) => (
+        sum + constructionCostForCell(gameState, item.index, item.type)
+      ), 0);
       const validation = validatePlacement(gameState, selectedFacility, i, {
         availableCredits: gameState.credits - reservedCost,
         plan: otherPlan,
@@ -171,7 +180,7 @@ function buildCellConfigs() {
 export function renderGrid() {
   const assessment = assessConstructionPlan(gameState);
   setCellClickHandler(handleSceneCellClick);
-  sizeChipEl.textContent = `육각 반경 ${gameState.boardRadius} · ${gameState.grid.length}칸`;
+  sizeChipEl.textContent = `사용 가능 ${gameState.expansion.activeCellIndices.length}/${gameState.grid.length}칸`;
   renderCityScene3D(buildCellConfigs(), gameState.boardRadius);
   setBuildPreviewMode({
     enabled: gameState.isEditable && placementPreviewVisible,

@@ -8,7 +8,23 @@ export const Events = {
   QUEST_READY: 'quest:ready',
   QUEST_CLAIMED: 'quest:claimed',
   QUEST_STARTED: 'quest:started',
+  OBJECTIVE_STARTED: 'objective:started',
+  OBJECTIVE_PROGRESSED: 'objective:progressed',
+  OBJECTIVE_READY: 'objective:ready',
+  OBJECTIVE_CLAIMED: 'objective:claimed',
+  CITY_EVENT_FORECASTED: 'cityEvent:forecasted',
+  CITY_EVENT_STARTED: 'cityEvent:started',
+  CITY_EVENT_ENDED: 'cityEvent:ended',
+  OPERATIONAL_RISK_WARNING: 'operationalRisk:warning',
+  OPERATIONAL_RISK_PAUSE: 'operationalRisk:pause',
+  STRESS_TEST_STARTED: 'stressTest:started',
+  STRESS_PHASE_CHANGED: 'stressTest:phaseChanged',
+  STRESS_TEST_FINISHED: 'stressTest:finished',
+  STRESS_TEST_START_REQUESTED: 'stressTest:startRequested',
+  REPORT_OPEN_REQUESTED: 'report:openRequested',
   FACILITY_PRIORITY_CHANGED: 'facility:priorityChanged',
+  OPERATION_MODE_CHANGED: 'facility:operationModeChanged',
+  BATTERY_POLICY_CHANGED: 'facility:batteryPolicyChanged',
   RESEARCH_START_REQUESTED: 'research:startRequested',
   RESEARCH_STARTED: 'research:started',
   RESEARCH_CANCEL_REQUESTED: 'research:cancelRequested',
@@ -29,6 +45,8 @@ export const Events = {
   BOARD_DEMOLISHED: 'board:demolished',
   BOARD_FACILITY_SELECTED: 'board:facilitySelected',
   BOARD_EXPANDED: 'board:expanded',
+  EXPANSION_CHOICE_REQUESTED: 'expansion:choiceRequested',
+  EXPANSION_CHOSEN: 'expansion:chosen',
   BUILD_PLAN_CHANGED: 'buildPlan:changed',
   BUILD_PLAN_CLEARED: 'buildPlan:cleared',
   BUILD_PLAN_COMMIT_REQUESTED: 'buildPlan:commitRequested',
@@ -45,10 +63,6 @@ export const Events = {
   // Quiz / concepts
   QUIZ_ANSWERED: 'quiz:answered',
   QUIZ_FINISHED: 'quiz:finished',
-
-  // Diagnosis
-  DIAGNOSIS_TILE_FOUND: 'diagnosis:tileFound',
-  DIAGNOSIS_COMPLETE: 'diagnosis:complete',
 
   // UI
   TOAST_SHOW: 'toast:show',

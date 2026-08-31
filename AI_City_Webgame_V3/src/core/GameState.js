@@ -1,7 +1,37 @@
-import { BOARD, GAME, STAGES, TIME } from './Constants.js';
+import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constants.js';
 import { roundCredits } from './Money.js';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
+
+const initialCellIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
+
+function progressionDefaults() {
+  return {
+    chapter: 1,
+    tutorialQuestIndex: 1,
+    tutorialQuestStatus: 'active',
+    tutorialProgress: {},
+    objectiveSetId: null,
+    objectiveProgress: {},
+    completedObjectiveSetIds: [],
+  };
+}
+
+function expansionDefaults() {
+  return { phase: 0, firstChoice: null, activeCellIndices: initialCellIndices() };
+}
+
+function eventDefaults() {
+  return {
+    seed: GAME.EVENT_SEED,
+    schedule: [],
+    activeId: null,
+    completed: [],
+    forecastAcknowledgedIds: [],
+    currentMetrics: null,
+    lastResult: null,
+  };
+}
 
 export class GameState {
   constructor() {
@@ -31,10 +61,6 @@ export class GameState {
     this.quizAttempts = {};
     this.quizResults = {};
 
-    this.diagnosisFound = new Set();
-    this.diagnosisHintUsed = false;
-    this.diagnosisScannerActive = true;
-
     this.sound = true;
     this.musicEnabled = true;
 
@@ -55,6 +81,20 @@ export class GameState {
     this.climateAlert = 'normal';
     this.consecutiveEssentialOutageHours = 0;
     this.emergencySupportUsedQuestIds = new Set();
+    this.progression = progressionDefaults();
+    this.expansion = expansionDefaults();
+    this.events = eventDefaults();
+    this.stressTest = { status: 'locked', phaseIndex: 0, phaseHour: 0, result: null, metrics: null, attempts: 0 };
+    this.operationalRisk = { negativeCreditHours: 0, essentialBlackoutHours: 0, warningIds: [] };
+    this.emergencySupport = { used: false, economyScorePenalty: 0 };
+    this.decisionCounts = {
+      modeChanges: 0,
+      priorityChanges: 0,
+      researchPauses: 0,
+      emergencySupport: 0,
+      automaticModeChanges: 0,
+      batteryPolicyChanges: 0,
+    };
     this.onboardingVersionSeen = 0;
     this.tutorialStep = 'build-button';
     this.tutorialComplete = false;
@@ -64,6 +104,7 @@ export class GameState {
       completedIds: new Set(),
       techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0 },
       quizAccelerationBankHours: 0,
+      quizCreditQuestionIds: {},
     };
     this.carbonCrisisHours = 0;
     this.carbonWarningMilestones = new Set();
@@ -108,9 +149,6 @@ export class GameState {
       quizPassThreshold: this.quizPassThreshold,
       quizAttempts: this.quizAttempts,
       quizResults: this.quizResults,
-      diagnosisFound: [...this.diagnosisFound],
-      diagnosisHintUsed: this.diagnosisHintUsed,
-      diagnosisScannerActive: this.diagnosisScannerActive,
       sound: this.sound,
       musicEnabled: this.musicEnabled,
       questIndex: this.questIndex,
@@ -128,6 +166,13 @@ export class GameState {
       climateAlert: this.climateAlert,
       consecutiveEssentialOutageHours: this.consecutiveEssentialOutageHours,
       emergencySupportUsedQuestIds: [...this.emergencySupportUsedQuestIds],
+      progression: structuredClone(this.progression),
+      expansion: structuredClone(this.expansion),
+      events: structuredClone(this.events),
+      stressTest: structuredClone(this.stressTest),
+      operationalRisk: structuredClone(this.operationalRisk),
+      emergencySupport: structuredClone(this.emergencySupport),
+      decisionCounts: structuredClone(this.decisionCounts),
       onboardingVersionSeen: this.onboardingVersionSeen,
       tutorialStep: this.tutorialStep,
       tutorialComplete: this.tutorialComplete,
@@ -137,6 +182,7 @@ export class GameState {
         completedIds: [...this.research.completedIds],
         techLevels: { ...this.research.techLevels },
         quizAccelerationBankHours: this.research.quizAccelerationBankHours,
+        quizCreditQuestionIds: structuredClone(this.research.quizCreditQuestionIds || {}),
       },
       carbonCrisisHours: this.carbonCrisisHours,
       carbonWarningMilestones: [...this.carbonWarningMilestones],
@@ -167,9 +213,6 @@ export class GameState {
       this.quizPassThreshold = data.quizPassThreshold ?? 0;
       this.quizAttempts = data.quizAttempts ?? {};
       this.quizResults = data.quizResults ?? {};
-      this.diagnosisFound = new Set(data.diagnosisFound || []);
-      this.diagnosisHintUsed = !!data.diagnosisHintUsed;
-      this.diagnosisScannerActive = data.diagnosisScannerActive ?? true;
       this.sound = data.sound ?? true;
       this.musicEnabled = data.musicEnabled ?? this.musicEnabled;
       this.questIndex = data.questIndex ?? 1;
@@ -181,13 +224,56 @@ export class GameState {
       this.upgradePermitLevel = data.upgradePermitLevel ?? 1;
       this.campaignComplete = !!data.campaignComplete;
       this.elapsedGameHours = data.elapsedGameHours ?? 0;
-      this.timeScale = data.timeScale ?? TIME.DEFAULT_SCALE;
+      this.timeScale = TIME.ALLOWED_SCALES.includes(Number(data.timeScale))
+        ? Number(data.timeScale)
+        : TIME.DEFAULT_SCALE;
       this.lastSettlementDelta = data.lastSettlementDelta ?? 0;
       this.tickIndex = data.tickIndex ?? 0;
       this.lastTickSummary = data.lastTickSummary ?? null;
       this.climateAlert = data.climateAlert ?? 'normal';
       this.consecutiveEssentialOutageHours = data.consecutiveEssentialOutageHours ?? 0;
       this.emergencySupportUsedQuestIds = new Set(data.emergencySupportUsedQuestIds || []);
+      this.progression = {
+        ...progressionDefaults(),
+        ...(data.progression || {}),
+        tutorialProgress: { ...(data.progression?.tutorialProgress || {}) },
+        objectiveProgress: { ...(data.progression?.objectiveProgress || {}) },
+        completedObjectiveSetIds: [...(data.progression?.completedObjectiveSetIds || [])],
+      };
+      this.expansion = {
+        ...expansionDefaults(),
+        ...(data.expansion || {}),
+        activeCellIndices: [...(data.expansion?.activeCellIndices || initialCellIndices())],
+      };
+      this.events = {
+        ...eventDefaults(),
+        ...(data.events || {}),
+        schedule: [...(data.events?.schedule || [])],
+        completed: [...(data.events?.completed || [])],
+        forecastAcknowledgedIds: [...(data.events?.forecastAcknowledgedIds || [])],
+      };
+      this.stressTest = {
+        status: 'locked', phaseIndex: 0, phaseHour: 0, result: null, metrics: null, attempts: 0,
+        ...(data.stressTest || {}),
+      };
+      this.operationalRisk = {
+        negativeCreditHours: 0, essentialBlackoutHours: 0, warningIds: [],
+        ...(data.operationalRisk || {}),
+        warningIds: [...(data.operationalRisk?.warningIds || [])],
+      };
+      this.emergencySupport = {
+        used: false, economyScorePenalty: 0,
+        ...(data.emergencySupport || {}),
+      };
+      this.decisionCounts = {
+        modeChanges: 0,
+        priorityChanges: 0,
+        researchPauses: 0,
+        emergencySupport: 0,
+        automaticModeChanges: 0,
+        batteryPolicyChanges: 0,
+        ...(data.decisionCounts || {}),
+      };
       this.onboardingVersionSeen = data.onboardingVersionSeen ?? 0;
       this.tutorialStep = data.tutorialStep ?? 'build-button';
       this.tutorialComplete = !!data.tutorialComplete;
@@ -202,6 +288,7 @@ export class GameState {
           tidal: data.research?.techLevels?.tidal ?? 0,
         },
         quizAccelerationBankHours: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+        quizCreditQuestionIds: structuredClone(data.research?.quizCreditQuestionIds || {}),
       };
       this.carbonCrisisHours = Math.max(0, Number(data.carbonCrisisHours) || 0);
       this.carbonWarningMilestones = new Set(data.carbonWarningMilestones || []);
@@ -219,11 +306,27 @@ export class GameState {
 
 export function normalizeCell(cell) {
   if (!cell) return null;
+  const maxLevel = FACILITIES[cell.type]?.maxLevel || 3;
+  const level = Math.max(1, Math.min(maxLevel, Math.trunc(Number(cell.level) || 1)));
+  let batteryStoredLowCarbon = Math.max(0, Number(cell.batteryStoredLowCarbon) || 0);
+  let batteryStoredFossil = Math.max(0, Number(cell.batteryStoredFossil) || 0);
+  if (cell.type === 'battery') {
+    const capacity = (STORAGE_LEVELS[level]?.capacity || 0) * 1.3;
+    const total = batteryStoredLowCarbon + batteryStoredFossil;
+    if (total > capacity && total > 0) {
+      const scale = capacity / total;
+      batteryStoredLowCarbon = Math.round(batteryStoredLowCarbon * scale * 100) / 100;
+      batteryStoredFossil = Math.round((capacity - batteryStoredLowCarbon) * 100) / 100;
+    }
+  }
   return {
     ...cell,
+    level,
     priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
-    batteryStoredLowCarbon: Number(cell.batteryStoredLowCarbon) || 0,
-    batteryStoredFossil: Number(cell.batteryStoredFossil) || 0,
+    operationMode: cell.operationMode || 'normal',
+    ...(cell.type === 'battery' ? { batteryPolicy: cell.batteryPolicy || 'auto' } : {}),
+    batteryStoredLowCarbon,
+    batteryStoredFossil,
   };
 }
 

@@ -8,18 +8,31 @@ import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { getFacilityPermit, validateDemolitionPermit, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 import { calculateEnvironmentalOperations, facilityLevelStats } from './FacilityOperationSystem.js';
+import { isBatteryHubForConsumer } from './PowerNetworkSystem.js';
+import { buildCityModifierContext, effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import {
   createHexCoordinates,
-  expandHexGrid,
   isOuterRing,
   neighborIndices as hexNeighborIndices,
 } from './HexGridSystem.js';
+import {
+  activateExpansionSide,
+  constructionCostForCell,
+  isExpansionCellActive,
+} from './ZoneSystem.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (v) => Math.round(v * 10) / 10;
+const BATTERY_CONSUMER_TYPES = Object.freeze(['residential', 'factory', 'data', 'cooling']);
 
-export function cellStats(cell) {
-  return facilityLevelStats(cell);
+function batteryHasConsumerNeighbor(grid, batteryIndex, coords) {
+  return grid.some((cell, consumerIndex) => cell
+    && BATTERY_CONSUMER_TYPES.includes(cell.type)
+    && isBatteryHubForConsumer(batteryIndex, consumerIndex, coords));
+}
+
+export function cellStats(cell, modifier = null) {
+  return modifier ? effectiveFacilityStats(cell, modifier) : facilityLevelStats(cell);
 }
 
 export function getBoardCoordinates(state = gameState) {
@@ -43,8 +56,12 @@ export function getCellSpatial(grid, index, coords = getBoardCoordinates()) {
   if (t === 'factory') (hasNeighbor(grid, index, coords, ['thermal', 'nuclear', 'solar', 'wind', 'tidal']) ? positive : warnings).push('발전소 인접');
   if (t === 'data') (hasNeighbor(grid, index, coords, ['cooling']) ? positive : warnings).push('순환냉각 인접');
   if (t === 'residential' && hasNeighbor(grid, index, coords, ['green'])) positive.push('녹지 생활권');
-  if (['solar', 'wind'].includes(t)) (hasNeighbor(grid, index, coords, ['battery']) ? positive : warnings).push('저장장치 연결');
-  if (t === 'battery' && hasNeighbor(grid, index, coords, ['solar', 'wind'])) positive.push('재생에너지 연결');
+  if (['solar', 'wind'].includes(t)) {
+    const connectedHub = neighborIndices(index, coords)
+      .some((batteryIndex) => grid[batteryIndex]?.type === 'battery' && batteryHasConsumerNeighbor(grid, batteryIndex, coords));
+    (connectedHub ? positive : warnings).push('소비지 저장 허브 연결');
+  }
+  if (t === 'battery' && batteryHasConsumerNeighbor(grid, index, coords)) positive.push('소비지 저장 허브');
   if (t === 'nuclear' && hasNeighbor(grid, index, coords, ['cooling'])) positive.push('냉각 보조');
   if (t === 'cooling' && hasNeighbor(grid, index, coords, ['data', 'nuclear'])) positive.push('냉각 수요 연결');
   if (['factory', 'thermal'].includes(t) && hasNeighbor(grid, index, coords, ['residential'])) warnings.push('주거지 오염 갈등');
@@ -68,7 +85,7 @@ export const PARTNER_RULES = {
   residential: { good: ['green'], bad: ['factory', 'thermal', 'nuclear', 'data'] },
   solar: { good: ['battery'], bad: [] },
   wind: { good: ['battery'], bad: [] },
-  battery: { good: ['solar', 'wind'], bad: [] },
+  battery: { good: BATTERY_CONSUMER_TYPES, bad: [] },
   cooling: { good: ['data', 'nuclear'], bad: [] },
   green: { good: ['residential'], bad: ['thermal', 'factory'] },
 };
@@ -82,24 +99,37 @@ export function placementPreview(facilityKey, grid, coords = getBoardCoordinates
   grid.forEach((cell, i) => {
     if (cell) return;
     const ns = neighborIndices(i, coords);
-    if (ns.some((n) => grid[n] && rule.good.includes(grid[n].type))) good.add(i);
+    const hasGood = ns.some((n) => {
+      if (!grid[n] || !rule.good.includes(grid[n].type)) return false;
+      if (['solar', 'wind'].includes(facilityKey) && grid[n].type === 'battery') {
+        return batteryHasConsumerNeighbor(grid, n, coords);
+      }
+      return true;
+    });
+    if (hasGood) good.add(i);
     if (ns.some((n) => grid[n] && rule.bad.includes(grid[n].type))) bad.add(i);
   });
   return { good, bad };
 }
 
-export function calcMetrics(grid, coords = getBoardCoordinates()) {
+export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContext = null) {
   const previewOperations = Object.fromEntries(grid
     .map((cell, index) => cell ? [index, { powerRatio: 1, operationRatio: 1 }] : null)
     .filter(Boolean));
-  const environment = calculateEnvironmentalOperations({ grid, coords, facilityOperations: previewOperations });
+  const environment = calculateEnvironmentalOperations({
+    grid,
+    coords,
+    facilityOperations: previewOperations,
+    modifierContext,
+  });
   let dev = 0, demand = 0, supply = 0, carbon = environment.hourlyCarbon, water = environment.hourlyWater, renewableSupply = 0, dataCount = 0, thermalCount = 0;
   let synergyScore = 0, synergyLinks = 0, conflictPairs = 0, heatCluster = 0;
   const linkedRenewables = new Set();
+  const consumerHubBatteries = new Set();
 
   grid.forEach((cell, i) => {
     if (!cell) return;
-    const s = cellStats(cell);
+    const s = cellStats(cell, facilityModifierAt(modifierContext, i));
     dev += s.dev; demand += s.demand; supply += s.supply;
     if (['solar', 'wind', 'tidal'].includes(cell.type)) renewableSupply += s.supply;
     if (cell.type === 'data') dataCount++;
@@ -122,8 +152,8 @@ export function calcMetrics(grid, coords = getBoardCoordinates()) {
     if (cell.type === 'residential' && ns.some((n) => grid[n]?.type === 'green')) {
       dev += 4 * cell.level; synergyScore += 4 * cell.level; synergyLinks++;
     }
-    if (['solar', 'wind'].includes(cell.type) && ns.some((n) => grid[n]?.type === 'battery')) {
-      linkedRenewables.add(i); synergyLinks++; synergyScore += 3 * cell.level;
+    if (cell.type === 'battery' && batteryHasConsumerNeighbor(grid, i, coords)) {
+      consumerHubBatteries.add(i); synergyLinks++; synergyScore += 3 * cell.level;
     }
     if (cell.type === 'nuclear' && ns.some((n) => grid[n]?.type === 'cooling')) {
       synergyLinks++; synergyScore += 2;
@@ -144,6 +174,12 @@ export function calcMetrics(grid, coords = getBoardCoordinates()) {
       ns.forEach((n) => { if (grid[n]?.type === 'green') conflictPairs++; });
     }
   });
+
+  if (consumerHubBatteries.size) {
+    grid.forEach((cell, index) => {
+      if (['solar', 'wind'].includes(cell?.type)) linkedRenewables.add(index);
+    });
+  }
 
   let renewablePenalty = 0;
   grid.forEach((cell, i) => {
@@ -185,7 +221,9 @@ export function demolitionRefund(cell) {
 }
 
 export function refreshMetrics() {
-  gameState.metrics = calcMetrics(gameState.grid, getBoardCoordinates(gameState));
+  const coords = getBoardCoordinates(gameState);
+  const modifierContext = buildCityModifierContext(gameState, { coords });
+  gameState.metrics = calcMetrics(gameState.grid, coords, modifierContext);
   return gameState.metrics;
 }
 
@@ -198,6 +236,7 @@ export function selectFacility(key) {
 const PLACEMENT_MESSAGES = Object.freeze({
   not_editable: '현재 퀘스트에서는 도시를 편집할 수 없습니다.',
   invalid_cell: '유효하지 않은 대지입니다.',
+  inactive_expansion: '아직 개방하지 않은 확장 대지입니다.',
   occupied: '이미 시설이 있는 대지입니다.',
   locked_quest: '퀘스트 보상으로 먼저 해금해야 합니다.',
   locked_research: '연구를 완료해야 해금됩니다.',
@@ -220,6 +259,7 @@ export function validatePlacement(state, facilityKey, index, {
   let permit = null;
   if (!state.isEditable) reason = 'not_editable';
   else if (!Number.isInteger(index) || !coords[index]) reason = 'invalid_cell';
+  else if (!isExpansionCellActive(state, index)) reason = 'inactive_expansion';
   else if (grid[index]) reason = 'occupied';
   else if (!facility) reason = 'locked_quest';
   else if (facilityKey === 'tidal' && (!state.unlockedFacilities.has('tidal') || (state.research?.techLevels?.tidal || 0) < 1)) reason = 'locked_research';
@@ -237,14 +277,17 @@ export function validatePlacement(state, facilityKey, index, {
       });
       if (!validateGridFacilityDependencies(projectedGrid, state).ok) reason = 'thermal_reserve_required';
     }
-    if (!reason && availableCredits < facility.cost) reason = 'insufficient_credits';
+    const buildCost = constructionCostForCell(state, index, facilityKey);
+    if (!reason && availableCredits < buildCost) reason = 'insufficient_credits';
   }
+  const buildCost = facility ? constructionCostForCell(state, index, facilityKey) : 0;
   return {
     ok: !reason,
     reason,
     facility,
     permit,
-    missingCredits: facility ? Math.max(0, Math.round((facility.cost - availableCredits) * 10) / 10) : 0,
+    buildCost,
+    missingCredits: facility ? Math.max(0, Math.round((buildCost - availableCredits) * 10) / 10) : 0,
     message: reason === 'facility_limit' ? permit.message : reason ? PLACEMENT_MESSAGES[reason] : '건설할 수 있습니다.',
   };
 }
@@ -257,7 +300,7 @@ export function validateUpgrade(state, index) {
   if (cell.level >= facility.maxLevel) return { ok: false, reason: 'max_level', facility };
   const nextLevel = cell.level + 1;
   if (nextLevel > state.upgradePermitLevel) return { ok: false, reason: 'city_permit_required', requiredLevel: nextLevel, facility };
-  if (['solar', 'wind', 'battery', 'tidal'].includes(cell.type)
+  if (['solar', 'wind', 'battery'].includes(cell.type)
     && nextLevel > (state.research?.techLevels?.[cell.type] || 0)) {
     return { ok: false, reason: 'technology_required', requiredLevel: nextLevel, facility };
   }
@@ -282,8 +325,10 @@ export function upgradeRequirementMessage(state, validation) {
   if (validation.reason === 'technology_required') {
     const cell = state.grid.find((item) => item?.type === validation.facility && item) || null;
     const type = cell?.type || Object.entries(FACILITIES).find(([, facility]) => facility === validation.facility)?.[0];
-    const researchId = validation.requiredLevel >= 3 ? 'renewable3' : {
-      solar: 'solar2', wind: 'wind2', battery: 'battery2', tidal: 'tidal1',
+    const researchId = validation.requiredLevel >= 3 ? {
+      solar: 'solar3', wind: 'wind3', battery: 'battery3',
+    }[type] : {
+      solar: 'solar2', wind: 'wind2', battery: 'battery2',
     }[type];
     const name = RESEARCH[researchId]?.name || '해당 기술';
     return `${name} 연구를 완료해야 ${validation.facility.name} Lv.${validation.requiredLevel} 강화가 가능합니다.`;
@@ -317,8 +362,13 @@ export function placeFacility(index) {
   if (!validation.ok) return validation;
   const f = validation.facility;
 
-  gameState.grid[index] = { type: key, level: 1 };
-  gameState.credits = roundCredits(gameState.credits - f.cost);
+  gameState.grid[index] = {
+    type: key,
+    level: 1,
+    operationMode: 'normal',
+    ...(key === 'battery' ? { batteryPolicy: 'auto' } : {}),
+  };
+  gameState.credits = roundCredits(gameState.credits - validation.buildCost);
   gameState.turn++;
   const metrics = refreshMetrics();
   const placedCount = gameState.grid.filter(Boolean).length;
@@ -354,20 +404,21 @@ export function demolishCell(index) {
   return { ok: true, index, name, refund, previous: { ...cell }, metrics };
 }
 
-export function expandBoard(state = gameState) {
-  if (state.boardRadius >= BOARD.EXPANDED_RADIUS) return { ok: false, reason: 'already_expanded' };
+export function expandBoard(state = gameState, side = null) {
+  if (!side) return { ok: false, reason: 'expansion_choice_required', requiresChoice: true };
   const oldRadius = state.boardRadius;
-  const oldLength = state.grid.length;
-  state.grid = expandHexGrid(state.grid, oldRadius, BOARD.EXPANDED_RADIUS);
-  state.boardRadius = BOARD.EXPANDED_RADIUS;
-  const addedIndices = Array.from({ length: state.grid.length - oldLength }, (_, offset) => oldLength + offset);
-  state.expandedCells = new Set(addedIndices);
+  const activation = activateExpansionSide(state, side);
+  if (!activation.ok) return activation;
   if (state === gameState) refreshMetrics();
-  return { ok: true, oldRadius, newRadius: state.boardRadius, addedIndices, metrics: state.metrics };
+  return { ...activation, oldRadius, newRadius: state.boardRadius, metrics: state.metrics };
 }
 
-export function expandGrid() {
-  const result = expandBoard(gameState);
+export function expandGrid(side = null) {
+  if (!side) {
+    eventBus.emit(Events.EXPANSION_CHOICE_REQUESTED, {});
+    return { ok: false, reason: 'expansion_choice_required', requiresChoice: true };
+  }
+  const result = expandBoard(gameState, side);
   if (!result.ok) return result;
   eventBus.emit(Events.BOARD_EXPANDED, result);
   setTimeout(() => {

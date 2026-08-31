@@ -6,13 +6,18 @@ function levelValue(type, level = 0) {
   return WORKFORCE_LEVELS[type]?.[level] ?? 0;
 }
 
-export function calculateWorkforce(grid = []) {
+export function calculateWorkforce(grid = [], modifierContext = null) {
   let capacity = 0;
   let used = 0;
 
-  grid.forEach((cell) => {
+  grid.forEach((cell, index) => {
     if (!cell) return;
-    const value = levelValue(cell.type, cell.level);
+    const modifier = modifierContext?.byFacility?.[index]?.combined
+      || modifierContext?.byFacility?.[index]
+      || {};
+    const multiplier = Number.isFinite(Number(modifier.workforce)) ? Number(modifier.workforce) : 1;
+    const flat = Number.isFinite(Number(modifier.workforceFlat)) ? Number(modifier.workforceFlat) : 0;
+    const value = Math.max(0, levelValue(cell.type, cell.level) * multiplier + flat);
     if (cell.type === 'residential') capacity += value;
     else used += value;
   });

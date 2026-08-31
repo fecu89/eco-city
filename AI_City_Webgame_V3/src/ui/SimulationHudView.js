@@ -46,8 +46,14 @@ export function renderSimulationHud() {
   els.carbon.textContent = `${summary?.lowCarbonPercent ?? 0}%`;
   const labels = { normal: '평상시', heat_watch: '폭염 주의', extreme_heat: '극한 폭염' };
   const carbonActive = gameState.carbonCrisisHours > 0;
+  const risk = gameState.operationalRisk;
+  const operationalAlert = risk.negativeCreditHours > 0 || risk.essentialBlackoutHours > 0;
   els.alert.querySelector('b').textContent = carbonActive
     ? `탄소 위험 ${gameState.carbonCrisisHours}/${CARBON_CRISIS.GAME_OVER_HOURS}h`
+    : operationalAlert
+      ? risk.negativeCreditHours >= risk.essentialBlackoutHours
+        ? `적자 위험 ${risk.negativeCreditHours}/24h`
+        : `필수전력 위험 ${risk.essentialBlackoutHours}/12h`
     : labels[gameState.climateAlert] || labels.normal;
-  els.alert.className = `sr-only ${carbonActive ? 'climate-carbon_crisis' : `climate-${gameState.climateAlert}`}`;
+  els.alert.className = `sr-only ${carbonActive || operationalAlert ? 'climate-carbon_crisis' : `climate-${gameState.climateAlert}`}`;
 }

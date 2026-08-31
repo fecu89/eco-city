@@ -5,7 +5,7 @@ import { migrateV1Save } from '../../../src/systems/SaveSystem.js';
 test('new state starts quest 1 at 2040 epoch with only residential unlocked', () => {
   const state = new GameState();
 
-  expect(SAVE_VERSION).toBe(5);
+  expect(SAVE_VERSION).toBe(6);
   expect(state.questIndex).toBe(1);
   expect(state.elapsedGameHours).toBe(0);
   expect(state.boardRadius).toBe(2);

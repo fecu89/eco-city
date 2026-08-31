@@ -329,7 +329,7 @@ test('all fifteen rewards follow the approved unlock, permit, credit, and comple
   expect(claimCurrentQuest(state)).toEqual({ ok: false, reason: 'already_claimed' });
 });
 
-test('emergency support is limited to once per quest at one credit or less', () => {
+test('emergency support is limited to once per campaign at one credit or less', () => {
   const state = new GameState();
   state.credits = 1;
   expect(requestEmergencySupport(state)).toEqual({ ok: true, credits: 5 });

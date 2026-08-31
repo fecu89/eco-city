@@ -9,6 +9,7 @@ import {
   handleResearchFacilityRemoved,
   listResearchAvailability,
   researchDemandByIndex,
+  researchEffects,
   startResearch,
 } from '../../../src/systems/ResearchSystem.js';
 
@@ -113,10 +114,45 @@ test('every research finishes within three real minutes at 1x speed', () => {
     solar2: [120, 10],
     wind2: [120, 10],
     battery2: [150, 15],
+    smartGrid: [150, 15],
+    demandResponse: [150, 15],
     tidal1: [150, 18],
-    renewable3: [180, 24],
+    solar3: [180, 20],
+    wind3: [180, 20],
+    battery3: [180, 22],
   });
   expect(Math.max(...Object.values(RESEARCH).map((item) => item.durationHours))).toBe(180);
+});
+
+test('tidal research accepts either generation branch and legacy capstone is not listed', () => {
+  const state = stateWithDataCenter({ credits: 100 });
+  state.research.completedIds.add('wind2');
+  const availability = listResearchAvailability(state);
+  expect(availability.find(({ id }) => id === 'tidal1')).toMatchObject({ available: true, reasonCodes: [] });
+  expect(availability.some(({ id }) => id === 'renewable3')).toBe(false);
+});
+
+test('completed branch research exposes its distinct simulation effects', () => {
+  const state = new GameState();
+  expect(researchEffects(state)).toMatchObject({
+    solarSupply: 1,
+    windSupply: 1,
+    lowWindSupply: 0.35,
+    batteryCapacity: 1,
+    transmissionLossPerTile: 0.06,
+    demandResponse: false,
+  });
+  state.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'smartGrid', 'demandResponse', 'battery3']);
+  expect(researchEffects(state)).toMatchObject({
+    solarSupply: 1.2,
+    windSupply: 1.15,
+    lowWindSupply: 0.5,
+    batteryCapacity: 1.3,
+    transmissionLossPerTile: 0.04,
+    demandResponse: true,
+    batteryReservePolicies: true,
+    batteryEmergencyReserve: true,
+  });
 });
 
 test('finishing one job applies its technology once and leaves other jobs running', () => {

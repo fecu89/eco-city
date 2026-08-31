@@ -24,7 +24,7 @@ test('two data centers run independent research without pausing the city', async
   await expect(page.locator('#upgradeBtn')).toBeVisible();
   await expect(page.locator('.research-panel')).toContainText('데이터센터 #0 연구');
   await expect(page.locator('.facility-console-scroll')).toHaveCSS('overflow-y', 'auto');
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(5);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const solarCard = page.locator('[data-research-start="solar2"]');
   await expect(solarCard.locator('svg')).toHaveCount(1);
@@ -91,11 +91,36 @@ test('an underpowered research center is emphasized on both the city and researc
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
-    state.grid[1] = { type: 'nuclear', level: 1, priority: 'normal' };
+    state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
     window.__settleSimulationHour();
   });
   await expect(active).not.toHaveClass(/underpowered/);
   expect(await page.evaluate(() => window.__getCellVisual(0).researchWarning)).toBe(false);
+});
+
+for (const viewport of [
+  { name: 'desktop', width: 1280, height: 720 },
+  { name: 'mobile', width: 390, height: 844 },
+]) test(`${viewport.name} level-two data center previews and confirms an operation mode`, async ({ gamePage: page }) => {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.grid[0] = { type: 'data', level: 2, priority: 'normal', operationMode: 'normal' };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  const focused = page.locator('[data-operation-mode="research"]');
+  await expect(focused).toBeVisible();
+  await focused.click();
+  await expect(page.locator('#modeChangeForecast')).toContainText('9.9 → 14.9 E/h');
+  expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].operationMode)).toBe('normal');
+  await page.locator('#confirmOperationMode').click();
+  expect(await page.evaluate(() => ({
+    mode: window.__GAME_STATE__.grid[0].operationMode,
+    decisions: window.__GAME_STATE__.decisionCounts.modeChanges,
+  }))).toEqual({ mode: 'research', decisions: 1 });
 });
 
 test('research acceleration opens its assigned four-question quiz and affects only that job', async ({ gamePage: page }) => {
@@ -144,7 +169,7 @@ for (const viewport of [
     window.__clickCell(0);
   });
 
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(5);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const gridBox = await page.locator('.research-grid').boundingBox();
   const modalBox = await page.locator('#modalCard').boundingBox();
@@ -173,4 +198,27 @@ test('locked research explains its exact prerequisite on hover and touch', async
   // aria-disabled는 카드가 연구 실행 대상이 아님을 전달하지만, 터치 안내는 그대로 받아야 한다.
   await solar.click({ force: true });
   await expect(page.locator('.toast', { hasText: '태양광 해금 필요' })).toBeVisible();
+});
+
+test('battery reserve policy is visible, locked by research, and persisted from the facility console', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    const state = window.__GAME_STATE__;
+    window.__setTimeScale(0);
+    state.grid[0] = { type: 'battery', level: 2, batteryPolicy: 'auto' };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await expect(page.locator('#batteryPolicyControls')).toBeVisible();
+  await expect(page.locator('[data-battery-policy="reserve30"]')).toBeDisabled();
+  await expect(page.locator('[data-battery-policy="reserve30"]')).toHaveAttribute('title', /차세대 저장 화학/);
+  await page.evaluate(() => {
+    window.__GAME_STATE__.research.completedIds.add('battery2');
+    window.__clickCell(0);
+  });
+  await page.locator('[data-battery-policy="reserve30"]').click();
+  expect(await page.evaluate(() => ({
+    policy: window.__GAME_STATE__.grid[0].batteryPolicy,
+    decisions: window.__GAME_STATE__.decisionCounts.batteryPolicyChanges,
+  }))).toEqual({ policy: 'reserve30', decisions: 1 });
 });

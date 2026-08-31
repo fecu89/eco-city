@@ -16,14 +16,14 @@ test('the final council is the only quest quiz while every research owns four qu
   expect(state.quizResearchId).toBeNull();
 
   expect(Object.keys(RESEARCH_QUIZZES).sort()).toEqual([
-    'battery2', 'renewable3', 'solar2', 'tidal1', 'wind2',
+    'battery2', 'battery3', 'demandResponse', 'smartGrid', 'solar2', 'solar3', 'tidal1', 'wind2', 'wind3',
   ]);
   const ids = [];
   Object.entries(RESEARCH_QUIZZES).forEach(([researchId, questions]) => {
     expect(questions, researchId).toHaveLength(4);
     questions.forEach((question) => ids.push(question.id));
   });
-  expect(new Set(ids).size).toBe(20);
+  expect(new Set(ids).size).toBe(36);
 });
 
 test('answer options are shuffled per session without changing the correct answer or source bank', () => {
@@ -73,20 +73,19 @@ test('four correct answers can finish the longest research without accelerating 
   state.credits = 100;
   state.grid[1] = { type: 'data', level: 1 };
   state.grid[2] = { type: 'data', level: 1 };
-  state.unlockedFacilities.add('solar');
+  state.unlockedFacilities.add('battery');
   state.unlockedFacilities.add('wind');
-  state.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'tidal1']);
-  expect(startResearch(state, 'renewable3', 1).ok).toBe(true);
-  state.research.completedIds.delete('wind2');
+  state.research.completedIds = new Set(['battery2']);
+  expect(startResearch(state, 'battery3', 1).ok).toBe(true);
   expect(startResearch(state, 'wind2', 2).ok).toBe(true);
 
   for (let answer = 0; answer < 4; answer++) {
-    const result = accelerateResearchFromQuiz(state, 'renewable3');
-    expect(result.appliedJobs).toEqual(['renewable3']);
+    const result = accelerateResearchFromQuiz(state, 'battery3');
+    expect(result.appliedJobs).toEqual(['battery3']);
   }
 
-  expect(state.research.completedIds.has('renewable3')).toBe(true);
-  expect(state.research.jobs.renewable3).toBeUndefined();
+  expect(state.research.completedIds.has('battery3')).toBe(true);
+  expect(state.research.jobs.battery3).toBeUndefined();
   expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(0);
 });
 
@@ -99,4 +98,20 @@ test('research acceleration does not bank when its selected job is missing', () 
     reason: 'research_not_active',
   });
   expect(state.research.quizAccelerationBankHours).toBe(0);
+});
+
+test('a research question grants acceleration only once across retries', () => {
+  const state = new GameState();
+  state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveHours: 0 };
+  startResearchQuiz(state, 'solar2', () => 0);
+  const first = currentQuestQuizQuestion(state);
+  const correctIndex = first.options.findIndex((option) => option.correct);
+  expect(answerQuestQuiz(state, correctIndex).acceleration.hours).toBe(30);
+
+  state.quizPool = [first];
+  state.quizIndex = 0;
+  state.quizAnswered = false;
+  const repeated = answerQuestQuiz(state, correctIndex);
+  expect(repeated.acceleration).toMatchObject({ hours: 0, reason: 'question_already_credited' });
+  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(30);
 });

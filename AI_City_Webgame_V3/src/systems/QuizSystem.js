@@ -101,9 +101,20 @@ export function answerQuestQuiz(state, optionIndex) {
   state.quizAnswered = true;
   const correct = !!question.options[optionIndex]?.correct;
   if (correct) state.quizCorrect += 1;
-  const acceleration = correct && state.quizResearchId
-    ? accelerateResearchFromQuiz(state, state.quizResearchId)
-    : null;
+  let acceleration = null;
+  if (correct && state.quizResearchId) {
+    state.research.quizCreditQuestionIds ||= {};
+    const creditedIds = new Set(state.research.quizCreditQuestionIds[state.quizResearchId] || []);
+    if (creditedIds.has(question.id)) {
+      acceleration = {
+        appliedJobs: [], hours: 0, completed: [], reason: 'question_already_credited',
+      };
+    } else {
+      creditedIds.add(question.id);
+      state.research.quizCreditQuestionIds[state.quizResearchId] = [...creditedIds];
+      acceleration = accelerateResearchFromQuiz(state, state.quizResearchId);
+    }
+  }
   const result = {
     correct,
     correctIndex: question.options.findIndex((option) => option.correct),

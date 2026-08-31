@@ -16,6 +16,9 @@ import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { claimObjectiveSet, isObjectiveCampaignActive } from '../systems/ObjectiveSystem.js';
+import { clearObjectivePanelMode, openObjectiveMap, renderObjectivePanel } from './ObjectiveView.js';
+import { STRESS_PHASES } from '../core/EventDefinitions.js';
 
 let els;
 let onChanged = () => {};
@@ -29,6 +32,22 @@ export function initQuestView(elements, changed) {
   els = elements;
   onChanged = changed || (() => {});
   eachNode(els.claim, (claim) => claim.addEventListener('click', () => {
+    if (isObjectiveCampaignActive(gameState)) {
+      const result = claimObjectiveSet(gameState);
+      if (!result.ok) return;
+      if (result.expansion?.ok) eventBus.emit(Events.BOARD_EXPANDED, result.expansion);
+      detailsExpanded = false;
+      onChanged({ phase: 'objective-claimed', result });
+      return;
+    }
+    if (['ready', 'failed'].includes(gameState.stressTest?.status)) {
+      eventBus.emit(Events.STRESS_TEST_START_REQUESTED, {});
+      return;
+    }
+    if (gameState.stressTest?.status === 'passed') {
+      eventBus.emit(Events.REPORT_OPEN_REQUESTED, {});
+      return;
+    }
     const quizKind = QUIZ_KINDS[gameState.questIndex];
     if (quizKind && gameState.questStatus !== 'ready_to_claim') {
       startQuestQuiz(gameState, quizKind);
@@ -95,6 +114,9 @@ function progressForCurrent() {
 
 export function renderQuest() {
   if (!els) return;
+  if (renderObjectivePanel(gameState, els)) return;
+  clearObjectivePanelMode(els);
+  if (renderStressTestPanel()) return;
   const evaluation = evaluateCurrentQuest(gameState);
   const quest = QUESTS[gameState.questIndex - 1];
   eachNode(els.level, (node) => { node.textContent = `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`; });
@@ -125,6 +147,51 @@ export function renderQuest() {
     els.expand.querySelector('span').textContent = detailsExpanded ? '간단히 보기' : '전체 내용 펼치기';
   }
   eachNode(els.root, (node) => node.closest('[data-hud-panel="quest"]')?.classList.toggle('quest-details-expanded', detailsExpanded));
+}
+
+function renderStressTestPanel() {
+  const stress = gameState.stressTest;
+  if (!stress || ['locked', 'legacy_complete'].includes(stress.status)) return false;
+  const totalHours = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationHours, 0);
+  const completedHours = STRESS_PHASES
+    .slice(0, stress.phaseIndex)
+    .reduce((sum, phase) => sum + phase.durationHours, 0) + (stress.phaseHour || 0);
+  const phase = STRESS_PHASES[Math.min(stress.phaseIndex, STRESS_PHASES.length - 1)];
+  const statusText = stress.status === 'running'
+    ? `${phase.label} ${stress.phaseHour}/${phase.durationHours}시간`
+    : stress.status === 'failed'
+      ? '도시 보완 후 재도전 가능'
+      : stress.status === 'passed'
+        ? '생존 성공 · 운영 보고서 준비 완료'
+        : '5단계 복합 위기 시험 준비 완료';
+  eachNode(els.level, (node) => { node.textContent = 'CHAPTER 4 · FINAL'; });
+  eachNode(els.title, (node) => { node.textContent = '도시 스트레스 테스트'; });
+  eachNode(els.goal, (node) => { node.textContent = statusText; });
+  eachNode(els.reward, (node) => { node.textContent = '통과 후 도시 운영 프로필과 최종 보고서'; });
+  eachNode(els.bar, (node) => {
+    node.style.width = `${stress.status === 'passed' ? 100 : Math.min(100, completedHours / totalHours * 100)}%`;
+  });
+  eachNode(els.claim, (node) => {
+    node.disabled = stress.status === 'running';
+    node.textContent = stress.status === 'ready'
+      ? '테스트 시작'
+      : stress.status === 'failed'
+        ? '테스트 재도전'
+        : stress.status === 'passed'
+          ? '최종 보고서 보기'
+          : `${phase.label} 진행 중`;
+  });
+  eachNode(els.root, (node) => {
+    node.classList.toggle('quest-ready', stress.status !== 'running');
+    node.classList.add('objective-mode');
+  });
+  eachNode(els.contextAction, (node) => node.classList.add('hidden'));
+  if (els.details) {
+    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationHours}h</small></span>`).join('')}</div>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
+    els.details.classList.remove('hidden');
+  }
+  els.expand?.classList.add('hidden');
+  return true;
 }
 
 function renderQuestQuizModal() {
@@ -202,6 +269,10 @@ function renderQuestQuizResultModal(result) {
 }
 
 export function openQuestMap() {
+  if (isObjectiveCampaignActive(gameState) || !['locked', 'legacy_complete'].includes(gameState.stressTest?.status)) {
+    openObjectiveMap(gameState);
+    return;
+  }
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUEST MAP</span><h2>기후 생존 퀘스트</h2></div><button class="icon-btn" id="questMapClose">×</button></div>
     <div class="quest-map-list">${QUESTS.map((quest) => `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`).join('')}</div>

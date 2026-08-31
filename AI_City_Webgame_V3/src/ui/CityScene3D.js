@@ -50,6 +50,11 @@ const TILE_COLORS = {
   previewGood: new THREE.Color(0x18402f),
   previewBad: new THREE.Color(0x3a1a20),
   newLand: new THREE.Color(0x1a3a30),
+  inactive: new THREE.Color(0x101b24),
+  zoneSolar: new THREE.Color(0x3f4930),
+  zoneResidential: new THREE.Color(0x244455),
+  zoneWind: new THREE.Color(0x244b4d),
+  zoneIndustrial: new THREE.Color(0x463b35),
 };
 
 const MARKER_COLORS = {
@@ -523,6 +528,7 @@ function refreshLoadedAssets() {
 }
 
 function tileColorFor(config) {
+  if (config.disabled) return TILE_COLORS.inactive;
   if (config.previewGood) return TILE_COLORS.previewGood;
   if (config.previewBad) return TILE_COLORS.previewBad;
   if (config.newLand) return TILE_COLORS.newLand;
@@ -530,6 +536,10 @@ function tileColorFor(config) {
   if (config.diagnosisState === 'ok') return TILE_COLORS.ok;
   if (config.diagnosisState === 'unknown') return TILE_COLORS.unknown;
   if (config.selected) return TILE_COLORS.selected;
+  if (config.zoneTrait === 'solar') return TILE_COLORS.zoneSolar;
+  if (config.zoneTrait === 'residential') return TILE_COLORS.zoneResidential;
+  if (config.zoneTrait === 'wind') return TILE_COLORS.zoneWind;
+  if (config.zoneTrait === 'industrial') return TILE_COLORS.zoneIndustrial;
   return TILE_COLORS.base;
 }
 
@@ -1377,6 +1387,11 @@ export function getCityRendererStats() {
     textureCount: renderer?.info.memory.textures ?? 0,
     occupiedCells: currentConfigs.filter((config) => !config.empty && config.type).length,
     tileInstances: tileMesh?.count ?? 0,
+    inactiveTileCount: currentConfigs.filter((config) => config.disabled).length,
+    zoneTileCounts: currentConfigs.reduce((counts, config) => {
+      if (config.zoneTrait) counts[config.zoneTrait] = (counts[config.zoneTrait] || 0) + 1;
+      return counts;
+    }, {}),
     boardRadius: currentRadius,
     hexCellCount: currentCoords.length,
     facilityInstances,

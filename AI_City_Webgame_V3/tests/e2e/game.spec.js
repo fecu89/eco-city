@@ -20,6 +20,10 @@ test.describe('boot and agent contract', () => {
     expect(snapshot.research).not.toHaveProperty('active');
     expect(snapshot.visualGameTime).toMatchObject({ year: 2040, month: 1, day: 1 });
     expect(snapshot).toHaveProperty('carbonCrisisHours');
+    expect(snapshot.progression).toMatchObject({ chapter: 1, tutorialQuestIndex: 1, objectiveSetId: null });
+    expect(snapshot.expansion).toMatchObject({ phase: 0, firstChoice: null });
+    expect(snapshot.events).toMatchObject({ activeId: null });
+    expect(snapshot.stressTest).toMatchObject({ status: 'locked', phaseIndex: 0 });
     expect(snapshot.island).toMatchObject({ landInstances: 37, shoreInstances: 24, waterInstances: 156 });
   });
 
@@ -141,7 +145,7 @@ test.describe('quest operations, celebration, reset, and save', () => {
       state.grid = Array(19).fill(null);
       state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
       state.grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
-      state.grid[2] = { type: 'nuclear', level: 1, priority: 'normal' };
+      state.grid[2] = { type: 'thermal', level: 1, priority: 'normal' };
       window.__refreshGameForTest();
     });
     await page.evaluate(() => {

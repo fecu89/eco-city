@@ -1,6 +1,8 @@
 import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { roundCredits } from '../core/Money.js';
+import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
+export { researchEffects } from './ResearchEffectSystem.js';
 
 function prerequisiteMet(state, prerequisite) {
   const [kind, id, rawLevel] = prerequisite.split(':');
@@ -8,6 +10,18 @@ function prerequisiteMet(state, prerequisite) {
   if (kind === 'research') return state.research.completedIds.has(id);
   if (kind === 'tech') return (state.research.techLevels[id] || 0) >= Number(rawLevel);
   return false;
+}
+
+function prerequisiteGroup(definition) {
+  if (Array.isArray(definition.prerequisites)) return { mode: 'all', items: definition.prerequisites };
+  return definition.prerequisites || { mode: 'all', items: [] };
+}
+
+function unmetPrerequisites(state, definition) {
+  const group = prerequisiteGroup(definition);
+  const missing = group.items.filter((item) => !prerequisiteMet(state, item));
+  if (group.mode === 'any' && missing.length < group.items.length) return [];
+  return missing;
 }
 
 function prerequisiteLabel(prerequisite) {
@@ -30,17 +44,24 @@ export function activeResearchJobs(state) {
 export function listResearchAvailability(state) {
   const jobs = researchJobs(state);
   return Object.values(RESEARCH).map((definition) => {
-    const reasonCodes = definition.prerequisites.filter((item) => !prerequisiteMet(state, item));
+    const reasonCodes = unmetPrerequisites(state, definition);
     const completed = state.research.completedIds.has(definition.id);
+    const reasonLabels = reasonCodes.map(prerequisiteLabel);
     return {
       ...definition,
       completed,
       active: Boolean(jobs[definition.id]),
       available: !completed && !jobs[definition.id] && reasonCodes.length === 0,
       reasonCodes,
-      reasonLabels: reasonCodes.map(prerequisiteLabel),
+      reasonLabels: groupLabel(definition, reasonLabels),
     };
   });
+}
+
+function groupLabel(definition, labels) {
+  const group = prerequisiteGroup(definition);
+  if (group.mode === 'any' && labels.length > 1) return [`${labels.join(' 또는 ')}`];
+  return labels;
 }
 
 function validDataCenter(state, index) {
@@ -101,7 +122,8 @@ export function assignResearchDataCenter(state, researchId, index) {
 
 export function researchDemandByIndex(state) {
   return activeResearchJobs(state).reduce((demand, job) => {
-    if (validDataCenter(state, job.dataCenterIndex)) {
+    if (validDataCenter(state, job.dataCenterIndex)
+      && state.grid[job.dataCenterIndex]?.operationMode !== 'eco') {
       demand[job.dataCenterIndex] = RESEARCH_RULES.EXTRA_DEMAND;
     }
     return demand;
@@ -158,7 +180,7 @@ export function accelerateResearchFromQuiz(state, researchId, hours = null) {
   };
 }
 
-export function advanceResearchOneHour(state, facilityPower) {
+export function advanceResearchOneHour(state, facilityPower, modifierContext = null) {
   const results = {};
   const completed = [];
 
@@ -186,8 +208,24 @@ export function advanceResearchOneHour(state, facilityPower) {
       };
       continue;
     }
+    const cell = state.grid[active.dataCenterIndex];
+    const researchSpeed = effectiveFacilityStats(
+      cell,
+      facilityModifierAt(modifierContext, active.dataCenterIndex),
+    ).researchSpeed;
+    if (researchSpeed <= 0) {
+      active.status = 'mode_paused';
+      results[active.id] = {
+        status: 'mode_paused',
+        advancedHours: 0,
+        completed: false,
+        ratio,
+        dataCenterIndex: active.dataCenterIndex,
+      };
+      continue;
+    }
     const dataCenterLevel = state.grid[active.dataCenterIndex]?.level || 1;
-    const advancedHours = RESEARCH_RULES.DATA_CENTER_SPEED[dataCenterLevel] || 1;
+    const advancedHours = (RESEARCH_RULES.DATA_CENTER_SPEED[dataCenterLevel] || 1) * researchSpeed;
     active.elapsedEffectiveHours = Math.min(definition.durationHours, active.elapsedEffectiveHours + advancedHours);
     active.status = 'running';
     if (active.elapsedEffectiveHours < definition.durationHours) {

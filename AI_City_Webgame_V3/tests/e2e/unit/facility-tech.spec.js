@@ -162,31 +162,26 @@ test('an upgrade is blocked when its extra staff would exceed the resident popul
   expect(upgradeRequirementMessage(gameState, validation)).toContain('주거지');
 });
 
-test('the capstone research makes every level-three facility reachable', () => {
+test('level-three renewable upgrades require and receive their own branch research', () => {
   gameState.credits = 500;
   gameState.upgradePermitLevel = 3;
-  gameState.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'tidal1']);
+  gameState.research.completedIds = new Set(['solar2', 'wind2', 'battery2']);
   gameState.research.techLevels = { solar: 2, wind: 2, battery: 2, tidal: 1 };
-  gameState.research.jobs.renewable3 = {
-    id: 'renewable3',
-    dataCenterIndex: 5,
-    elapsedEffectiveHours: 180,
-    paidCost: 24,
-  };
+  for (const researchId of ['solar3', 'wind3', 'battery3']) {
+    gameState.research.jobs[researchId] = {
+      id: researchId,
+      dataCenterIndex: 5,
+      elapsedEffectiveHours: 180,
+      paidCost: 20,
+    };
+    completeResearchJob(gameState, researchId);
+  }
 
-  completeResearchJob(gameState, 'renewable3');
-
-  expect(gameState.research.techLevels).toEqual({ solar: 3, wind: 3, battery: 3, tidal: 3 });
-  Object.entries(FACILITIES)
-    .filter(([, facility]) => facility.maxLevel === 3)
-    .forEach(([type]) => {
-      gameState.grid = Array(19).fill(null);
-      if (type === 'residential') {
-        gameState.grid[0] = { type, level: 2, priority: 'essential' };
-      } else {
-        gameState.grid[0] = { type: 'residential', level: 3, priority: 'essential' };
-        gameState.grid[1] = { type, level: 2, priority: 'normal' };
-      }
-      expect(validateUpgrade(gameState, type === 'residential' ? 0 : 1), type).toMatchObject({ ok: true, nextLevel: 3 });
-    });
+  expect(gameState.research.techLevels).toEqual({ solar: 3, wind: 3, battery: 3, tidal: 1 });
+  for (const type of ['solar', 'wind', 'battery']) {
+    gameState.grid = Array(19).fill(null);
+    gameState.grid[0] = { type: 'residential', level: 3, priority: 'essential' };
+    gameState.grid[1] = { type, level: 2, priority: 'normal' };
+    expect(validateUpgrade(gameState, 1), type).toMatchObject({ ok: true, nextLevel: 3 });
+  }
 });

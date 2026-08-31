@@ -3,6 +3,7 @@ import { QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
+import { evaluateObjectiveSet, isObjectiveCampaignActive } from './ObjectiveSystem.js';
 
 const facilities = (state, type) => state.grid.filter((cell) => cell?.type === type);
 
@@ -39,6 +40,8 @@ export function claimCurrentQuest(state) {
   if (state.claimedQuestIds.has(quest.id)) return { ok: false, reason: 'already_claimed' };
   if (state.questStatus !== 'ready_to_claim') return { ok: false, reason: 'not_ready' };
   state.claimedQuestIds.add(quest.id);
+  state.progression.tutorialQuestIndex = Math.min(6, quest.index);
+  state.progression.tutorialQuestStatus = 'complete';
   state.credits = roundCredits(state.credits + quest.reward.credits);
   quest.reward.unlockFacilities.forEach((facility) => state.unlockedFacilities.add(facility));
   if (state.questIndex === 4) {
@@ -66,9 +69,18 @@ export function claimCurrentQuest(state) {
     credits: quest.reward.credits,
     unlockedFacility: quest.reward.unlockFacility,
     unlockedFacilities: [...quest.reward.unlockFacilities],
-    nextQuest: state.questIndex,
+    nextQuest: quest.index === 6 ? null : state.questIndex,
     expandGrid: quest.index === 6,
   };
+  if (quest.index === 6) {
+    state.progression.chapter = 2;
+    state.progression.objectiveSetId = null;
+    state.progression.objectiveProgress = {};
+    state.questStatus = 'claimed';
+  } else if (quest.index < 6) {
+    state.progression.tutorialQuestIndex = state.questIndex;
+    state.progression.tutorialQuestStatus = 'active';
+  }
   eventBus.emit(Events.QUEST_CLAIMED, { quest, result });
   return result;
 }
@@ -78,6 +90,7 @@ const allRatios = (state, type, summary) => state.grid
   .filter((ratio) => ratio != null);
 
 export function applySimulationQuestProgress(state, summary) {
+  if (isObjectiveCampaignActive(state)) return evaluateObjectiveSet(state, summary);
   let condition = false;
   let required = 3;
   switch (state.questIndex) {
@@ -171,10 +184,10 @@ export function markQuestQuizResult(state, passed) {
 }
 
 export function requestEmergencySupport(state) {
-  const key = String(state.questIndex);
-  if (state.emergencySupportUsedQuestIds.has(key)) return { ok: false, reason: 'already_used' };
+  if (state.emergencySupport?.used) return { ok: false, reason: 'already_used' };
   if (state.credits > 1) return { ok: false, reason: 'not_eligible' };
-  state.emergencySupportUsedQuestIds.add(key);
+  state.emergencySupport = { used: true, economyScorePenalty: 2 };
+  state.decisionCounts.emergencySupport = (state.decisionCounts.emergencySupport || 0) + 1;
   state.credits = roundCredits(state.credits + 4);
   return { ok: true, credits: state.credits };
 }

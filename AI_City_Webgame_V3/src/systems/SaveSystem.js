@@ -1,4 +1,4 @@
-import { BOARD, FACILITIES, GAME } from '../core/Constants.js';
+import { BOARD, FACILITIES, GAME, TIME } from '../core/Constants.js';
 import { SAVE_VERSION, normalizeCell } from '../core/GameState.js';
 import { gameState } from '../core/GameState.js';
 import { roundCredits } from '../core/Money.js';
@@ -195,6 +195,7 @@ export function stripObsoleteState(data) {
   const obsolete = new Set([
     'evidence', 'badges', 'advisorQuestions', 'transcripts', 'aiAdvice', 'aiHistory',
     'simulationDay', 'simulationHour', 'gridSize',
+    'diagnosisFound', 'diagnosisHintUsed', 'diagnosisScannerActive',
   ]);
   Object.keys(clean).forEach((key) => {
     if (obsolete.has(key) || key.toLowerCase().startsWith('ai')) delete clean[key];
@@ -244,11 +245,132 @@ export function migrateV4ToV5(data) {
       ...research,
       jobs,
       quizAccelerationBankHours: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+      quizCreditQuestionIds: structuredClone(data.research?.quizCreditQuestionIds || {}),
     },
     carbonCrisisHours: Math.max(0, Number(data.carbonCrisisHours) || 0),
     carbonWarningMilestones: Array.isArray(data.carbonWarningMilestones) ? data.carbonWarningMilestones : [],
     gameOver: !!data.gameOver,
     gameOverReason: data.gameOverReason ?? null,
+  };
+}
+
+function legacyProgression(data, changedReady) {
+  const questIndex = Math.max(1, Math.min(15, Math.trunc(Number(data.questIndex) || 1)));
+  const campaignComplete = Boolean(data.campaignComplete);
+  const completedObjectiveSetIds = [];
+  if (questIndex >= 10 || campaignComplete) completedObjectiveSetIds.push('transition-choice');
+  if (questIndex >= 13 || campaignComplete) completedObjectiveSetIds.push('specialization');
+  if (questIndex >= 15 || campaignComplete) completedObjectiveSetIds.push('resilience');
+  const objectiveSetId = campaignComplete || questIndex >= 15 || questIndex <= 6
+    ? null
+    : questIndex <= 9
+      ? 'transition-choice'
+      : questIndex <= 12
+        ? 'specialization'
+        : 'resilience';
+  return {
+    chapter: campaignComplete || questIndex >= 15 ? 4 : questIndex <= 6 ? 1 : questIndex <= 9 ? 2 : 3,
+    tutorialQuestIndex: Math.min(6, questIndex),
+    tutorialQuestStatus: questIndex > 6 ? 'claimed' : (changedReady ? 'active' : data.questStatus || 'active'),
+    tutorialProgress: questIndex <= 6 && !changedReady ? { ...(data.questProgress || {}) } : {},
+    objectiveSetId,
+    objectiveProgress: {},
+    completedObjectiveSetIds,
+  };
+}
+
+function legacyExpansion(data, grid) {
+  const isExpanded = grid.length === BOARD.EXPANDED_CELLS || Number(data.boardRadius) >= BOARD.EXPANDED_RADIUS;
+  return isExpanded
+    ? {
+      phase: 2,
+      firstChoice: 'legacy_full',
+      activeCellIndices: Array.from({ length: BOARD.EXPANDED_CELLS }, (_, index) => index),
+    }
+    : {
+      phase: 0,
+      firstChoice: null,
+      activeCellIndices: Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index),
+    };
+}
+
+function normalizeV6Grid(data) {
+  const expanded = Array.isArray(data.grid) && (data.grid.length === BOARD.EXPANDED_CELLS || Number(data.boardRadius) >= BOARD.EXPANDED_RADIUS);
+  const length = expanded ? BOARD.EXPANDED_CELLS : BOARD.INITIAL_CELLS;
+  return Array.from({ length }, (_, index) => normalizeCell(data.grid?.[index] ?? null));
+}
+
+export function migrateV5ToV6(data) {
+  const changedReady = [9, 14].includes(Number(data.questIndex)) && data.questStatus === 'ready_to_claim';
+  const grid = normalizeV6Grid(data);
+  const completedIds = [...(data.research?.completedIds || [])];
+  const completed = new Set(completedIds);
+  const techLevels = {
+    solar: Math.max(1, Math.min(3, Number(data.research?.techLevels?.solar) || 1)),
+    wind: Math.max(1, Math.min(3, Number(data.research?.techLevels?.wind) || 1)),
+    battery: Math.max(1, Math.min(3, Number(data.research?.techLevels?.battery) || 1)),
+    tidal: Math.max(0, Math.min(3, Number(data.research?.techLevels?.tidal) || 0)),
+  };
+  if (completed.has('renewable3')) {
+    for (const type of ['solar', 'wind', 'battery', 'tidal']) techLevels[type] = Math.max(3, techLevels[type]);
+  }
+  const campaignComplete = Boolean(data.campaignComplete);
+  const legacySupportUsed = Array.isArray(data.emergencySupportUsedQuestIds)
+    && data.emergencySupportUsedQuestIds.length > 0;
+  const boardRadius = grid.length === BOARD.EXPANDED_CELLS ? BOARD.EXPANDED_RADIUS : BOARD.INITIAL_RADIUS;
+  const selectedCell = Number.isInteger(data.selectedCell) && data.selectedCell >= 0 && data.selectedCell < grid.length
+    ? data.selectedCell
+    : null;
+  return {
+    ...data,
+    v: 6,
+    credits: roundCredits(data.credits),
+    boardRadius,
+    grid,
+    selectedCell,
+    timeScale: TIME.ALLOWED_SCALES.includes(Number(data.timeScale)) ? Number(data.timeScale) : TIME.DEFAULT_SCALE,
+    upgradePermitLevel: Math.max(1, Math.min(3, Math.trunc(Number(data.upgradePermitLevel) || 1))),
+    questStatus: changedReady ? 'active' : data.questStatus || 'active',
+    questProgress: changedReady ? {} : { ...(data.questProgress || {}) },
+    progression: legacyProgression(data, changedReady),
+    expansion: legacyExpansion(data, grid),
+    events: {
+      seed: GAME.EVENT_SEED,
+      schedule: [],
+      activeId: null,
+      completed: [],
+      forecastAcknowledgedIds: [],
+    },
+    stressTest: {
+      status: campaignComplete ? 'legacy_complete' : Number(data.questIndex) >= 15 ? 'ready' : 'locked',
+      phaseIndex: 0,
+      phaseHour: 0,
+      result: null,
+    },
+    operationalRisk: {
+      negativeCreditHours: 0,
+      essentialBlackoutHours: Math.max(0, Number(data.consecutiveEssentialOutageHours) || 0),
+      warningIds: [],
+    },
+    emergencySupport: {
+      used: legacySupportUsed,
+      economyScorePenalty: legacySupportUsed ? 2 : 0,
+    },
+    decisionCounts: {
+      modeChanges: 0,
+      priorityChanges: 0,
+      researchPauses: 0,
+      emergencySupport: Number(legacySupportUsed),
+      automaticModeChanges: 0,
+      batteryPolicyChanges: 0,
+    },
+    research: {
+      ...(data.research || {}),
+      jobs: Object.fromEntries(Object.entries(data.research?.jobs || {}).map(([id, job]) => [id, { ...job, id: job?.id || id }])),
+      completedIds,
+      techLevels,
+      quizAccelerationBankHours: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+    },
   };
 }
 
@@ -259,6 +381,7 @@ export function migrateSaveData(data) {
   if (migrated.v === 2) migrated = migrateV2ToV3(migrated);
   if (migrated.v === 3) migrated = migrateV3ToV4(migrated);
   if (migrated.v === 4) migrated = migrateV4ToV5(migrated);
+  if (migrated.v === 5) migrated = migrateV5ToV6(migrated);
   if (migrated.v !== SAVE_VERSION) throw new Error(`Unsupported save version: ${migrated.v}`);
   return stripObsoleteState(migrated);
 }

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
-import { applyCarbonCrisis } from '../../../src/systems/CarbonCrisisSystem.js';
+import { applyCarbonCrisis, carbonPressureForHours } from '../../../src/systems/CarbonCrisisSystem.js';
 
 function crisisState({ questIndex = 6, carbonCrisisHours = 0 } = {}) {
   const state = new GameState();
@@ -37,4 +37,15 @@ test('carbon crisis is inactive until quest 5 has been completed', () => {
     const state = crisisState({ questIndex });
     expect(applyCarbonCrisis(state, 99)).toMatchObject({ active: false, hours: 0 });
   }
+});
+
+test('carbon pressure tiers change exactly at 24, 72, 144, and 168 hours', () => {
+  expect(carbonPressureForHours(23)).toMatchObject({ tier: 'normal', healthMultiplier: 1, residentialIncomeMultiplier: 1, waterMultiplier: 1, reportPenalty: 0 });
+  expect(carbonPressureForHours(24)).toMatchObject({ tier: 'watch', healthMultiplier: 1.25, residentialIncomeMultiplier: 1, waterMultiplier: 1 });
+  expect(carbonPressureForHours(71).tier).toBe('watch');
+  expect(carbonPressureForHours(72)).toMatchObject({ tier: 'danger', healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05 });
+  expect(carbonPressureForHours(143).tier).toBe('danger');
+  expect(carbonPressureForHours(144)).toMatchObject({ tier: 'severe', reportPenalty: 5 });
+  expect(carbonPressureForHours(167).tier).toBe('severe');
+  expect(carbonPressureForHours(168).tier).toBe('extreme');
 });

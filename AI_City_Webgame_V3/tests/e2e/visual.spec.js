@@ -174,7 +174,7 @@ test.describe('visual mobile', () => {
       window.__refreshGameForTest();
       window.__clickCell(0);
     });
-    await expect(page.locator('.research-grid > .research-card')).toHaveCount(5);
+    await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
     await expect(page).toHaveScreenshot('facility-console-research-mobile.png', { maxDiffPixels: 18000 });
   });
 

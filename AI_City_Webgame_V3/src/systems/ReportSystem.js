@@ -1,6 +1,7 @@
 import { REPORT_TIERS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
+import { carbonPressureForHours } from './CarbonCrisisSystem.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -62,7 +63,9 @@ export function computeReport() {
 
   const sustainability = clamp(100 - Math.max(0, -m.balance) * 8 - m.carbon * 2.2 - Math.max(0, m.water - 10) * 2, 0, 100);
   const spatial = clamp(m.synergyLinks * 18 - m.conflictPairs * 12, 0, 100);
-  const operationScore = operationsScore(operations);
+  const penalties = (gameState.emergencySupport?.economyScorePenalty || 0)
+    + carbonPressureForHours(gameState.carbonCrisisHours).reportPenalty;
+  const operationScore = Math.max(0, round1(operationsScore(operations) - penalties));
   const designScore = round1(
     sustainability / 100 * 15
     + spatial / 100 * 10
@@ -87,6 +90,7 @@ export function computeReport() {
     total,
     tier,
     operations,
+    penalties,
     devDelta: m.dev - b.dev,
     balanceDelta: Math.round((m.balance - b.balance) * 10) / 10,
     carbonDelta: m.carbon - (b.carbon ?? m.carbon),
