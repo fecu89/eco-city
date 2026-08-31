@@ -379,7 +379,9 @@ test.describe('fullscreen world HUD', () => {
     });
     await expect(page.locator('#modal')).toBeVisible();
 
-    await page.locator('[data-facility-tab="management"]').click();
+    await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
+    await expect(page.locator('#upgradeBtn')).toBeVisible();
+    await expect(page.locator('#demolishBtn')).toBeVisible();
     await page.locator('#upgradeBtn').click();
 
     await expect(page.locator('#modal')).toBeHidden();

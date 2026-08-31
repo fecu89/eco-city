@@ -80,8 +80,14 @@ function rewardText(quest) {
 function progressForCurrent() {
   if (gameState.questStatus === 'ready_to_claim' || gameState.questStatus === 'claimed') return 100;
   if (gameState.questIndex === 1) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'residential').length * 50);
+  if (gameState.questIndex === 3) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'green').length * 100);
+  if (gameState.questIndex === 9) {
+    const hours = Math.min(1, (gameState.questProgress.consecutiveHours || 0) / 3);
+    const energy = Math.min(1, (gameState.questProgress.hubEnergy || 0) / 8);
+    return Math.min(hours, energy) * 100;
+  }
   const hours = gameState.questProgress.consecutiveHours || 0;
-  const required = [2, 3, 4, 5, 6, 7].includes(gameState.questIndex)
+  const required = [2, 4, 5, 6, 7].includes(gameState.questIndex)
     ? QUEST_REQUIREMENTS.OPERATING_HOURS
     : gameState.questIndex === 14 ? 4 : 3;
   return Math.min(100, hours / required * 100);

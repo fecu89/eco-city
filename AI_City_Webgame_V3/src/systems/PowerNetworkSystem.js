@@ -1,6 +1,7 @@
-import { FACILITIES, LEVEL_MULTIPLIERS, POWER_RULES, STORAGE_LEVELS } from '../core/Constants.js';
+import { POWER_RULES, STORAGE_LEVELS } from '../core/Constants.js';
 import { getDemandMultiplier, getSolarMultiplier, getWindMultiplier } from './ClimateSystem.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
+import { facilityLevelStats } from './FacilityOperationSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
 const LOW_CARBON = new Set(['nuclear', 'solar', 'wind', 'tidal']);
@@ -21,9 +22,7 @@ export function isBatteryNeighbor(batteryIndex, consumerIndex, coordinates) {
 }
 
 function levelValue(cell, field) {
-  const facility = FACILITIES[cell.type];
-  if (field === 'supply') return (facility.supply || 0) * LEVEL_MULTIPLIERS.output[cell.level];
-  return (facility.demand || 0) * LEVEL_MULTIPLIERS.demand[cell.level];
+  return facilityLevelStats(cell)[field] || 0;
 }
 
 export function calculatePowerNetwork({

@@ -1,4 +1,4 @@
-import { FACILITIES, FACILITY_LIMITS_BY_QUEST } from '../core/Constants.js';
+import { FACILITIES, FACILITY_LIMITS_BY_QUEST, GRID_RESERVE_RULES } from '../core/Constants.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 
 const LAST_QUEST = 15;
@@ -57,31 +57,51 @@ export function getFacilityPermit(state, type, plan = []) {
   return getFacilityPermitForCount(state, type, planned);
 }
 
-export function validateGridFacilityDependencies(grid) {
+function hasCompletedStorageHub(state) {
+  return state?.claimedQuestIds?.has?.(GRID_RESERVE_RULES.BATTERY_SUBSTITUTE_QUEST_ID) === true;
+}
+
+export function validateGridFacilityDependencies(grid, state = null) {
   const nuclearCount = countType(grid, 'nuclear');
   const thermalCount = countType(grid, 'thermal');
-  if (nuclearCount > 0 && thermalCount < 1) {
-    return {
-      ok: false,
-      reason: 'thermal_reserve_required',
-      message: '핵발전을 운영하려면 화력발전 예비력 1기를 함께 유지해야 합니다.',
-    };
+  const batteryCount = countType(grid, 'battery');
+  if (nuclearCount < 1) {
+    return { ok: true, reason: null, reserveType: null, message: '핵발전 예비력 조건이 필요하지 않습니다.' };
   }
-  return { ok: true, reason: null, message: '필수 발전 예비력 조건을 충족했습니다.' };
+  if (thermalCount > 0) {
+    return { ok: true, reason: null, reserveType: 'thermal', message: '화력발전이 핵발전 예비력을 제공합니다.' };
+  }
+  if (hasCompletedStorageHub(state) && batteryCount > 0) {
+    return { ok: true, reason: null, reserveType: 'battery', message: '에너지저장 시설이 핵발전 예비력을 제공합니다.' };
+  }
+  return {
+    ok: false,
+    reason: 'thermal_reserve_required',
+    reserveType: null,
+    message: '핵발전을 운영하려면 화력발전 1기가 필요합니다. 저탄소 저장 허브 완료 후에는 에너지저장 시설로 대체할 수 있습니다.',
+  };
 }
 
 export function validateDemolitionPermit(state, index) {
   const cell = state?.grid?.[index];
   if (!cell) return { ok: false, reason: 'empty', message: '철거할 시설이 없습니다.' };
   const nuclearCount = countType(state.grid, 'nuclear');
-  const thermalCount = countType(state.grid, 'thermal');
-  if (cell.type === 'thermal' && nuclearCount > 0 && thermalCount <= 1) {
-    return {
-      ok: false,
-      reason: 'last_thermal_supports_nuclear',
-      message: '핵발전이 남아 있어 마지막 화력발전 예비력은 철거할 수 없습니다. 핵발전을 먼저 철거하세요.',
-      resolution: '핵발전소를 먼저 철거한 뒤 화력발전소를 철거하세요.',
-    };
+  if (nuclearCount > 0 && ['thermal', 'battery'].includes(cell.type)) {
+    const projectedGrid = state.grid.map((item, cellIndex) => cellIndex === index ? null : item);
+    const dependency = validateGridFacilityDependencies(projectedGrid, state);
+    if (!dependency.ok) {
+      const batteryReserve = cell.type === 'battery';
+      return {
+        ok: false,
+        reason: batteryReserve ? 'last_battery_supports_nuclear' : 'last_thermal_supports_nuclear',
+        message: batteryReserve
+          ? '화력 없는 핵발전망의 마지막 에너지저장 시설은 철거할 수 없습니다.'
+          : '핵발전이 남아 있어 마지막 화력발전 예비력은 철거할 수 없습니다. 저탄소 저장 허브 완료 후 배터리로 대체할 수 있습니다.',
+        resolution: batteryReserve
+          ? '화력발전 예비력을 다시 확보하거나 핵발전을 먼저 철거하세요.'
+          : '저탄소 저장 허브를 완료하고 에너지저장 시설을 유지하거나 핵발전을 먼저 철거하세요.',
+      };
+    }
   }
   const projectedGrid = state.grid.map((item, cellIndex) => cellIndex === index ? null : item);
   const workforce = validateWorkforceTransition(state.grid, projectedGrid);

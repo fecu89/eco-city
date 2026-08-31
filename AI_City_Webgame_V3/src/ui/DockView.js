@@ -1,20 +1,15 @@
-import { FACILITIES, FACILITY_ECONOMY, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { FACILITIES, FACILITY_BUILD_ORDER, FACILITY_ECONOMY, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
 import { formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { QUESTS } from '../core/QuestDefinitions.js';
 import { getFacilityPermit } from '../systems/FacilityPermitSystem.js';
 
 let dockEl = null;
 let detailEl = null;
 let detailFacilityKey = null;
 
-const FACILITY_UNLOCK_ORDER = new Map([
-  ['residential', 0],
-  ...QUESTS
-    .flatMap((quest) => quest.reward.unlockFacilities.map((facility) => [facility, quest.index])),
-]);
+const FACILITY_DISPLAY_ORDER = new Map(FACILITY_BUILD_ORDER.map((facility, index) => [facility, index]));
 
 export function initDockView(el, sharedDetailEl = null) {
   dockEl = el;
@@ -60,8 +55,8 @@ function orderedFacilities() {
   return Object.entries(FACILITIES).sort(([left], [right]) => {
     const unlockedDifference = Number(!gameState.unlockedFacilities.has(left)) - Number(!gameState.unlockedFacilities.has(right));
     if (unlockedDifference) return unlockedDifference;
-    return (FACILITY_UNLOCK_ORDER.get(left) ?? Number.MAX_SAFE_INTEGER)
-      - (FACILITY_UNLOCK_ORDER.get(right) ?? Number.MAX_SAFE_INTEGER);
+    return (FACILITY_DISPLAY_ORDER.get(left) ?? Number.MAX_SAFE_INTEGER)
+      - (FACILITY_DISPLAY_ORDER.get(right) ?? Number.MAX_SAFE_INTEGER);
   });
 }
 

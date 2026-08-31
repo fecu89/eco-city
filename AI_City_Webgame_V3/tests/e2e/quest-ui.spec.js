@@ -43,9 +43,25 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#questRewardClose')).toHaveCount(0);
     await expect(page.locator('.toast.quest-reward-alert')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questPanel')).toContainText('LEVEL 2 / 15');
+    await expect(page.locator('#questPanelGoal')).toContainText('흑자로 2시간');
+    await expect(page.locator('#questPanelReward')).toContainText('녹지 해금');
     expect(await page.evaluate(() => window.__GAME_STATE__.credits)).toBe(before + 4);
     expect(await page.evaluate(() => window.__GAME_STATE__.unlockedFacilities.has('factory'))).toBe(true);
     expect(await page.evaluate(() => window.__GAME_STATE__.unlockedFacilities.has('thermal'))).toBe(true);
+  });
+
+  test('level 3 asks for one green space and keeps data center as its reward', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 3;
+      state.questStatus = 'active';
+      state.unlockedFacilities.add('green');
+      window.__refreshGameForTest();
+    });
+    const panel = await openQuestPanel(page);
+    await expect(panel.locator('#questPanelTitle')).toHaveText('첫 녹지 조성');
+    await expect(panel.locator('#questPanelGoal')).toContainText('녹지 1칸');
+    await expect(panel.locator('#questPanelReward')).toContainText('데이터센터 해금');
   });
 
   test('the compact quest card expands to show every condition and reward in place', async ({ gamePage: page }) => {
@@ -107,7 +123,7 @@ test.describe('quest economy HUD', () => {
     await page.locator('#facilityPriorityControls [data-priority="essential"]').click();
     expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].priority)).toBe('essential');
 
-    await page.locator('[data-facility-tab="management"]').click();
+    await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
     await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 6.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('환급 3.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('손실 3.00 💰');
@@ -196,6 +212,10 @@ test.describe('quest economy HUD', () => {
     await openQuestPanel(page);
     await page.locator('#questPanelClaimBtn').click();
     await expect(page.locator('#modalCard')).toContainText('기후 생존 도시 성적표');
+    await expect(page.locator('#modalCard')).toContainText('운영 점수');
+    await expect(page.locator('#modalCard')).toContainText('설계 점수');
+    await expect(page.locator('#modalCard')).toContainText('지식 점수');
+    await expect(page.locator('#modalCard')).toContainText('퀴즈 정답률');
     await expect(page.locator('#modalCard')).toContainText('평균 송전 효율');
     await expect(page.locator('#validationBtn')).toHaveCount(0);
   });

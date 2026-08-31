@@ -123,3 +123,36 @@ test('simulation controller keeps one timer across nested pause and resume', () 
   controller.resume('hidden');
   expect(timers.size).toBe(1);
 });
+
+test('simulation controller reset clears speed, progress, and every pause reason', () => {
+  for (const scale of [0, 1, 4]) {
+    let nextId = 0;
+    let currentTime = 0;
+    const timers = new Map();
+    const controller = createSimulationController({
+      intervalMs: 1000,
+      settle: () => {},
+      now: () => currentTime,
+      setTimer: (fn, ms) => { const id = ++nextId; timers.set(id, { fn, ms }); return id; },
+      clearTimer: (id) => timers.delete(id),
+    });
+
+    controller.start();
+    currentTime = 250;
+    controller.setTimeScale(scale);
+    controller.pause('modal');
+    controller.pause('hidden');
+    controller.reset();
+
+    expect(controller.getState(), `reset from ${scale}x`).toMatchObject({
+      running: true,
+      paused: false,
+      pauseReasons: [],
+      scheduled: true,
+      timeScale: 1,
+      progress: 0,
+    });
+    expect(timers.size).toBe(1);
+    controller.dispose();
+  }
+});

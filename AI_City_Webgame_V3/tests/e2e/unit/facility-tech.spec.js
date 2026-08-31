@@ -14,6 +14,7 @@ import { evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
 import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
+import { completeResearchJob } from '../../../src/systems/ResearchSystem.js';
 
 test.beforeEach(() => gameState.reset());
 
@@ -34,6 +35,29 @@ test('board placement enforces quest capacity and thermal reserve for nuclear', 
   });
   gameState.grid[3] = { type: 'thermal', level: 1 };
   expect(validatePlacement(gameState, 'nuclear', 2)).toMatchObject({ ok: true });
+});
+
+test('a proven storage hub can reserve a newly placed nuclear facility without thermal', () => {
+  gameState.credits = 100;
+  gameState.questIndex = 10;
+  gameState.unlockedFacilities.add('nuclear');
+  gameState.claimedQuestIds.add('storage-hub');
+  gameState.grid[0] = { type: 'residential', level: 1 };
+  gameState.grid[1] = { type: 'battery', level: 1 };
+
+  expect(validatePlacement(gameState, 'nuclear', 2)).toMatchObject({ ok: true });
+});
+
+test('a valid nuclear reserve never bypasses the construction credit check', () => {
+  gameState.credits = 0;
+  gameState.questIndex = 5;
+  gameState.unlockedFacilities.add('nuclear');
+  gameState.grid[0] = { type: 'thermal', level: 1 };
+
+  expect(validatePlacement(gameState, 'nuclear', 1)).toMatchObject({
+    ok: false,
+    reason: 'insufficient_credits',
+  });
 });
 
 test('board demolition command preserves the last thermal reserve while nuclear remains', () => {
@@ -136,4 +160,33 @@ test('an upgrade is blocked when its extra staff would exceed the resident popul
     shortage: 1,
   });
   expect(upgradeRequirementMessage(gameState, validation)).toContain('주거지');
+});
+
+test('the capstone research makes every level-three facility reachable', () => {
+  gameState.credits = 500;
+  gameState.upgradePermitLevel = 3;
+  gameState.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'tidal1']);
+  gameState.research.techLevels = { solar: 2, wind: 2, battery: 2, tidal: 1 };
+  gameState.research.jobs.renewable3 = {
+    id: 'renewable3',
+    dataCenterIndex: 5,
+    elapsedEffectiveHours: 180,
+    paidCost: 24,
+  };
+
+  completeResearchJob(gameState, 'renewable3');
+
+  expect(gameState.research.techLevels).toEqual({ solar: 3, wind: 3, battery: 3, tidal: 3 });
+  Object.entries(FACILITIES)
+    .filter(([, facility]) => facility.maxLevel === 3)
+    .forEach(([type]) => {
+      gameState.grid = Array(19).fill(null);
+      if (type === 'residential') {
+        gameState.grid[0] = { type, level: 2, priority: 'essential' };
+      } else {
+        gameState.grid[0] = { type: 'residential', level: 3, priority: 'essential' };
+        gameState.grid[1] = { type, level: 2, priority: 'normal' };
+      }
+      expect(validateUpgrade(gameState, type === 'residential' ? 0 : 1), type).toMatchObject({ ok: true, nextLevel: 3 });
+    });
 });

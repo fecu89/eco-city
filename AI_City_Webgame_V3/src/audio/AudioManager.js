@@ -35,6 +35,11 @@ function resumeAndStart() {
 }
 
 export function initAudioManager() {
+  eventBus.on(Events.GAME_RESET, () => {
+    if (masterGain) masterGain.gain.value = gameState.sound ? 1 : 0;
+    stopAmbient();
+    startAmbientIfReady();
+  });
   eventBus.on(Events.AUDIO_SFX, ({ name }) => {
     if (!gameState.sound) return;
     ensureContext();

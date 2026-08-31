@@ -10,16 +10,28 @@ export function initChartView(canvas) {
   canvasEl = canvas;
 }
 
+export function chartValues(state = gameState) {
+  const m = state.metrics;
+  if (!m) return [];
+  const live = state.lastTickSummary;
+  const reliability = live?.demand > 0
+    ? live.deliveredPower / live.demand * 100
+    : m.reliability;
+  const carbon = live?.hourlyCarbon ?? m.carbon;
+  const water = live?.hourlyWater ?? m.water;
+  return [
+    clamp(m.dev, 0, 100),
+    clamp(reliability, 0, 100),
+    clamp(100 - carbon * 4, 0, 100),
+    clamp(100 - water * 4, 0, 100),
+    clamp(m.synergyLinks * 20, 0, 100),
+  ];
+}
+
 export function updateChart() {
   const m = gameState.metrics;
   if (!m) return;
-  const values = [
-    clamp(m.dev, 0, 100),
-    clamp(m.reliability, 0, 100),
-    clamp(100 - m.carbon * 4, 0, 100),
-    clamp(100 - m.water * 4, 0, 100),
-    clamp(m.synergyLinks * 20, 0, 100),
-  ];
+  const values = chartValues(gameState);
   const labels = ['발전', '전력안정', '저탄소', '물관리', '공간연결'];
 
   if (!chart) {

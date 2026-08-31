@@ -7,6 +7,11 @@ let hideTimer = null;
 
 export function initQuestCelebration(element) {
   root = element;
+  eventBus.on(Events.GAME_RESET, () => {
+    clearTimeout(hideTimer);
+    root?.classList.remove('show');
+    root?.replaceChildren();
+  });
   eventBus.on(Events.QUEST_CLAIMED, ({ quest, result }) => {
     if (!root || !quest) return;
     clearTimeout(hideTimer);

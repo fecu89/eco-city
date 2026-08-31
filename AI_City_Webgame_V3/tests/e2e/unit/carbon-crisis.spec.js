@@ -9,27 +9,27 @@ function crisisState({ questIndex = 6, carbonCrisisHours = 0 } = {}) {
   return state;
 }
 
-test('carbon above 8 accumulates and safe operation recovers two hours', () => {
+test('carbon above 10 accumulates and operation at 10 recovers two hours', () => {
   const state = crisisState({ carbonCrisisHours: 10 });
-  expect(applyCarbonCrisis(state, 8.01).hours).toBe(11);
-  expect(applyCarbonCrisis(state, 8).hours).toBe(9);
+  expect(applyCarbonCrisis(state, 10.01).hours).toBe(11);
+  expect(applyCarbonCrisis(state, 10).hours).toBe(9);
 });
 
 test('warnings occur once at 24, 72, and 144 hours', () => {
   const state = crisisState({ carbonCrisisHours: 23 });
-  expect(applyCarbonCrisis(state, 9).warnings).toEqual([24]);
-  expect(applyCarbonCrisis(state, 9).warnings).toEqual([]);
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([24]);
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([]);
   state.carbonCrisisHours = 71;
-  expect(applyCarbonCrisis(state, 9).warnings).toEqual([72]);
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([72]);
   state.carbonCrisisHours = 143;
-  expect(applyCarbonCrisis(state, 9).warnings).toEqual([144]);
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([144]);
 });
 
 test('168 crisis hours transitions to carbon game over once', () => {
   const state = crisisState({ carbonCrisisHours: 167 });
-  expect(applyCarbonCrisis(state, 9).gameOverTransition).toBe(true);
+  expect(applyCarbonCrisis(state, 11).gameOverTransition).toBe(true);
   expect(state).toMatchObject({ gameOver: true, gameOverReason: 'carbon_crisis' });
-  expect(applyCarbonCrisis(state, 9).gameOverTransition).toBe(false);
+  expect(applyCarbonCrisis(state, 11).gameOverTransition).toBe(false);
 });
 
 test('carbon crisis is inactive until quest 5 has been completed', () => {

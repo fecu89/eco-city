@@ -1,12 +1,13 @@
-import { BOARD, FACILITIES, LEVEL_MULTIPLIERS, STAGES } from '../core/Constants.js';
+import { BOARD, FACILITIES, STAGES } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
 import { formatCredits } from '../core/Money.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
-import { getFacilityPermit, validateDemolitionPermit } from './FacilityPermitSystem.js';
+import { getFacilityPermit, validateDemolitionPermit, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
+import { calculateEnvironmentalOperations, facilityLevelStats } from './FacilityOperationSystem.js';
 import {
   createHexCoordinates,
   expandHexGrid,
@@ -18,19 +19,7 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (v) => Math.round(v * 10) / 10;
 
 export function cellStats(cell) {
-  const f = FACILITIES[cell.type];
-  const L = cell.level;
-  const outMul = LEVEL_MULTIPLIERS.output[L];
-  const demandMul = LEVEL_MULTIPLIERS.demand[L];
-  const impactMul = LEVEL_MULTIPLIERS.impact[L];
-  const negMul = LEVEL_MULTIPLIERS.negative[L];
-  return {
-    dev: (f.dev || 0) * outMul,
-    demand: (f.demand || 0) * demandMul,
-    supply: (f.supply || 0) * outMul,
-    carbon: (f.carbon || 0) < 0 ? (f.carbon || 0) * negMul : (f.carbon || 0) * impactMul,
-    water: (f.water || 0) < 0 ? (f.water || 0) * negMul : (f.water || 0) * impactMul,
-  };
+  return facilityLevelStats(cell);
 }
 
 export function getBoardCoordinates(state = gameState) {
@@ -100,14 +89,18 @@ export function placementPreview(facilityKey, grid, coords = getBoardCoordinates
 }
 
 export function calcMetrics(grid, coords = getBoardCoordinates()) {
-  let dev = 0, demand = 0, supply = 0, carbon = 0, water = 0, renewableSupply = 0, dataCount = 0, thermalCount = 0;
+  const previewOperations = Object.fromEntries(grid
+    .map((cell, index) => cell ? [index, { powerRatio: 1, operationRatio: 1 }] : null)
+    .filter(Boolean));
+  const environment = calculateEnvironmentalOperations({ grid, coords, facilityOperations: previewOperations });
+  let dev = 0, demand = 0, supply = 0, carbon = environment.hourlyCarbon, water = environment.hourlyWater, renewableSupply = 0, dataCount = 0, thermalCount = 0;
   let synergyScore = 0, synergyLinks = 0, conflictPairs = 0, heatCluster = 0;
   const linkedRenewables = new Set();
 
   grid.forEach((cell, i) => {
     if (!cell) return;
     const s = cellStats(cell);
-    dev += s.dev; demand += s.demand; supply += s.supply; carbon += s.carbon; water += s.water;
+    dev += s.dev; demand += s.demand; supply += s.supply;
     if (['solar', 'wind', 'tidal'].includes(cell.type)) renewableSupply += s.supply;
     if (cell.type === 'data') dataCount++;
     if (cell.type === 'thermal') thermalCount++;
@@ -122,7 +115,7 @@ export function calcMetrics(grid, coords = getBoardCoordinates()) {
     if (cell.type === 'data') {
       if (ns.some((n) => grid[n]?.type === 'cooling')) {
         const b = 10 * cell.level;
-        dev += b; water -= 4 * cell.level; synergyScore += b; synergyLinks++;
+        dev += b; synergyScore += b; synergyLinks++;
       }
       ns.forEach((n) => { if (grid[n]?.type === 'data' && n > i) heatCluster++; });
     }
@@ -133,10 +126,10 @@ export function calcMetrics(grid, coords = getBoardCoordinates()) {
       linkedRenewables.add(i); synergyLinks++; synergyScore += 3 * cell.level;
     }
     if (cell.type === 'nuclear' && ns.some((n) => grid[n]?.type === 'cooling')) {
-      water -= 2 * cell.level; synergyLinks++; synergyScore += 2;
+      synergyLinks++; synergyScore += 2;
     }
     if (['factory', 'thermal'].includes(cell.type)) {
-      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= 3; carbon += 1; } });
+      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= 3; } });
     }
     // 원전 인접 주거지: 안전 불안이라는 사회적 갈등 — 발전점수 손실이 더 크다.
     if (cell.type === 'nuclear') {
@@ -148,11 +141,10 @@ export function calcMetrics(grid, coords = getBoardCoordinates()) {
     }
     // 오염 시설이 녹지를 훼손 — 탄소 부담이 늘어난 것처럼 취급.
     if (['thermal', 'factory'].includes(cell.type)) {
-      ns.forEach((n) => { if (grid[n]?.type === 'green') { conflictPairs++; carbon += 0.5; } });
+      ns.forEach((n) => { if (grid[n]?.type === 'green') conflictPairs++; });
     }
   });
 
-  water += heatCluster * 2;
   let renewablePenalty = 0;
   grid.forEach((cell, i) => {
     if (!cell || !['solar', 'wind'].includes(cell.type)) return;
@@ -211,7 +203,7 @@ const PLACEMENT_MESSAGES = Object.freeze({
   locked_research: '연구를 완료해야 해금됩니다.',
   outer_ring_only: '조력발전은 현재 도시의 최외곽 육각에만 건설할 수 있습니다.',
   facility_limit: '현재 퀘스트의 시설 건설 허가 한도에 도달했습니다.',
-  thermal_reserve_required: '핵발전을 건설하려면 화력발전 예비력 1기가 필요합니다.',
+  thermal_reserve_required: '핵발전을 건설하려면 화력발전 1기가 필요합니다. 저탄소 저장 허브 완료 후에는 배터리로 대체할 수 있습니다.',
   insufficient_credits: '건설 크레딧이 부족합니다.',
 });
 
@@ -234,10 +226,19 @@ export function validatePlacement(state, facilityKey, index, {
   else if (!state.unlockedFacilities.has(facilityKey)) reason = 'locked_quest';
   else if (facility.placement === 'outer_ring' && !isOuterRing(index, coords, state.boardRadius)) reason = 'outer_ring_only';
   else if (!skipPermit && !(permit = getFacilityPermit(state, facilityKey, plan)).ok) reason = permit.reason;
-  else if (requireNuclearReserve && facilityKey === 'nuclear'
-    && !grid.some((cell) => cell?.type === 'thermal')
-    && !plan.some((item) => item?.type === 'thermal')) reason = 'thermal_reserve_required';
-  else if (availableCredits < facility.cost) reason = 'insufficient_credits';
+  else {
+    if (requireNuclearReserve && facilityKey === 'nuclear') {
+      const projectedGrid = grid.map((cell) => cell ? { ...cell } : null);
+      projectedGrid[index] = { type: facilityKey, level: 1 };
+      plan.forEach((item) => {
+        if (Number.isInteger(item?.index) && FACILITIES[item.type]) {
+          projectedGrid[item.index] = { type: item.type, level: 1 };
+        }
+      });
+      if (!validateGridFacilityDependencies(projectedGrid, state).ok) reason = 'thermal_reserve_required';
+    }
+    if (!reason && availableCredits < facility.cost) reason = 'insufficient_credits';
+  }
   return {
     ok: !reason,
     reason,

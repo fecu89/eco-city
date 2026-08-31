@@ -74,14 +74,18 @@ test.describe('construction and inspection', () => {
     await expect(detail).toContainText('인구 +10');
   });
 
-  test('build cards follow quest unlock order and place unlocked facilities first', async ({ gamePage: page }) => {
+  test('level 3 moves unlocked green space directly behind residential in the build order', async ({ gamePage: page }) => {
     await page.evaluate(() => {
-      window.__GAME_STATE__.unlockedFacilities.add('wind');
+      const state = window.__GAME_STATE__;
+      state.questIndex = 3;
+      state.unlockedFacilities.add('factory');
+      state.unlockedFacilities.add('thermal');
+      state.unlockedFacilities.add('green');
       window.__refreshGameForTest();
     });
     await openHudPanel(page, 'build');
     const order = await page.locator('#facilityDock .facility-btn').evaluateAll((cards) => cards.map((card) => card.dataset.facility));
-    expect(order).toEqual(['residential', 'wind', 'factory', 'thermal', 'green', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'tidal']);
+    expect(order).toEqual(['residential', 'green', 'factory', 'thermal', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'wind', 'tidal']);
   });
 
   test('an occupied cell opens live economics and the 50 percent demolition breakdown', async ({ gamePage: page }) => {
@@ -90,9 +94,27 @@ test.describe('construction and inspection', () => {
     await page.evaluate(() => window.__settleSimulationHour());
     await clickCell(page, 0);
     await expect(page.locator('.facility-inspector-grid')).toContainText('시간당 수입');
-    await page.locator('[data-facility-tab="management"]').click();
+    await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
     await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 2.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('환급 1.00 💰');
+  });
+
+  test('facility inspection shows live adjacency-adjusted environmental use', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 6;
+      state.grid = Array(19).fill(null);
+      state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+      state.grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
+      state.grid[2] = { type: 'thermal', level: 1, priority: 'normal' };
+      state.grid[3] = { type: 'residential', level: 1, priority: 'essential' };
+      window.__settleSimulationHour();
+      window.__refreshGameForTest();
+    });
+
+    await clickCell(page, 0);
+    await expect(page.locator('#facilityLiveWater')).toHaveText('1/h');
+    await expect(page.locator('#facilityLiveCarbon')).toHaveText('0 CO₂/h');
   });
 
   test('unlocked factory placement preview marks a power-plant neighbor', async ({ gamePage: page }) => {
@@ -142,14 +164,38 @@ test.describe('quest operations, celebration, reset, and save', () => {
   test('reset returns to quest 1, 08:00, and an empty city', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     await clickCell(page, 0);
+    await page.evaluate(() => {
+      window.__setTimeScale(4);
+      window.__resetEventCount = 0;
+      window.__EVENT_BUS__.on(window.__EVENTS__.GAME_RESET, () => { window.__resetEventCount += 1; });
+      window.__EVENT_BUS__.emit(window.__EVENTS__.TOAST_SHOW, { title: '초기화 전 알림', duration: 30000 });
+      window.__EVENT_BUS__.emit(window.__EVENTS__.QUEST_CLAIMED, {
+        quest: { title: '초기화 전 완료' },
+        result: { credits: 1 },
+      });
+    });
     await clickHudAction(page, 'settings', '#resetBtn');
     // 초기화 이벤트와 상태 읽기를 같은 브라우저 작업에서 수행해 1초 시뮬레이션 틱과 경합하지 않는다.
-    const snapshot = await page.evaluate(() => {
+    const resetResult = await page.evaluate(() => {
       document.getElementById('confirmReset').click();
-      return JSON.parse(window.render_game_to_text());
+      return {
+        snapshot: JSON.parse(window.render_game_to_text()),
+        simulation: window.__getSimulationState(),
+        resetEvents: window.__resetEventCount,
+        toasts: document.querySelector('#toastStack')?.children.length,
+        celebrationVisible: document.querySelector('#questCelebration')?.classList.contains('show'),
+      };
     });
-    expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, hour: 8 } });
+    const { snapshot } = resetResult;
+    expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, hour: 8, timeScale: 1 } });
     expect(snapshot.entities).toEqual([]);
+    expect(resetResult).toMatchObject({
+      simulation: { timeScale: 1, paused: false, pauseReasons: [] },
+      resetEvents: 1,
+      toasts: 1,
+      celebrationVisible: false,
+    });
+    expect(resetResult.simulation.progress).toBeLessThan(0.05);
   });
 
   test('quest and battery state survive autosave reload', async ({ gamePage: page }) => {

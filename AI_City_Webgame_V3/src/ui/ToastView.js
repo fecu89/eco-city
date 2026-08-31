@@ -9,6 +9,9 @@ let stackEl = null;
 export function initToastView(el) {
   stackEl = el;
   eventBus.on(Events.TOAST_SHOW, (options) => showToast(options));
+  eventBus.on(Events.GAME_RESET, () => {
+    if (stackEl) stackEl.replaceChildren();
+  });
 }
 
 function removeToast(div) {

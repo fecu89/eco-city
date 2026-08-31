@@ -6,7 +6,7 @@ test('demolition requires an irreversible-action confirmation before changing th
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
-  await page.locator('[data-facility-tab="management"]').click();
+  await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
   await page.locator('#demolishBtn').click();
   await expect(page.locator('#modalCard')).toContainText('되돌릴 수 없습니다');
   await expect(page.locator('#modalCard')).toContainText('환급 1.00 💰');
@@ -24,7 +24,7 @@ test('the last thermal reserve cannot enter demolition confirmation while nuclea
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
-  await page.locator('[data-facility-tab="management"]').click();
+  await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
   await page.locator('#demolishBtn').click();
   await expect(page.locator('#modalCard [data-demolition-blocked]')).toBeVisible();
   await expect(page.locator('#modalCard')).toContainText('철거 제한');

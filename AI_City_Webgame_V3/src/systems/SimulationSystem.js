@@ -59,6 +59,7 @@ export function createHourSettler({
       industryFill: economy.labor.industryFill,
       facilityPower: power.facilityPower,
       facilityEconomy: economy.facilityEconomy,
+      facilityEnvironment: economy.facilityEnvironment,
       routes: power.routes,
       batteryStored: round1(Object.values(power.nextBatteries).reduce((sum, item) => sum + item.lowCarbon + item.fossil, 0)),
       overcrowding: economy.overcrowding,
@@ -152,6 +153,16 @@ export function createSimulationController({
       if (scale === 0) pauseReasons.add('player');
       else pauseReasons.delete('player');
       cancel();
+      schedule();
+      return timeScale;
+    },
+    reset(scale = 1) {
+      getIntervalMs(scale);
+      cancel();
+      pauseReasons.clear();
+      baseProgress = 0;
+      timeScale = scale;
+      if (scale === 0) pauseReasons.add('player');
       schedule();
       return timeScale;
     },

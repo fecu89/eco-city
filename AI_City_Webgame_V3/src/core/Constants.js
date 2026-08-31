@@ -98,6 +98,11 @@ export const QUEST_REQUIREMENTS = Object.freeze({
   TRANSITION_CARBON_MAX: 12,
 });
 
+export const FACILITY_BUILD_ORDER = Object.freeze([
+  'residential', 'green', 'factory', 'thermal', 'data', 'nuclear',
+  'cooling', 'solar', 'battery', 'wind', 'tidal',
+]);
+
 // 각 퀘스트에서 허용되는 시설별 누적 최대치다. 빈 항목은 이전 퀘스트 값을 유지한다.
 export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   1: Object.freeze({ residential: 2 }),
@@ -133,7 +138,7 @@ export const RESEARCH_RULES = Object.freeze({
 });
 
 export const CARBON_CRISIS = Object.freeze({
-  SAFE_HOURLY: 8,
+  SAFE_HOURLY: 10,
   GAME_OVER_HOURS: 168,
   RECOVERY_PER_SAFE_HOUR: 2,
   WARNING_HOURS: Object.freeze([24, 72, 144]),
@@ -145,6 +150,10 @@ export const POWER_RULES = {
   MIN_EFFICIENCY: 0.55,
   HUB_EFFICIENCY: 0.95,
 };
+
+export const GRID_RESERVE_RULES = Object.freeze({
+  BATTERY_SUBSTITUTE_QUEST_ID: 'storage-hub',
+});
 
 export const STORAGE_LEVELS = {
   1: { capacity: 20, throughput: 8 },
@@ -187,7 +196,7 @@ export const ECONOMY_RULES = {
   OVERCROWDING_COST_RATE: 0.1,
   POLLUTION_HEALTH_COST: 0.4,
   POLLUTION_TAX_MULTIPLIER: 0.5,
-  CARBON_SAFE_RATE: 8,
+  CARBON_SAFE_RATE: 10,
   CLIMATE_RECOVERY_RATE: 0.25,
   UPKEEP_LEVEL_MULTIPLIERS: [0, 1, 1.4, 1.8],
 };

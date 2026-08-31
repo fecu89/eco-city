@@ -1,12 +1,12 @@
 import {
   ECONOMY_RULES,
   FACILITIES,
-  FACILITY_ECONOMY,
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { calculateWorkforce } from './WorkforceSystem.js';
 import { roundCredits } from '../core/Money.js';
+import { calculateEnvironmentalOperations, facilityLevelStats } from './FacilityOperationSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
@@ -39,13 +39,11 @@ export function settleEconomy({ grid, coords = null, facilityPower = {}, credits
 
   let grossIncome = 0;
   let maintenance = 0;
-  let hourlyCarbon = 0;
-  let hourlyWater = 0;
   const facilityEconomy = {};
 
   grid.forEach((cell, index) => {
     if (!cell) return;
-    const economy = FACILITY_ECONOMY[cell.type];
+    const stats = facilityLevelStats(cell);
     const power = facilityPower[index];
     const powerRatio = power ? Math.max(0, Math.min(1, power.ratio ?? (power.demand ? power.delivered / power.demand : 1))) : (FACILITIES[cell.type].demand ? 0 : 1);
     const running = powerRatio >= ECONOMY_RULES.STOP_POWER_RATIO;
@@ -58,19 +56,22 @@ export function settleEconomy({ grid, coords = null, facilityPower = {}, credits
       ? ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO + (1 - ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO) * labor.employmentRate
       : 1;
     const operationRatio = running ? powerRatio * laborMultiplier : 0;
-    const income = economy.income * (cell.type === 'residential' ? powerRatio * employmentMultiplier : operationRatio) * pollutionMultiplier;
-    const upkeep = round1(economy.upkeep * ECONOMY_RULES.UPKEEP_LEVEL_MULTIPLIERS[cell.level]);
+    const income = stats.income * (cell.type === 'residential' ? powerRatio * employmentMultiplier : operationRatio) * pollutionMultiplier;
+    const upkeep = round1(stats.upkeep);
     grossIncome += income;
     maintenance += upkeep;
-    const carbonFactor = ['factory', 'data'].includes(cell.type) ? operationRatio : Math.max(0.25, operationRatio || (FACILITIES[cell.type].supply ? 0.25 : 0));
-    hourlyCarbon += Math.max(0, FACILITIES[cell.type].carbon || 0) * carbonFactor;
-    hourlyWater += (FACILITIES[cell.type].water || 0) * (FACILITIES[cell.type].demand ? powerRatio : 1);
     facilityEconomy[index] = { income: round2(income), upkeep, powerRatio: round1(powerRatio), operationRatio: round1(operationRatio), laborMultiplier, pollutionMultiplier };
+  });
+
+  const environment = calculateEnvironmentalOperations({
+    grid,
+    coords: boardCoords,
+    facilityOperations: facilityEconomy,
   });
 
   const overcrowding = Object.entries(counts).reduce((sum, [type, count]) => sum + Math.max(0, count - ECONOMY_RULES.OVERCROWDING_FREE_COUNT) * FACILITIES[type].cost * ECONOMY_RULES.OVERCROWDING_COST_RATE, 0);
   const health = pollutionPairs.size * ECONOMY_RULES.POLLUTION_HEALTH_COST;
-  const climateRecovery = Math.max(0, hourlyCarbon - ECONOMY_RULES.CARBON_SAFE_RATE) * ECONOMY_RULES.CLIMATE_RECOVERY_RATE;
+  const climateRecovery = Math.max(0, environment.hourlyCarbon - ECONOMY_RULES.CARBON_SAFE_RATE) * ECONOMY_RULES.CLIMATE_RECOVERY_RATE;
   const netCredits = roundCredits(grossIncome - maintenance - overcrowding - health - climateRecovery);
 
   return {
@@ -83,7 +84,8 @@ export function settleEconomy({ grid, coords = null, facilityPower = {}, credits
     climateRecovery: round1(climateRecovery),
     netCredits,
     nextCredits: Math.max(0, roundCredits(credits + netCredits)),
-    hourlyCarbon: round1(hourlyCarbon),
-    hourlyWater: Math.max(0, round1(hourlyWater)),
+    hourlyCarbon: round1(environment.hourlyCarbon),
+    hourlyWater: round1(environment.hourlyWater),
+    facilityEnvironment: environment.byFacility,
   };
 }

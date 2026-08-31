@@ -1,5 +1,5 @@
 import './style.css';
-import { FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { CARBON_CRISIS, FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -266,22 +266,30 @@ function onCellClick(index) {
 }
 
 function handleReset() {
-  openResetConfirmModal(() => {
-    gameState.reset();
-    clearSavedGame();
-    refreshAll();
-    eventBus.emit(Events.TOAST_SHOW, { title: '초기화 완료', text: '처음부터 다시 시작합니다.' });
-  });
+  openResetConfirmModal(() => resetGame({
+    title: '초기화 완료',
+    text: '처음부터 다시 시작합니다.',
+  }));
+}
+
+function resetGame({ title, text }) {
+  closeModal();
+  gameState.reset();
+  clearSavedGame();
+  resumeTimeScale = TIME.DEFAULT_SCALE;
+  simulationController.reset(gameState.timeScale);
+  continuousClockView?.renderNow();
+  eventBus.emit(Events.GAME_RESET, {});
+  refreshAll();
+  refreshTimeControls();
+  eventBus.emit(Events.TOAST_SHOW, { title, text });
 }
 
 function resetAfterGameOver() {
-  gameState.reset();
-  clearSavedGame();
-  closeModal();
-  simulationController.setTimeScale(gameState.timeScale);
-  continuousClockView?.renderNow();
-  refreshAll();
-  eventBus.emit(Events.TOAST_SHOW, { title: '새 도시 시작', text: '탄소 위기 기록을 초기화했습니다.' });
+  resetGame({
+    title: '새 도시 시작',
+    text: '탄소 위기 기록을 초기화했습니다.',
+  });
 }
 
 function bindEvents() {
@@ -428,7 +436,7 @@ function boot() {
   eventBus.on(Events.CARBON_WARNING, ({ hours }) => {
     eventBus.emit(Events.TOAST_SHOW, {
       title: '탄소 위기 경보',
-      text: `${hours}/168시간 · 시간당 탄소를 8 이하로 낮추세요.`,
+      text: `${hours}/${CARBON_CRISIS.GAME_OVER_HOURS}시간 · 시간당 탄소를 ${CARBON_CRISIS.SAFE_HOURLY} 이하로 낮추세요.`,
       priority: true,
     });
   });
@@ -502,7 +510,7 @@ window.render_game_to_text = () => {
     visualGameTime: { ...visualCalendar, label: formatCalendar(visualCalendar) },
     climateAlert: gameState.climateAlert,
     carbonCrisisHours: gameState.carbonCrisisHours,
-    carbonCrisisLimit: 168,
+    carbonCrisisLimit: CARBON_CRISIS.GAME_OVER_HOURS,
     turn: gameState.turn,
     credits: gameState.credits,
     devScore: m ? m.dev : 0,

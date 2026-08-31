@@ -1,4 +1,4 @@
-import { RESEARCH_RULES } from '../core/Constants.js';
+import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { roundCredits } from '../core/Money.js';
 
@@ -12,9 +12,9 @@ function prerequisiteMet(state, prerequisite) {
 
 function prerequisiteLabel(prerequisite) {
   const [kind, id, rawLevel] = prerequisite.split(':');
-  if (kind === 'facility') return `${id} 시설 해금 필요`;
+  if (kind === 'facility') return `${FACILITIES[id]?.name || id} 해금 필요`;
   if (kind === 'research') return `${RESEARCH[id]?.name || id} 완료 필요`;
-  if (kind === 'tech') return `${id} 기술 Lv.${rawLevel} 필요`;
+  if (kind === 'tech') return `${FACILITIES[id]?.name || id} 기술 Lv.${rawLevel} 필요`;
   return prerequisite;
 }
 

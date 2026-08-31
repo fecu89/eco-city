@@ -5,7 +5,6 @@ import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
 
 const facilities = (state, type) => state.grid.filter((cell) => cell?.type === type);
-const POWER_PLANTS = new Set(['thermal', 'nuclear', 'solar', 'wind', 'tidal']);
 
 function hasAdjacent(state, index, types) {
   const coords = createHexCoordinates(state.boardRadius);
@@ -16,9 +15,7 @@ export function evaluateCurrentQuest(state) {
   const wasReady = state.questStatus === 'ready_to_claim';
   let ready = state.questStatus === 'ready_to_claim';
   if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
-  if (state.questIndex === 2) ready = state.grid.some((cell, index) => (
-    cell?.type === 'factory' && hasAdjacent(state, index, new Set(['thermal']))
-  ));
+  if (state.questIndex === 3) ready = facilities(state, 'green').length >= 1;
   if (state.questIndex === 8) ready = state.research.completedIds.has('solar2')
     && facilities(state, 'solar').some((cell) => cell.level >= 2);
   if (state.questIndex === 10) ready = state.research.completedIds.has('wind2')
@@ -85,14 +82,14 @@ export function applySimulationQuestProgress(state, summary) {
   let required = 3;
   switch (state.questIndex) {
     case 2:
-      return evaluateCurrentQuest(state);
-    case 3:
       condition = Object.entries(summary.facilityEconomy || {}).some(([index, item]) => state.grid[index]?.type === 'factory'
-        && hasAdjacent(state, Number(index), POWER_PLANTS)
+        && hasAdjacent(state, Number(index), new Set(['thermal']))
         && (summary.facilityPower?.[index]?.ratio ?? 0) >= 0.5
         && item.operationRatio >= 0.5
         && item.income > 0);
       break;
+    case 3:
+      return evaluateCurrentQuest(state);
     case 4:
       condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'data' && item.ratio >= 0.9);
       break;
@@ -125,8 +122,10 @@ export function applySimulationQuestProgress(state, summary) {
       const delivered = (summary.routes || [])
         .filter((route) => route.kind === 'battery' && (route.lowCarbonDelivered > 0 || ['solar', 'wind'].includes(state.grid[route.from]?.type)))
         .reduce((sum, route) => sum + (route.lowCarbonDelivered ?? route.delivered), 0);
-      state.questProgress.hubEnergy = Math.round(((state.questProgress.hubEnergy || 0) + delivered) * 100) / 100;
       condition = delivered > 0;
+      state.questProgress.hubEnergy = condition
+        ? Math.round(((state.questProgress.hubEnergy || 0) + delivered) * 100) / 100
+        : 0;
       break;
     }
     case 11:
@@ -145,7 +144,8 @@ export function applySimulationQuestProgress(state, summary) {
       condition = summary.hour >= 19 && summary.hour <= 23 && summary.deliveredPower >= summary.demand && summary.batteryStored >= 5;
       break;
     case 14:
-      condition = summary.lowCarbonPercent >= 70
+      condition = (state.research.completedIds.has('renewable3') || state.grid.some((cell) => cell?.level >= 3))
+        && summary.lowCarbonPercent >= 70
         && summary.hourlyWater < (state.baseline?.hourlyWater ?? Infinity)
         && summary.netCredits > 0;
       break;
@@ -153,10 +153,10 @@ export function applySimulationQuestProgress(state, summary) {
       return evaluateCurrentQuest(state);
   }
   state.questProgress.consecutiveHours = condition ? (state.questProgress.consecutiveHours || 0) + 1 : 0;
-  if ([2, 3, 4, 5, 6, 7].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_HOURS;
+  if ([2, 4, 5, 6, 7].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_HOURS;
   if (state.questIndex === 14) required = 4;
   const ready = state.questIndex === 9
-    ? state.questProgress.hubEnergy >= 8
+    ? state.questProgress.consecutiveHours >= 3 && state.questProgress.hubEnergy >= 8
     : state.questProgress.consecutiveHours >= required;
   if (ready && state.questStatus !== 'ready_to_claim') {
     state.questStatus = 'ready_to_claim';

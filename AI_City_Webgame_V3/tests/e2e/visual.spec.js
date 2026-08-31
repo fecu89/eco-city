@@ -74,7 +74,7 @@ test.describe('visual', () => {
     await expect(page).toHaveScreenshot('world-hud-menu.png', { maxDiffPixels: 18000 });
   });
 
-  test('data center research console keeps navigation and actions around a scrollable catalog', async ({ gamePage: page }) => {
+  test('data center keeps research and management actions in one scrollable console', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.questIndex = 15;
@@ -85,7 +85,6 @@ test.describe('visual', () => {
       window.__refreshGameForTest();
       window.__clickCell(0);
     });
-    await page.locator('[data-facility-tab="research"]').click();
     await expect(page.locator('.research-panel')).toBeVisible();
     await expect(page.locator('.facility-console-scroll')).toBeVisible();
     await expect(page).toHaveScreenshot('facility-console-research.png', { maxDiffPixels: 18000 });
@@ -162,6 +161,21 @@ test.describe('visual mobile', () => {
     await page.locator('.mobile-bar [data-hud-target="quest"]').click();
     await page.locator('#questPanelExpandBtn').click();
     await expect(page).toHaveScreenshot('world-hud-mobile-quest-expanded.png', { maxDiffPixels: 18000 });
+  });
+
+  test('mobile data center keeps the research catalog in three columns', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 15;
+      state.credits = 100;
+      state.researchMenuUnlocked = true;
+      state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+      state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
+      window.__refreshGameForTest();
+      window.__clickCell(0);
+    });
+    await expect(page.locator('.research-grid > .research-card')).toHaveCount(5);
+    await expect(page).toHaveScreenshot('facility-console-research-mobile.png', { maxDiffPixels: 18000 });
   });
 
   test('City Kit board fits the mobile gameplay viewport', async ({ gamePage: page }) => {

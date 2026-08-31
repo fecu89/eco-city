@@ -71,6 +71,52 @@ test('nuclear needs thermal reserve and the last supporting thermal cannot be de
   expect(validateDemolitionPermit(state, 1)).toMatchObject({ ok: true });
 });
 
+test('claiming the storage-hub quest lets a battery replace the last thermal reserve', () => {
+  const state = new GameState();
+  state.questIndex = 10;
+  state.grid[0] = { type: 'thermal', level: 1 };
+  state.grid[1] = { type: 'nuclear', level: 1 };
+  state.grid[2] = { type: 'battery', level: 1 };
+
+  expect(validateDemolitionPermit(state, 0)).toMatchObject({
+    ok: false,
+    reason: 'last_thermal_supports_nuclear',
+  });
+
+  state.claimedQuestIds.add('storage-hub');
+  expect(validateGridFacilityDependencies(
+    state.grid.map((cell, index) => index === 0 ? null : cell),
+    state,
+  )).toMatchObject({ ok: true, reserveType: 'battery' });
+  expect(validateDemolitionPermit(state, 0)).toMatchObject({ ok: true });
+});
+
+test('storage-hub completion without a remaining battery does not waive nuclear reserve', () => {
+  const state = new GameState();
+  state.questIndex = 10;
+  state.claimedQuestIds.add('storage-hub');
+  state.grid[0] = { type: 'thermal', level: 1 };
+  state.grid[1] = { type: 'nuclear', level: 1 };
+
+  expect(validateDemolitionPermit(state, 0)).toMatchObject({
+    ok: false,
+    reason: 'last_thermal_supports_nuclear',
+  });
+});
+
+test('the last battery reserve cannot be demolished from a coal-free nuclear grid', () => {
+  const state = new GameState();
+  state.questIndex = 10;
+  state.claimedQuestIds.add('storage-hub');
+  state.grid[0] = { type: 'battery', level: 1 };
+  state.grid[1] = { type: 'nuclear', level: 1 };
+
+  expect(validateDemolitionPermit(state, 0)).toMatchObject({
+    ok: false,
+    reason: 'last_battery_supports_nuclear',
+  });
+});
+
 test('a residence cannot be demolished when it would leave facilities understaffed', () => {
   const state = new GameState();
   state.grid[0] = { type: 'residential', level: 1 };

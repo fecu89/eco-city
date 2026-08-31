@@ -45,7 +45,7 @@ test('quest 1 becomes ready with two homes and claims its reward once', () => {
   expect(state.credits).toBe(before + 4);
 });
 
-test('quest 14 needs four consecutive low-carbon, lower-water profitable hours', () => {
+test('quest 14 needs late growth plus four consecutive low-carbon, lower-water profitable hours', () => {
   const state = new GameState();
   state.questIndex = 14;
   state.baseline = { hourlyWater: 10 };
@@ -56,6 +56,22 @@ test('quest 14 needs four consecutive low-carbon, lower-water profitable hours',
   applySimulationQuestProgress(state, { lowCarbonPercent: 60, hourlyWater: 8, netCredits: 1 });
   expect(state.questProgress.consecutiveHours).toBe(0);
   for (let i = 0; i < 4; i++) applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
+  expect(state.questStatus).toBe('active');
+
+  state.grid[0] = { type: 'solar', level: 3 };
+  for (let i = 0; i < 4; i++) applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 14 also accepts the integrated renewable grid research as late growth', () => {
+  const state = new GameState();
+  state.questIndex = 14;
+  state.baseline = { hourlyWater: 10 };
+  state.research.completedIds.add('renewable3');
+
+  for (let i = 0; i < 4; i++) {
+    applySimulationQuestProgress(state, { lowCarbonPercent: 75, hourlyWater: 8, netCredits: 1 });
+  }
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
@@ -75,19 +91,36 @@ test('quest 5 uses a reachable 12 CO2 transition ceiling with 40 percent low-car
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quest 2 becomes ready from one adjacent factory and thermal pair without idle waiting', () => {
+test('quest 2 requires an adjacent factory and thermal pair to earn income for two hours', () => {
   const state = new GameState();
   const thermalIndex = neighborIndices(0, createHexCoordinates(2))[0];
   state.questIndex = 2;
   state.grid[0] = { type: 'factory', level: 1 };
   state.grid[thermalIndex] = { type: 'thermal', level: 1 };
-  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  const operating = summary({
+    facilityPower: { 0: powered(0.6) },
+    facilityEconomy: { 0: { operationRatio: 0.6, income: 1 } },
+  });
+
+  applySimulationQuestProgress(state, operating);
+  expect(state.questStatus).toBe('active');
+  expect(state.questProgress.consecutiveHours).toBe(1);
+  applySimulationQuestProgress(state, summary({
+    facilityPower: { 0: powered(0.6) },
+    facilityEconomy: { 0: { operationRatio: 0.6, income: 0 } },
+  }));
+  expect(state.questProgress.consecutiveHours).toBe(0);
+  applySimulationQuestProgress(state, operating);
+  applySimulationQuestProgress(state, operating);
+  expect(state.questStatus).toBe('ready_to_claim');
 
   const separated = new GameState();
   separated.questIndex = 2;
   separated.grid[0] = { type: 'factory', level: 1 };
   separated.grid[18] = { type: 'thermal', level: 1 };
-  expect(evaluateCurrentQuest(separated).ready).toBe(false);
+  applySimulationQuestProgress(separated, operating);
+  applySimulationQuestProgress(separated, operating);
+  expect(separated.questStatus).toBe('active');
 });
 
 test('quest 6 completes when powered adjacent data cooling keeps water at the baseline', () => {
@@ -154,47 +187,41 @@ test('quest 7 needs solar power delivered at a 30 percent low-carbon share for t
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quests 3 and 4 enforce their facility, adjacency, power and duration rules', () => {
-  const cases = [
-    {
-      quest: 3,
-      grid: [{ type: 'factory' }, { type: 'thermal' }],
-      tick: summary({ facilityPower: { 0: powered(0.6) }, facilityEconomy: { 0: { operationRatio: 0.6, income: 1 } } }),
-      hours: 2,
-    },
-    {
-      quest: 4,
-      grid: [{ type: 'data' }, { type: 'thermal' }, { type: 'residential' }, { type: 'factory' }, { type: 'residential' }],
-      tick: summary({ facilityPower: { 0: powered(0.95) } }),
-      hours: 2,
-    },
-  ];
-
-  for (const item of cases) {
-    const state = new GameState();
-    state.questIndex = item.quest;
-    state.grid = [...item.grid, ...Array(19 - item.grid.length).fill(null)].map((cell) => cell && ({ level: 1, priority: 'normal', ...cell }));
-    for (let hour = 0; hour < item.hours; hour++) applySimulationQuestProgress(state, item.tick);
-    expect(state.questStatus, `quest ${item.quest}`).toBe('ready_to_claim');
-  }
-
-  const separated = new GameState();
-  separated.questIndex = 3;
-  separated.grid[0] = { type: 'factory', level: 1 };
-  separated.grid[18] = { type: 'thermal', level: 1 };
-  const factoryTick = summary({ facilityPower: { 0: powered(1) }, facilityEconomy: { 0: { operationRatio: 1, income: 1 } } });
-  applySimulationQuestProgress(separated, factoryTick);
-  applySimulationQuestProgress(separated, factoryTick);
-  expect(separated.questStatus).toBe('active');
+test('quest 3 becomes ready only after the first green space is built', () => {
+  const state = new GameState();
+  state.questIndex = 3;
+  expect(evaluateCurrentQuest(state).ready).toBe(false);
+  state.grid[0] = { type: 'green', level: 1 };
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
 });
 
-test('quest 9 requires a renewable battery route in each of three hours and 8E cumulative', () => {
+test('quest 4 keeps the powered data-center duration gate', () => {
+  const state = new GameState();
+  state.questIndex = 4;
+  state.grid = [
+    { type: 'data' }, { type: 'thermal' }, { type: 'residential' },
+    { type: 'factory' }, { type: 'residential' }, ...Array(14).fill(null),
+  ].map((cell) => cell && ({ level: 1, priority: 'normal', ...cell }));
+  const tick = summary({ facilityPower: { 0: powered(0.95) } });
+  applySimulationQuestProgress(state, tick);
+  expect(state.questStatus).toBe('active');
+  applySimulationQuestProgress(state, tick);
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 9 requires an unbroken renewable battery route for three hours and 8E cumulative', () => {
+  expect(QUESTS[8]).toMatchObject({ title: '저탄소 저장 허브', progressKind: 'energy' });
   const state = new GameState();
   state.questIndex = 9;
   state.grid[0] = { type: 'solar', level: 1 };
   state.grid[1] = { type: 'battery', level: 1 };
   state.grid[2] = { type: 'residential', level: 1 };
   const route = { kind: 'battery', from: 0, via: 1, to: 2, delivered: 3 };
+
+  applySimulationQuestProgress(state, summary({ routes: [route] }));
+  expect(state.questProgress).toMatchObject({ hubEnergy: 3, consecutiveHours: 1 });
+  applySimulationQuestProgress(state, summary({ routes: [] }));
+  expect(state.questProgress).toMatchObject({ hubEnergy: 0, consecutiveHours: 0 });
 
   applySimulationQuestProgress(state, summary({ routes: [route] }));
   applySimulationQuestProgress(state, summary({ routes: [route] }));

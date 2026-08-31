@@ -45,3 +45,61 @@ test('final campaign report evaluates operations and exports no evidence field',
   expect(exported.transcripts).toBeUndefined();
   expect(exported.boardRadius).toBe(2);
 });
+
+test('research quiz completion without correct answers earns no knowledge score', () => {
+  gameState.reset();
+  gameState.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+  gameState.quizResults = {
+    'research:solar2': { passed: true, correct: 0, total: 4 },
+  };
+  const wrong = computeReport();
+
+  gameState.quizResults = {
+    'research:solar2': { passed: true, correct: 4, total: 4 },
+  };
+  const correct = computeReport();
+
+  expect(wrong.knowledgeScore).toBe(0);
+  expect(wrong.knowledgeAccuracy).toBe(0);
+  expect(correct.knowledgeScore).toBe(20);
+  expect(correct.knowledgeAccuracy).toBe(100);
+  expect(correct.total - wrong.total).toBe(20);
+});
+
+test('actual operating history materially changes the final score', () => {
+  gameState.reset();
+  gameState.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+  gameState.quizResults = { 'climate-council': { passed: true, correct: 3, total: 4 } };
+  gameState.simulationTotals = {
+    hours: 10,
+    netCredits: -20,
+    transmissionEfficiency: 5,
+    lowCarbonPercent: 0,
+    employmentRate: 2,
+    industryFill: 2,
+    essentialOutageHours: 10,
+    overcrowding: 10,
+    health: 10,
+  };
+  const struggling = computeReport();
+
+  gameState.simulationTotals = {
+    hours: 10,
+    netCredits: 30,
+    transmissionEfficiency: 10,
+    lowCarbonPercent: 900,
+    employmentRate: 8,
+    industryFill: 8,
+    essentialOutageHours: 0,
+    overcrowding: 0,
+    health: 0,
+  };
+  const resilient = computeReport();
+
+  expect(struggling.operationsScore).toBeLessThan(15);
+  expect(resilient.operationsScore).toBeGreaterThan(40);
+  expect(resilient.total - struggling.total).toBeGreaterThan(25);
+  expect(resilient.total).toBe(Math.round(
+    resilient.operationsScore + resilient.designScore + resilient.knowledgeScore,
+  ));
+});

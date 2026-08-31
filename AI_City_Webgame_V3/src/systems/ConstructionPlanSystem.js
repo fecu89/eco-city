@@ -48,7 +48,7 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
   });
 
   if (items.some((item) => item.type === 'nuclear')) {
-    const dependency = validateGridFacilityDependencies(projectedGrid);
+    const dependency = validateGridFacilityDependencies(projectedGrid, state);
     if (!dependency.ok) errors.push({ index: null, type: 'nuclear', ...dependency });
   }
 

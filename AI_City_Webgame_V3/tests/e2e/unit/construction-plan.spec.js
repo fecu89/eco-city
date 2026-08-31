@@ -61,6 +61,16 @@ test('nuclear and its thermal reserve can be queued in either order', () => {
   expect(state.grid[1]?.type).toBe('thermal');
 });
 
+test('a completed storage hub and existing battery satisfy a nuclear construction plan', () => {
+  const state = preparedState(10, 30, ['nuclear', 'battery']);
+  state.claimedQuestIds.add('storage-hub');
+  state.grid[0] = { type: 'residential', level: 1 };
+  state.grid[1] = { type: 'battery', level: 1 };
+  state.constructionPlan = [{ index: 2, type: 'nuclear' }];
+
+  expect(assessConstructionPlan(state)).toMatchObject({ ok: true, totalCost: 8 });
+});
+
 test('successful commit writes every planned facility and charges once', () => {
   const state = preparedState(5, 30, ['residential', 'thermal']);
   state.constructionPlan = [{ index: 0, type: 'residential' }, { index: 1, type: 'thermal' }];

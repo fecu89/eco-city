@@ -1,6 +1,7 @@
 import {
   createIcons,
   Brain,
+  BatteryCharging,
   Building2,
   ChartNoAxesCombined,
   CloudSun,
@@ -16,6 +17,7 @@ import {
   Leaf,
   Map,
   Music,
+  Network,
   Presentation,
   Pin,
   PinOff,
@@ -30,6 +32,8 @@ import {
   Users,
   Volume2,
   VolumeX,
+  Waves,
+  Wind,
   X,
   Zap,
 } from 'lucide';
@@ -42,6 +46,7 @@ import { eventBus, Events } from '../core/EventBus.js';
 // 에러는 안 남) 아이콘이 전부 안 보이는 상태가 된다 — 반드시 PascalCase 키를 써야 한다.
 const ICONS = {
   Brain,
+  BatteryCharging,
   Building2,
   ChartNoAxesCombined,
   CloudSun,
@@ -57,6 +62,7 @@ const ICONS = {
   Leaf,
   Map,
   Music,
+  Network,
   Presentation,
   Pin,
   PinOff,
@@ -71,6 +77,8 @@ const ICONS = {
   Users,
   Volume2,
   VolumeX,
+  Waves,
+  Wind,
   X,
   Zap,
 };

@@ -49,11 +49,11 @@ test('quests 1 through 7 have reachable gates under their actual caps, grid, pow
   expect(evaluateCurrentQuest(quest1).ready).toBe(true);
 
   const quest2 = stateFor(2, [[0, 'thermal'], [1, 'factory'], [2, 'residential']]);
-  expect(evaluateCurrentQuest(quest2).ready).toBe(true);
+  settleHours(quest2, 2);
+  expect(quest2.questStatus).toBe('ready_to_claim');
 
-  const quest3 = stateFor(3, [[0, 'thermal'], [1, 'factory'], [2, 'residential'], [3, 'residential']]);
-  settleHours(quest3, 2);
-  expect(quest3.questStatus).toBe('ready_to_claim');
+  const quest3 = stateFor(3, [[0, 'green']]);
+  expect(evaluateCurrentQuest(quest3).ready).toBe(true);
 
   const quest4 = stateFor(4, [[0, 'thermal'], [13, 'thermal'], [1, 'data'], [2, 'residential'], [3, 'residential'], [4, 'factory']]);
   settleHours(quest4, 2);
@@ -85,7 +85,7 @@ test('quests 8 through 15 each have a reachable real-system completion state', (
   expect(evaluateCurrentQuest(quest8).ready).toBe(true);
 
   const quest9 = stateFor(9, [[0, 'battery', { batteryStoredLowCarbon: 20 }], [1, 'data'], [13, 'solar'], [2, 'residential']]);
-  const quest9Summaries = settleHours(quest9, 1);
+  const quest9Summaries = settleHours(quest9, 3);
   expect(quest9Summaries[0].routes.some((route) => route.kind === 'battery' && route.lowCarbonDelivered > 0)).toBe(true);
   expect(quest9.questStatus).toBe('ready_to_claim');
 
@@ -112,7 +112,7 @@ test('quests 8 through 15 each have a reachable real-system completion state', (
   expect(quest13Summaries.every(({ batteryStored }) => batteryStored >= 5)).toBe(true);
   expect(quest13.questStatus).toBe('ready_to_claim');
 
-  const quest14 = stateFor(14, [[0, 'nuclear'], [11, 'solar'], [12, 'wind'], [13, 'thermal'], [1, 'residential'], [2, 'residential'], [3, 'residential'], [4, 'residential'], [5, 'factory'], [6, 'data'], [7, 'cooling']]);
+  const quest14 = stateFor(14, [[0, 'nuclear'], [11, 'solar', { level: 3 }], [12, 'wind'], [13, 'thermal'], [1, 'residential'], [2, 'residential'], [3, 'residential'], [4, 'residential'], [5, 'factory'], [6, 'data'], [17, 'cooling']]);
   quest14.baseline = { hourlyWater: 15 };
   const quest14Summaries = settleHours(quest14, 4);
   expect(quest14Summaries.at(-1).lowCarbonPercent).toBeGreaterThanOrEqual(70);

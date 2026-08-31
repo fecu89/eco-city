@@ -3,10 +3,48 @@ import { gameState } from '../core/GameState.js';
 import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const round1 = (value) => Math.round(value * 10) / 10;
+
+function knowledgeResult(quizResults) {
+  const totals = Object.values(quizResults || {}).reduce((sum, result) => {
+    const total = Math.max(0, Number(result?.total) || 0);
+    const correct = clamp(Number(result?.correct) || 0, 0, total);
+    return { correct: sum.correct + correct, total: sum.total + total };
+  }, { correct: 0, total: 0 });
+  const accuracy = totals.total ? totals.correct / totals.total : 0;
+  return {
+    correct: totals.correct,
+    total: totals.total,
+    accuracy: Math.round(accuracy * 100),
+    score: round1(accuracy * 20),
+  };
+}
+
+function operationsScore(operations) {
+  if (!operations.hours) return 0;
+  const lowCarbon = clamp(operations.averageLowCarbonPercent / 100, 0, 1) * 15;
+  const outageRate = clamp(1 - operations.essentialOutageHours / operations.hours, 0, 1);
+  const power = outageRate * 10
+    + clamp(operations.averageTransmissionEfficiency / 100, 0, 1) * 5;
+  const economy = clamp((operations.averageNetCredits + 2) / 6, 0, 1) * 10;
+  const staffing = clamp((operations.averageEmploymentRate + operations.averageIndustryFill) / 200, 0, 1) * 6;
+  const socialCostPerHour = (operations.overcrowdingCost + operations.healthCost) / operations.hours;
+  const social = clamp(1 - socialCostPerHour / 2, 0, 1) * 4;
+  return round1(lowCarbon + power + economy + staffing + social);
+}
 
 // 15개 퀘스트의 실제 운영 기록을 요약한다. 별도 일괄 검증 관문은 만들지 않는다.
 export function computeReport() {
-  const m = calcMetrics(gameState.grid, getBoardCoordinates(gameState));
+  const staticMetrics = calcMetrics(gameState.grid, getBoardCoordinates(gameState));
+  const live = gameState.lastTickSummary;
+  const m = {
+    ...staticMetrics,
+    carbon: live?.hourlyCarbon ?? staticMetrics.carbon,
+    water: live?.hourlyWater ?? staticMetrics.water,
+    demand: live?.demand ?? staticMetrics.demand,
+    reliableSupply: live?.deliveredPower ?? staticMetrics.reliableSupply,
+    balance: live ? Math.round((live.deliveredPower - live.demand) * 10) / 10 : staticMetrics.balance,
+  };
   const b = gameState.baseline || m;
   const totals = gameState.simulationTotals;
   const hours = Math.max(1, totals.hours);
@@ -24,8 +62,14 @@ export function computeReport() {
 
   const sustainability = clamp(100 - Math.max(0, -m.balance) * 8 - m.carbon * 2.2 - Math.max(0, m.water - 10) * 2, 0, 100);
   const spatial = clamp(m.synergyLinks * 18 - m.conflictPairs * 12, 0, 100);
-  const autonomy = clamp((gameState.claimedQuestIds.size / 15) * 80 + Object.values(gameState.quizResults).filter((result) => result.passed).length * 7, 0, 100);
-  const total = Math.round(sustainability * 0.4 + spatial * 0.25 + autonomy * 0.25 + clamp(m.dev, 0, 100) * 0.1);
+  const operationScore = operationsScore(operations);
+  const designScore = round1(
+    sustainability / 100 * 15
+    + spatial / 100 * 10
+    + clamp(m.dev, 0, 100) / 100 * 5,
+  );
+  const knowledge = knowledgeResult(gameState.quizResults);
+  const total = Math.round(operationScore + designScore + knowledge.score);
   const tier = REPORT_TIERS.find((t) => total >= t.min);
 
   return {
@@ -33,7 +77,13 @@ export function computeReport() {
     baseline: b,
     sustainability: Math.round(sustainability),
     spatial: Math.round(spatial),
-    autonomy: Math.round(autonomy),
+    autonomy: knowledge.accuracy,
+    operationsScore: operationScore,
+    designScore,
+    knowledgeScore: knowledge.score,
+    knowledgeAccuracy: knowledge.accuracy,
+    quizCorrect: knowledge.correct,
+    quizTotal: knowledge.total,
     total,
     tier,
     operations,
