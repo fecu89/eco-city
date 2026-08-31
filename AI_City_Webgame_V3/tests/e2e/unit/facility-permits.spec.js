@@ -12,6 +12,9 @@ const {
 
 test('facility limits expose the approved cumulative capacity through all fifteen quests', () => {
   expect(getFacilityLimits(1)).toMatchObject({ residential: 2 });
+  expect(getFacilityLimits(3)).toMatchObject({ green: 1 });
+  expect(getFacilityLimits(6)).toMatchObject({ green: 2 });
+  expect(getFacilityLimits(9)).toMatchObject({ green: 3 });
   expect(getFacilityLimits(5)).toMatchObject({ residential: 5, thermal: 2, nuclear: 1 });
   expect(getFacilityLimits(10)).toMatchObject({ nuclear: 2, solar: 4, battery: 3, green: 3 });
   expect(getFacilityLimits(15)).toMatchObject({ residential: 10, nuclear: 2, solar: 6, tidal: 3 });
@@ -65,5 +68,29 @@ test('nuclear needs thermal reserve and the last supporting thermal cannot be de
     ok: false,
     reason: 'last_thermal_supports_nuclear',
   });
+  expect(validateDemolitionPermit(state, 1)).toMatchObject({ ok: true });
+});
+
+test('a residence cannot be demolished when it would leave facilities understaffed', () => {
+  const state = new GameState();
+  state.grid[0] = { type: 'residential', level: 1 };
+  state.grid[1] = { type: 'factory', level: 1 };
+  state.grid[2] = { type: 'data', level: 1 };
+
+  expect(validateDemolitionPermit(state, 0)).toMatchObject({
+    ok: false,
+    reason: 'workforce_shortage_after_demolition',
+    capacity: 0,
+    used: 7,
+    shortage: 7,
+  });
+});
+
+test('a legacy understaffed save can demolish a staffed facility to recover', () => {
+  const state = new GameState();
+  state.grid[0] = { type: 'residential', level: 1 };
+  state.grid[1] = { type: 'nuclear', level: 3 };
+  state.grid[2] = { type: 'thermal', level: 1 };
+
   expect(validateDemolitionPermit(state, 1)).toMatchObject({ ok: true });
 });

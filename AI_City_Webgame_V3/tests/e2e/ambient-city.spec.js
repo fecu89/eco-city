@@ -14,6 +14,41 @@ async function renderAmbientCity(page) {
   });
 }
 
+async function renderSmokeCity(page) {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const configs = Array.from({ length: 19 }, () => ({ empty: true }));
+    configs[0] = { empty: false, type: 'thermal', level: 1 };
+    configs[1] = { empty: false, type: 'factory', level: 1 };
+    configs[2] = { empty: false, type: 'nuclear', level: 1 };
+    window.__renderCityConfigsForTest(configs, 2);
+    window.__finishFacilityAmbientForTest?.();
+  });
+}
+
+test('thermal emits six pooled smoke puffs above its stack mouth', async ({ gamePage: page }) => {
+  await renderSmokeCity(page);
+  const before = await page.evaluate(() => window.__getCityRendererStats());
+
+  expect(await page.evaluate(() => window.__triggerFacilityAmbientForTest('thermal', 0, 3000))).toBe(true);
+  const active = await page.evaluate(() => window.__getCityRendererStats());
+
+  expect(active.smokeEffectCount).toBe(6);
+  expect(active.smokeVisualSamples).toHaveLength(6);
+  expect(active.smokeVisualSamples[0].y).toBeGreaterThan(0.78);
+  expect(active.resourceRevision).toBe(before.resourceRevision);
+  expect(active.geometryCount).toBe(before.geometryCount);
+});
+
+test('factory and nuclear use three lighter pooled puffs each', async ({ gamePage: page }) => {
+  await renderSmokeCity(page);
+
+  expect(await page.evaluate(() => window.__triggerFacilityAmbientForTest('factory', 1, 2400))).toBe(true);
+  expect(await page.evaluate(() => window.__triggerFacilityAmbientForTest('nuclear', 2, 2400))).toBe(true);
+
+  expect(await page.evaluate(() => window.__getCityRendererStats().smokeEffectCount)).toBe(6);
+});
+
 test('facility motion uses pooled smoke and status layers while green stays bird-only', async ({ gamePage: page }) => {
   await renderAmbientCity(page);
   const before = await page.evaluate(() => window.__getCityRendererStats());
@@ -26,7 +61,7 @@ test('facility motion uses pooled smoke and status layers while green stays bird
   const active = await page.evaluate(() => window.__getCityRendererStats());
   expect(active.ambientEffectCount).toBe(3);
   expect(active.ambientEffectKinds.sort()).toEqual(['data', 'factory', 'wind']);
-  expect(active.smokeEffectCount).toBe(2);
+  expect(active.smokeEffectCount).toBe(3);
   expect(active.statusLightCount).toBeGreaterThan(0);
   expect(active.ambientFrameIntervalMs).toBe(100);
   expect(active.resourceRevision).toBe(before.resourceRevision);

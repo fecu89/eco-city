@@ -51,6 +51,8 @@ export function createHourSettler({
       lowCarbonPercent: power.lowCarbonPercent,
       deliveredPower: power.delivered,
       demand: power.demand,
+      capacity: economy.labor.capacity,
+      used: economy.labor.used,
       workforce: economy.labor.workforce,
       jobs: economy.labor.jobs,
       employmentRate: economy.labor.employmentRate,

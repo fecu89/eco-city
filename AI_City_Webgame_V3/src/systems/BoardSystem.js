@@ -6,6 +6,7 @@ import { formatCredits } from '../core/Money.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { getFacilityPermit, validateDemolitionPermit } from './FacilityPermitSystem.js';
+import { validateWorkforceTransition } from './WorkforceSystem.js';
 import {
   createHexCoordinates,
   expandHexGrid,
@@ -261,6 +262,13 @@ export function validateUpgrade(state, index) {
   }
   const cost = upgradeCost(cell);
   if (state.credits < cost) return { ok: false, reason: 'insufficient_credits', cost, missingCredits: cost - state.credits, facility };
+  const projectedGrid = state.grid.map((item, cellIndex) => cellIndex === index
+    ? { ...item, level: nextLevel }
+    : item);
+  const workforce = validateWorkforceTransition(state.grid, projectedGrid);
+  if (!workforce.ok) {
+    return { ok: false, reason: 'insufficient_workforce', cost, nextLevel, facility, ...workforce };
+  }
   return { ok: true, reason: null, cost, nextLevel, facility };
 }
 
@@ -282,6 +290,9 @@ export function upgradeRequirementMessage(state, validation) {
   if (validation.reason === 'insufficient_credits') {
     return `강화 크레딧 ${formatCredits(validation.missingCredits)}가 더 필요합니다.`;
   }
+  if (validation.reason === 'insufficient_workforce') {
+    return `강화 후 인력이 ${validation.shortage}명 부족합니다. 주거지를 먼저 건설하거나 강화하세요.`;
+  }
   if (validation.reason === 'max_level') return '이미 최대 레벨입니다.';
   if (validation.reason === 'not_editable') return '현재 퀘스트에서는 시설을 강화할 수 없습니다.';
   return '이 시설을 지금 강화할 수 없습니다.';
@@ -291,7 +302,7 @@ export function facilityUnlockMessage(state, facilityKey) {
   if (facilityKey === 'tidal' && (state.research?.techLevels?.tidal || 0) < 1) {
     return `${RESEARCH.tidal1.name} 연구를 완료하면 해금됩니다.`;
   }
-  const quest = QUESTS.find((item) => item.reward.unlockFacility === facilityKey);
+  const quest = QUESTS.find((item) => item.reward.unlockFacilities.includes(facilityKey));
   if (quest && !state.unlockedFacilities.has(facilityKey)) {
     return `퀘스트 ${quest.index} ‘${quest.title}’ 완료 보상으로 해금됩니다.`;
   }

@@ -10,10 +10,15 @@ export function nextAmbientDelay(random = Math.random) {
   return Math.round(CITY_AMBIENT_MOTION.MIN_DELAY_MS + progress * range);
 }
 
-function nextDuration(random) {
+export function ambientDurationBounds(type) {
+  return CITY_AMBIENT_MOTION.SMOKE[type]?.durationMs
+    || [CITY_AMBIENT_MOTION.MIN_DURATION_MS, CITY_AMBIENT_MOTION.MAX_DURATION_MS];
+}
+
+function nextDuration(type, random) {
   const progress = unitInterval(random());
-  const range = CITY_AMBIENT_MOTION.MAX_DURATION_MS - CITY_AMBIENT_MOTION.MIN_DURATION_MS;
-  return Math.round(CITY_AMBIENT_MOTION.MIN_DURATION_MS + progress * range);
+  const [minimum, maximum] = ambientDurationBounds(type);
+  return Math.round(minimum + progress * (maximum - minimum));
 }
 
 function uniqueCandidates(candidates) {
@@ -64,16 +69,23 @@ export function createAmbientMotionController({
       }
       const maxBatch = Math.min(CITY_AMBIENT_MOTION.MAX_ACTIVE_EFFECTS, candidates.length);
       const batchSize = 1 + Math.min(maxBatch - 1, Math.floor(unitInterval(random()) * maxBatch));
-      for (let index = 0; index < batchSize; index += 1) {
-        const candidate = pickCandidate(candidates, random);
+      const selected = [];
+      const smokeCandidates = candidates.filter(({ type }) => CITY_AMBIENT_MOTION.SMOKE_TYPES.includes(type));
+      if (smokeCandidates.length) {
+        const smokeCandidate = pickCandidate(smokeCandidates, random);
+        selected.push(smokeCandidate);
+        candidates.splice(candidates.findIndex(({ cellIndex }) => cellIndex === smokeCandidate.cellIndex), 1);
+      }
+      while (selected.length < batchSize && candidates.length) selected.push(pickCandidate(candidates, random));
+      selected.forEach((candidate) => {
         const effect = {
           id: `city-ambient-${++effectSequence}`,
           ...candidate,
-          durationMs: nextDuration(random),
+          durationMs: nextDuration(candidate.type, random),
         };
         active.set(effect.id, effect);
         onStart?.(effect);
-      }
+      });
     }, nextAmbientDelay(random));
   };
 

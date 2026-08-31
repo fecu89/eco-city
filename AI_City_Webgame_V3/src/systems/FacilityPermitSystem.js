@@ -1,4 +1,5 @@
 import { FACILITIES, FACILITY_LIMITS_BY_QUEST } from '../core/Constants.js';
+import { validateWorkforceTransition } from './WorkforceSystem.js';
 
 const LAST_QUEST = 15;
 
@@ -72,14 +73,25 @@ export function validateGridFacilityDependencies(grid) {
 export function validateDemolitionPermit(state, index) {
   const cell = state?.grid?.[index];
   if (!cell) return { ok: false, reason: 'empty', message: '철거할 시설이 없습니다.' };
-  if (cell.type !== 'thermal') return { ok: true, reason: null, message: '철거할 수 있습니다.' };
   const nuclearCount = countType(state.grid, 'nuclear');
   const thermalCount = countType(state.grid, 'thermal');
-  if (nuclearCount > 0 && thermalCount <= 1) {
+  if (cell.type === 'thermal' && nuclearCount > 0 && thermalCount <= 1) {
     return {
       ok: false,
       reason: 'last_thermal_supports_nuclear',
       message: '핵발전이 남아 있어 마지막 화력발전 예비력은 철거할 수 없습니다. 핵발전을 먼저 철거하세요.',
+      resolution: '핵발전소를 먼저 철거한 뒤 화력발전소를 철거하세요.',
+    };
+  }
+  const projectedGrid = state.grid.map((item, cellIndex) => cellIndex === index ? null : item);
+  const workforce = validateWorkforceTransition(state.grid, projectedGrid);
+  if (!workforce.ok) {
+    return {
+      ok: false,
+      reason: 'workforce_shortage_after_demolition',
+      message: `철거하면 인력이 ${workforce.shortage}명 부족해져 주거지를 철거할 수 없습니다.`,
+      resolution: '필요 인력이 적은 시설을 먼저 철거하거나 다른 주거지를 추가하세요.',
+      ...workforce,
     };
   }
   return { ok: true, reason: null, message: '철거할 수 있습니다.' };

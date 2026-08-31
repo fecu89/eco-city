@@ -6,6 +6,7 @@ test('demolition requires an irreversible-action confirmation before changing th
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
+  await page.locator('[data-facility-tab="management"]').click();
   await page.locator('#demolishBtn').click();
   await expect(page.locator('#modalCard')).toContainText('되돌릴 수 없습니다');
   await expect(page.locator('#modalCard')).toContainText('환급 1.00 💰');
@@ -23,9 +24,16 @@ test('the last thermal reserve cannot enter demolition confirmation while nuclea
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
+  await page.locator('[data-facility-tab="management"]').click();
   await page.locator('#demolishBtn').click();
-  await expect(page.locator('#modalCard')).toContainText('화력발전 · Lv.1');
+  await expect(page.locator('#modalCard [data-demolition-blocked]')).toBeVisible();
+  await expect(page.locator('#modalCard')).toContainText('철거 제한');
+  await expect(page.locator('#modalCard')).toContainText('핵발전');
   await expect(page.locator('#modalCard')).not.toContainText('되돌릴 수 없습니다');
-  await expect(page.locator('.toast', { hasText: '핵발전' })).toBeVisible();
+  await expect(page.locator('.toast', { hasText: '핵발전' })).toHaveCount(0);
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0]?.type)).toBe('thermal');
+
+  await page.locator('#confirmDemolitionBlocked').click();
+  await expect(page.locator('#modalCard')).toContainText('화력발전');
+  await expect(page.locator('#modalCard')).toContainText('LEVEL 1');
 });

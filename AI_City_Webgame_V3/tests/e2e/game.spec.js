@@ -71,7 +71,7 @@ test.describe('construction and inspection', () => {
     await expect(detail).toContainText('-2E/h');
     await expect(detail).toContainText('CO₂');
     await expect(detail.locator('[data-metric="water"]')).toHaveAttribute('aria-label', '물');
-    await expect(detail).toContainText('인구 +4');
+    await expect(detail).toContainText('인구 +10');
   });
 
   test('build cards follow quest unlock order and place unlocked facilities first', async ({ gamePage: page }) => {
@@ -81,7 +81,7 @@ test.describe('construction and inspection', () => {
     });
     await openHudPanel(page, 'build');
     const order = await page.locator('#facilityDock .facility-btn').evaluateAll((cards) => cards.map((card) => card.dataset.facility));
-    expect(order).toEqual(['residential', 'wind', 'thermal', 'factory', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'green', 'tidal']);
+    expect(order).toEqual(['residential', 'wind', 'factory', 'thermal', 'green', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'tidal']);
   });
 
   test('an occupied cell opens live economics and the 50 percent demolition breakdown', async ({ gamePage: page }) => {
@@ -90,6 +90,7 @@ test.describe('construction and inspection', () => {
     await page.evaluate(() => window.__settleSimulationHour());
     await clickCell(page, 0);
     await expect(page.locator('.facility-inspector-grid')).toContainText('시간당 수입');
+    await page.locator('[data-facility-tab="management"]').click();
     await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 2.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('환급 1.00 💰');
   });

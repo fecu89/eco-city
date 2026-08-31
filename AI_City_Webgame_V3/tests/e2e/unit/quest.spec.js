@@ -33,8 +33,13 @@ test('quest 1 becomes ready with two homes and claims its reward once', () => {
   expect(evaluateCurrentQuest(state).ready).toBe(true);
   state.questStatus = 'ready_to_claim';
   const before = state.credits;
-  expect(claimCurrentQuest(state)).toMatchObject({ ok: true, unlockedFacility: 'thermal', nextQuest: 2 });
+  expect(claimCurrentQuest(state)).toMatchObject({
+    ok: true,
+    unlockedFacilities: ['factory', 'thermal'],
+    nextQuest: 2,
+  });
   expect(state.credits).toBe(before + 4);
+  expect(state.unlockedFacilities.has('factory')).toBe(true);
   expect(state.unlockedFacilities.has('thermal')).toBe(true);
   expect(claimCurrentQuest(state)).toMatchObject({ ok: false });
   expect(state.credits).toBe(before + 4);
@@ -54,20 +59,35 @@ test('quest 14 needs four consecutive low-carbon, lower-water profitable hours',
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quest 5 replaces the quiz-only gate with two safe profitable nuclear hours', () => {
+test('quest 5 uses a reachable 12 CO2 transition ceiling with 40 percent low-carbon power', () => {
   expect(QUESTS.filter((quest) => quest.progressKind === 'quiz').map((quest) => quest.index)).toEqual([15]);
   expect(QUESTS[4]).toMatchObject({ index: 5, progressKind: 'hours', quizKind: null });
 
   const state = new GameState();
   state.questIndex = 5;
   state.grid[0] = { type: 'nuclear', level: 1 };
-  applySimulationQuestProgress(state, summary({ hourlyCarbon: 8, netCredits: 1 }));
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 12, lowCarbonPercent: 39, netCredits: 1 }));
   expect(state.questStatus).toBe('active');
-  applySimulationQuestProgress(state, summary({ hourlyCarbon: 8.1, netCredits: 1 }));
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 12.1, lowCarbonPercent: 60, netCredits: 1 }));
   expect(state.questProgress.consecutiveHours).toBe(0);
-  applySimulationQuestProgress(state, summary({ hourlyCarbon: 7, netCredits: 1 }));
-  applySimulationQuestProgress(state, summary({ hourlyCarbon: 7, netCredits: 1 }));
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 12, lowCarbonPercent: 40, netCredits: 1 }));
+  applySimulationQuestProgress(state, summary({ hourlyCarbon: 12, lowCarbonPercent: 40, netCredits: 1 }));
   expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 2 becomes ready from one adjacent factory and thermal pair without idle waiting', () => {
+  const state = new GameState();
+  const thermalIndex = neighborIndices(0, createHexCoordinates(2))[0];
+  state.questIndex = 2;
+  state.grid[0] = { type: 'factory', level: 1 };
+  state.grid[thermalIndex] = { type: 'thermal', level: 1 };
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+
+  const separated = new GameState();
+  separated.questIndex = 2;
+  separated.grid[0] = { type: 'factory', level: 1 };
+  separated.grid[18] = { type: 'thermal', level: 1 };
+  expect(evaluateCurrentQuest(separated).ready).toBe(false);
 });
 
 test('quest 6 completes when powered adjacent data cooling keeps water at the baseline', () => {
@@ -134,14 +154,8 @@ test('quest 7 needs solar power delivered at a 30 percent low-carbon share for t
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
-test('quests 2, 3 and 4 enforce their facility, adjacency, power and duration rules', () => {
+test('quests 3 and 4 enforce their facility, adjacency, power and duration rules', () => {
   const cases = [
-    {
-      quest: 2,
-      grid: [{ type: 'residential' }, { type: 'thermal' }],
-      tick: summary({ facilityPower: { 0: powered(0.95), 1: powered(0.95) } }),
-      hours: 2,
-    },
     {
       quest: 3,
       grid: [{ type: 'factory' }, { type: 'thermal' }],
@@ -261,7 +275,9 @@ test('quests 8 and 10 require their research and upgraded renewable facility tog
 
 test('all fifteen rewards follow the approved unlock, permit, credit, and completion sequence', () => {
   const state = new GameState();
-  const expectedUnlocks = ['thermal', 'factory', 'data', 'nuclear', 'cooling', 'solar', 'battery', 'wind', 'green'];
+  const expectedUnlocks = [
+    ['factory', 'thermal'], ['green'], ['data'], ['nuclear'], ['cooling'], ['solar'], ['battery'], ['wind'], [],
+  ];
   const expectedCredits = [4, 5, 6, 8, 8, 14, 6, 8, 8, 10, 10, 10, 12, 14, 0];
   const initialCredits = state.credits;
   let earned = 0;
@@ -272,7 +288,9 @@ test('all fifteen rewards follow the approved unlock, permit, credit, and comple
     expect(result.ok, `quest ${questIndex}`).toBe(true);
     earned += expectedCredits[questIndex - 1];
     expect(state.credits).toBe(initialCredits + earned);
-    if (questIndex <= expectedUnlocks.length) expect(state.unlockedFacilities.has(expectedUnlocks[questIndex - 1])).toBe(true);
+    for (const facility of expectedUnlocks[questIndex - 1] || []) {
+      expect(state.unlockedFacilities.has(facility)).toBe(true);
+    }
     if (questIndex === 6) expect(result.expandGrid).toBe(true);
     if (questIndex === 4) expect(state.researchMenuUnlocked).toBe(true);
     if (questIndex === 7) expect(state.upgradePermitLevel).toBe(2);

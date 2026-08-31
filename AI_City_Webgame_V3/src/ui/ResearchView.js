@@ -38,6 +38,7 @@ function activeJobMarkup(job, dataCenterIndex) {
       <div class="research-progress"><span data-research-live-progress style="width:${progressFor(job)}%"></span></div>
       <small data-research-live-hours>${Math.round(job.elapsedEffectiveHours)} / ${definition.durationHours}시간</small>
       <div class="research-actions">
+        ${assignedHere ? `<button class="btn primary" data-research-accelerate="${job.id}">퀴즈로 가속</button>` : ''}
         ${job.dataCenterIndex == null ? `<button class="btn secondary" data-research-assign="${job.id}">이 시설에 배정</button>` : ''}
         ${assignedHere ? `<button class="btn secondary" data-research-cancel="${job.id}">연구 취소 · 50% 환급</button>` : ''}
       </div>
@@ -119,5 +120,11 @@ export function bindResearchPanel(root, dataCenterIndex, onChanged) {
     const result = assignResearchDataCenter(gameState, button.dataset.researchAssign, dataCenterIndex);
     if (result.ok) eventBus.emit(Events.RESEARCH_ASSIGNED, result);
     onChanged?.(result);
+  }));
+  root.querySelectorAll('[data-research-accelerate]').forEach((button) => button.addEventListener('click', () => {
+    eventBus.emit(Events.RESEARCH_QUIZ_REQUESTED, {
+      researchId: button.dataset.researchAccelerate,
+      dataCenterIndex,
+    });
   }));
 }

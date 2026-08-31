@@ -13,8 +13,8 @@ test.describe('fullscreen world HUD', () => {
         demand: 5,
         lowCarbonPercent: 80,
         hourlyWater: 2.5,
-        workforce: 8,
-        jobs: 6,
+        capacity: 8,
+        used: 6,
       };
       window.__refreshGameForTest();
     });
@@ -23,7 +23,8 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#simNet')).toHaveText('+0.25/h');
     await expect(page.locator('#simCarbonRate')).toHaveText('3.4/h');
     await expect(page.locator('#simWater')).toHaveText('2.5/h');
-    await expect(page.locator('#simLabor')).toHaveText('8/6');
+    await expect(page.locator('#simLabor')).toHaveText('6/8');
+    await expect(page.locator('#simulationHud [data-metric="labor"]')).toHaveAttribute('title', '사용 인력 6 / 전체 인구 8');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(5);
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
@@ -41,8 +42,8 @@ test.describe('fullscreen world HUD', () => {
         demand: 10_000,
         lowCarbonPercent: 80,
         hourlyWater: 1_200_000,
-        workforce: 12_500,
-        jobs: 11_000,
+        capacity: 12_500,
+        used: 11_000,
       };
       window.__refreshGameForTest();
     });
@@ -53,7 +54,7 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#simPower')).toHaveText('12.5K/10K E');
     await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/h');
     await expect(page.locator('#simWater')).toHaveText('1.2M/h');
-    await expect(page.locator('#simLabor')).toHaveText('12.5K/11K');
+    await expect(page.locator('#simLabor')).toHaveText('11K/12.5K');
     await expect(page.locator('#simPower').locator('xpath=..')).toHaveAttribute('aria-label', /12,500/);
   });
 
@@ -159,6 +160,9 @@ test.describe('fullscreen world HUD', () => {
       .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
     await expect(detail.locator('[data-metric="credit"]')).toHaveAttribute('aria-label', '크레딧');
     await expect(detail.locator('[data-metric="power"]')).toHaveAttribute('aria-label', '전력');
+    await expect(detail.locator('[data-metric="labor"]')).toContainText('인구 +10');
+    await panel.locator('[data-facility="factory"]').hover();
+    await expect(detail.locator('[data-metric="labor"]')).toContainText('필요 인력 4명');
     expect(Number.parseFloat(await card.locator('.facility-card-identity strong').evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
     expect(Number.parseFloat(await detail.locator('.facility-detail-stats b').first().evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(11);
   });
@@ -193,7 +197,7 @@ test.describe('fullscreen world HUD', () => {
     await expect(residential.locator('.facility-limit')).toHaveText('2 / 2');
     await expect(residential).toHaveAttribute('aria-disabled', 'true');
     await expect(residential).toHaveAttribute('title', /퀘스트 2/);
-    await residential.click({ force: true });
+    await page.evaluate(() => document.querySelector('[data-facility="residential"]').click());
     await expect(page.locator('.toast', { hasText: '퀘스트 2' })).toBeVisible();
   });
 
@@ -300,6 +304,45 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
   });
 
+  test('desktop city and settings panels move independently and restore their saved positions', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      localStorage.removeItem('ai-city-status-panel-layout-v1');
+      localStorage.removeItem('ai-city-settings-panel-layout-v1');
+    });
+    const movePanel = async (name, selector, delta) => {
+      await page.locator(`[data-hud-target="${name}"]`).first().click();
+      const panel = page.locator(selector);
+      await page.waitForTimeout(240);
+      const before = await panel.boundingBox();
+      await page.mouse.move(before.x + 28, before.y + 24);
+      await page.mouse.down();
+      await page.mouse.move(before.x + delta.x, before.y + delta.y, { steps: 5 });
+      await page.mouse.up();
+      const after = await panel.boundingBox();
+      expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(40);
+      return after;
+    };
+
+    const status = await movePanel('status', '#statusPanel', { x: -150, y: 120 });
+    await page.locator('#statusPanel [data-hud-close]').click();
+    const settings = await movePanel('settings', '#settingsPanel', { x: -250, y: 150 });
+    expect(Math.hypot(settings.x - status.x, settings.y - status.y)).toBeGreaterThan(20);
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__);
+    await page.locator('[data-hud-target="status"]').first().click();
+    await page.waitForTimeout(240);
+    const restoredStatus = await page.locator('#statusPanel').boundingBox();
+    expect(Math.abs(restoredStatus.x - status.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(restoredStatus.y - status.y)).toBeLessThanOrEqual(2);
+    await page.locator('#statusPanel [data-hud-close]').click();
+    await page.locator('[data-hud-target="settings"]').first().click();
+    await page.waitForTimeout(240);
+    const restoredSettings = await page.locator('#settingsPanel').boundingBox();
+    expect(Math.abs(restoredSettings.x - settings.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(restoredSettings.y - settings.y)).toBeLessThanOrEqual(2);
+  });
+
   test('empty land builds only while the build panel is open', async ({ gamePage: page }) => {
     await page.evaluate(() => window.__clickCell(0));
     expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).entities)).toHaveLength(0);
@@ -320,6 +363,8 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('#confirmBuildBtn').click();
     await page.evaluate(() => window.__clickCell(0));
     await expect(page.locator('.facility-inspector-grid')).toBeVisible();
+    await expect(page.locator('.facility-inspector-grid')).toContainText('전체 인구');
+    await expect(page.locator('.facility-inspector-grid')).toContainText('+10명');
     await page.locator('.modal-card .close-modal').click();
 
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
@@ -334,6 +379,7 @@ test.describe('fullscreen world HUD', () => {
     });
     await expect(page.locator('#modal')).toBeVisible();
 
+    await page.locator('[data-facility-tab="management"]').click();
     await page.locator('#upgradeBtn').click();
 
     await expect(page.locator('#modal')).toBeHidden();
@@ -352,6 +398,7 @@ test.describe('fullscreen world HUD', () => {
       state.questIndex = 5;
       state.credits = 30;
       state.unlockedFacilities.add('thermal');
+      state.grid[1] = { type: 'residential', level: 1 };
       window.__refreshGameForTest();
     });
     await page.locator('[data-hud-target="build"]').first().click();

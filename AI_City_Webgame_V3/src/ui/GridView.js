@@ -45,6 +45,11 @@ function syncForecastMetrics(assessment) {
   );
   setForecastMetric('carbon', `CO₂ ${round1(projected.hourlyCarbon)}/h`, `Δ ${signed(projected.hourlyCarbon - current.hourlyCarbon)}`);
   setForecastMetric('water', `${round1(projected.hourlyWater)}/h`, `Δ ${signed(projected.hourlyWater - current.hourlyWater)}`);
+  setForecastMetric(
+    'labor',
+    `${formatCompactNumber(projected.labor.used, { fractionDigits: 0 })}/${formatCompactNumber(projected.labor.capacity, { fractionDigits: 0 })}명`,
+    `필요 Δ ${signed(projected.labor.used - current.labor.used, 0)} · 인구 Δ ${signed(projected.labor.capacity - current.labor.capacity, 0)}`,
+  );
 }
 
 function clearPlan() {

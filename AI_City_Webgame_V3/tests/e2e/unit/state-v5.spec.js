@@ -80,3 +80,29 @@ test('construction plans are transient across serialization and hydration', () =
   expect(restored.hydrate(saved)).toBe(true);
   expect(restored.constructionPlan).toEqual([]);
 });
+
+test('research quiz target is serialized and missing legacy values hydrate safely', () => {
+  const source = new GameState();
+  source.quizResearchId = 'solar2';
+  const saved = source.serialize();
+  expect(saved.quizResearchId).toBe('solar2');
+
+  const restored = new GameState();
+  expect(restored.hydrate(saved)).toBe(true);
+  expect(restored.quizResearchId).toBe('solar2');
+
+  delete saved.quizResearchId;
+  const legacy = new GameState();
+  expect(legacy.hydrate(saved)).toBe(true);
+  expect(legacy.quizResearchId).toBeNull();
+});
+
+test('new games enable music while an explicit saved disabled preference remains off', () => {
+  const fresh = new GameState();
+  expect(fresh.musicEnabled).toBe(true);
+  const saved = fresh.serialize();
+  saved.musicEnabled = false;
+  const restored = new GameState();
+  expect(restored.hydrate(saved)).toBe(true);
+  expect(restored.musicEnabled).toBe(false);
+});

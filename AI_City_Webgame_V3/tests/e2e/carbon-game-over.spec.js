@@ -8,6 +8,7 @@ test('seven unsafe carbon days pause the city and show a blocking reset modal', 
     state.carbonCrisisHours = 167;
     state.grid[0] = { type: 'thermal', level: 1, priority: 'normal' };
     state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
+    state.grid[2] = { type: 'residential', level: 1, priority: 'essential' };
     window.__settleSimulationHour();
   });
 

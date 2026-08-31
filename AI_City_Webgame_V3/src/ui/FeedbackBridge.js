@@ -1,14 +1,36 @@
 import { eventBus, Events } from '../core/EventBus.js';
-import { FACILITIES, RESEARCH_RULES, UI_FEEDBACK } from '../core/Constants.js';
-import { QUEST_COUNT } from '../core/QuestDefinitions.js';
+import { FACILITIES, UI_FEEDBACK } from '../core/Constants.js';
+import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
 import { formatCredits } from '../core/Money.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 
 function questRewardText(quest) {
   const parts = [];
   if (quest.reward.credits) parts.push(formatCredits(quest.reward.credits));
-  if (quest.reward.unlockFacility) parts.push(`${FACILITIES[quest.reward.unlockFacility]?.name || quest.reward.unlockFacility} 해금`);
+  if (quest.reward.unlockFacilities.length) {
+    const names = quest.reward.unlockFacilities
+      .map((facility) => FACILITIES[facility]?.name || facility)
+      .join('·');
+    parts.push(`${names} 해금`);
+  }
   return `보상 ${parts.join(' · ') || '최종 성적표'}`;
+}
+
+function showQuestRewardAlert(quest, result) {
+  const nextQuest = result.nextQuest ? QUESTS[result.nextQuest - 1] : null;
+  eventBus.emit(Events.TOAST_SHOW, {
+    kicker: result.campaignComplete ? '최종 퀘스트 완료' : '퀘스트 완료 · 보상 지급',
+    title: `${quest.title} 완료`,
+    text: questRewardText(quest),
+    meta: nextQuest
+      ? `LEVEL ${nextQuest.index} / ${QUEST_COUNT} · ${nextQuest.title} — ${nextQuest.goal}`
+      : '최종 운영 성적표가 열렸습니다.',
+    priority: true,
+    kind: 'quest-alert quest-reward-alert',
+    action: nextQuest ? 'quest' : null,
+    actionLabel: nextQuest ? '새 퀘스트 열기' : '',
+    duration: UI_FEEDBACK.QUEST_ALERT_MS,
+  });
 }
 
 function showQuestAlert(quest, ready = false) {
@@ -32,7 +54,12 @@ export function initFeedbackBridge() {
     eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
   });
 
-  eventBus.on(Events.QUEST_STARTED, ({ quest }) => {
+  eventBus.on(Events.QUEST_CLAIMED, ({ quest, result }) => {
+    showQuestRewardAlert(quest, result);
+  });
+
+  eventBus.on(Events.QUEST_STARTED, ({ quest, silentAlert = false }) => {
+    if (silentAlert) return;
     showQuestAlert(quest);
   });
 
@@ -62,12 +89,12 @@ export function initFeedbackBridge() {
     });
   });
 
-  eventBus.on(Events.RESEARCH_ACCELERATED, ({ appliedJobs, bankedHours }) => {
+  eventBus.on(Events.RESEARCH_ACCELERATED, ({ appliedJobs, hours }) => {
     eventBus.emit(Events.TOAST_SHOW, {
       title: '퀴즈 연구 가속',
       text: appliedJobs.length
-        ? `활성 연구 ${appliedJobs.length}개를 각각 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간 단축했습니다.`
-        : `${bankedHours}시간을 다음 연구에 적립했습니다.`,
+        ? `${RESEARCH[appliedJobs[0]]?.name || appliedJobs[0]} 연구를 ${hours}시간 단축했습니다.`
+        : '선택한 연구가 이미 완료되었습니다.',
     });
   });
 }

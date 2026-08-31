@@ -11,7 +11,7 @@ test.describe('quest economy HUD', () => {
     const panel = await openQuestPanel(page);
     await expect(panel).toContainText('LEVEL 1 / 15');
     await expect(page.locator('#questPanelTitle')).toHaveText('2040, 첫 시민');
-    await expect(page.locator('#questPanelReward')).toContainText('화력발전 해금');
+    await expect(page.locator('#questPanelReward')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questPanelReward')).not.toContainText('thermal');
     await expect(page.locator('#teacherNote')).toContainText('도시 정착');
     await expect(page.locator('#teacherNote')).not.toContainText('1차시');
@@ -30,7 +30,7 @@ test.describe('quest economy HUD', () => {
     expect(await page.evaluate(() => window.__GAME_STATE__.elapsedGameHours)).toBe(before + 1);
   });
 
-  test('claiming the first quest unlocks thermal exactly once', async ({ gamePage: page }) => {
+  test('claiming the first quest unlocks factory and thermal without a reward modal', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__GAME_STATE__.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
       window.__GAME_STATE__.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
@@ -40,11 +40,23 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
     const before = await page.evaluate(() => window.__GAME_STATE__.credits);
     await page.locator('#questPanelClaimBtn').click();
-    await page.locator('#questRewardClose').click();
-    await openQuestPanel(page);
+    await expect(page.locator('#questRewardClose')).toHaveCount(0);
+    await expect(page.locator('.toast.quest-reward-alert')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questPanel')).toContainText('LEVEL 2 / 15');
     expect(await page.evaluate(() => window.__GAME_STATE__.credits)).toBe(before + 4);
+    expect(await page.evaluate(() => window.__GAME_STATE__.unlockedFacilities.has('factory'))).toBe(true);
     expect(await page.evaluate(() => window.__GAME_STATE__.unlockedFacilities.has('thermal'))).toBe(true);
+  });
+
+  test('the compact quest card expands to show every condition and reward in place', async ({ gamePage: page }) => {
+    const panel = await openQuestPanel(page);
+    await expect(page.locator('#questPanelDetails')).toBeHidden();
+    await page.locator('#questPanelExpandBtn').click();
+    await expect(page.locator('#questPanelExpandBtn')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#questPanelExpandBtn')).toContainText('간단히 보기');
+    await expect(page.locator('#questPanelDetails')).toBeVisible();
+    await expect(page.locator('#questPanelDetails')).toContainText('주거지 2개');
+    await expect(page.locator('#questPanelDetails')).toContainText('공장·화력발전 해금');
   });
 
   test('quest 5 is an operational carbon transition instead of a quiz-only gate', async ({ gamePage: page }) => {
@@ -64,7 +76,7 @@ test.describe('quest economy HUD', () => {
     });
 
     await openQuestPanel(page);
-    await expect(page.locator('#questPanel')).toContainText('CO₂ 8 이하');
+    await expect(page.locator('#questPanel')).toContainText('CO₂ 12 이하');
     await expect(page.locator('#questPanelClaimBtn')).toHaveText('진행 중');
     await expect(page.locator('#questPanelClaimBtn')).toBeDisabled();
     await expect(page.locator('#questPanel')).not.toContainText('퀴즈 시작');
@@ -92,13 +104,15 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#facilityPriorityControls')).toContainText('필수');
     await expect(page.locator('#facilityPriorityControls')).toContainText('일반');
     await expect(page.locator('#facilityPriorityControls')).toContainText('절약');
+    await page.locator('#facilityPriorityControls [data-priority="essential"]').click();
+    expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].priority)).toBe('essential');
+
+    await page.locator('[data-facility-tab="management"]').click();
     await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 6.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('환급 3.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('손실 3.00 💰');
     await expect(page.locator('#recordEvidenceBtn')).toHaveCount(0);
 
-    await page.locator('#facilityPriorityControls [data-priority="essential"]').click();
-    expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].priority)).toBe('essential');
   });
 
   test('quest 6 presents the compact environmental water-cycle objective without a scanner', async ({ gamePage: page }) => {
@@ -132,7 +146,7 @@ test.describe('quest economy HUD', () => {
     expect(await page.evaluate(() => window.__getCityRendererStats().birdCount)).toBe(0);
   });
 
-  test('quest 4 closes directly into a new-quest alert because operating costs are public from the start', async ({ gamePage: page }) => {
+  test('quest 4 claims through a reward alert and starts the next quest without a reward modal', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       state.questIndex = 4;
@@ -144,15 +158,15 @@ test.describe('quest economy HUD', () => {
 
     await openQuestPanel(page);
     await page.locator('#questPanelClaimBtn').click();
-    await expect(page.locator('#modalCard')).toContainText('연구도시의 씨앗 완료');
-    await page.locator('#questRewardClose').click();
+    await expect(page.locator('#questRewardClose')).toHaveCount(0);
     await expect(page.locator('#modal')).toBeHidden();
+    await expect(page.locator('.toast.quest-reward-alert')).toContainText('연구도시의 씨앗 완료');
     const alert = page.locator('.toast.quest-alert');
     await expect(alert).toContainText('LEVEL 5 / 15');
-    await expect(alert).toContainText('탄소 경계선');
-    await expect(alert).toContainText('핵발전을 가동해 CO₂ 8 이하와 흑자를 2시간 유지하세요.');
-    await expect(alert).toContainText('보상 8.00 💰 · 순환냉각 해금');
-    await expect(alert.locator('[data-toast-action="quest"]')).toHaveText('퀘스트 열기');
+    await expect(alert).toContainText('탄소 전환선');
+    await expect(alert).toContainText('저탄소 전력 40% 이상, CO₂ 12 이하와 흑자를 2시간 유지하세요.');
+    await expect(alert).toContainText('보상 8.00 💰 · 핵발전 해금');
+    await expect(alert.locator('[data-toast-action="quest"]')).toHaveText('새 퀘스트 열기');
     await expect(page.locator('[data-hud-target="quest"]').first()).toHaveAttribute('data-notification', 'new');
     await alert.locator('[data-toast-action="quest"]').click();
     await expect(page.locator('#questPanel')).toHaveClass(/hud-panel-active/);
@@ -181,8 +195,6 @@ test.describe('quest economy HUD', () => {
 
     await openQuestPanel(page);
     await page.locator('#questPanelClaimBtn').click();
-    await expect(page.locator('#modalCard')).toContainText('도시 생존 성공');
-    await page.locator('#questRewardClose').click();
     await expect(page.locator('#modalCard')).toContainText('기후 생존 도시 성적표');
     await expect(page.locator('#modalCard')).toContainText('평균 송전 효율');
     await expect(page.locator('#validationBtn')).toHaveCount(0);

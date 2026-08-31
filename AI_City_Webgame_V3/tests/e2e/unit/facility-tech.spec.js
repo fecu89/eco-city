@@ -109,6 +109,7 @@ test('completed solar research can upgrade solar and satisfy quest 8', () => {
   gameState.questIndex = 8;
   gameState.questProgress.quizPassed = true;
   gameState.grid[0] = { type: 'solar', level: 1 };
+  gameState.grid[1] = { type: 'residential', level: 1 };
   gameState.credits = 100;
   gameState.upgradePermitLevel = 2;
   gameState.research.completedIds.add('solar2');
@@ -116,4 +117,23 @@ test('completed solar research can upgrade solar and satisfy quest 8', () => {
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
   expect(upgradeCell(0)).toMatchObject({ ok: true, level: 2 });
   expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+});
+
+test('an upgrade is blocked when its extra staff would exceed the resident population', () => {
+  gameState.questIndex = 7;
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 2;
+  gameState.grid[0] = { type: 'residential', level: 1 };
+  gameState.grid[1] = { type: 'nuclear', level: 1 };
+  gameState.grid[2] = { type: 'factory', level: 1 };
+
+  const validation = validateUpgrade(gameState, 2);
+  expect(validation).toMatchObject({
+    ok: false,
+    reason: 'insufficient_workforce',
+    capacity: 10,
+    used: 11,
+    shortage: 1,
+  });
+  expect(upgradeRequirementMessage(gameState, validation)).toContain('주거지');
 });

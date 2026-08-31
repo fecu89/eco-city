@@ -10,18 +10,28 @@ test('residential tax falls to its 25 percent floor without jobs', () => {
   const grid = cells(['residential', 'residential']);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
-  expect(result.labor).toEqual({ workforce: 8, jobs: 0, industryFill: 0, employmentRate: 0 });
+  expect(result.labor).toEqual({
+    capacity: 20,
+    used: 0,
+    available: 20,
+    shortage: 0,
+    utilization: 0,
+    workforce: 20,
+    jobs: 0,
+    industryFill: 0,
+    employmentRate: 0,
+  });
   expect(result.grossIncome).toBe(0.25);
 });
 
-test('industry income falls proportionally when workers are scarce', () => {
+test('a staffed level-one factory and data center use seven of ten residents', () => {
   const grid = cells(['residential', 'factory', 'data']);
   const labor = calculateLabor(grid);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
-  expect(labor.industryFill).toBe(0.4);
-  expect(result.facilityEconomy[1].income).toBe(0.4);
-  expect(result.facilityEconomy[2].income).toBe(0.8);
+  expect(labor).toMatchObject({ capacity: 10, used: 7, available: 3, shortage: 0, industryFill: 1 });
+  expect(result.facilityEconomy[1].income).toBe(1);
+  expect(result.facilityEconomy[2].income).toBe(2);
 });
 
 test('six factories add 1.2 credits per hour in overcrowding cost', () => {
@@ -35,7 +45,7 @@ test('hourly credit settlement preserves cent precision', () => {
   const grid = cells(['residential', 'factory', 'data']);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 1.005 });
 
-  expect(result.nextCredits * 100).toBe(Math.round(result.nextCredits * 100));
+  expect(result.nextCredits).toBe(4.39);
   expect(Number(result.nextCredits.toFixed(2))).toBe(result.nextCredits);
 });
 

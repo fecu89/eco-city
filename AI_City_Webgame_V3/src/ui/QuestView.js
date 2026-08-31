@@ -1,5 +1,6 @@
 import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
+import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { FACILITIES, QUEST_REQUIREMENTS, RESEARCH_RULES } from '../core/Constants.js';
 import { claimCurrentQuest, evaluateCurrentQuest, requestEmergencySupport } from '../systems/QuestSystem.js';
 import { markQuestQuizResult } from '../systems/QuestSystem.js';
@@ -9,6 +10,7 @@ import {
   currentQuestQuizQuestion,
   retryQuestQuiz,
   startQuestQuiz,
+  startResearchQuiz,
 } from '../systems/QuizSystem.js';
 import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
@@ -17,7 +19,9 @@ import { eventBus, Events } from '../core/EventBus.js';
 
 let els;
 let onChanged = () => {};
-const QUIZ_KINDS = { 8: 'clean-power', 15: 'climate-council' };
+let detailsExpanded = false;
+let researchQuizReturnIndex = null;
+const QUIZ_KINDS = { 15: 'climate-council' };
 const nodes = (value) => (Array.isArray(value) ? value : [value]).filter(Boolean);
 const eachNode = (value, callback) => nodes(value).forEach(callback);
 
@@ -35,19 +39,37 @@ export function initQuestView(elements, changed) {
     const result = claimCurrentQuest(gameState);
     if (!result.ok) return;
     if (result.expandGrid) expandGrid();
+    detailsExpanded = false;
     onChanged({ phase: 'claimed', quest: completed, result });
-    openRewardModal(completed, result, () => onChanged({ phase: 'reward_closed', quest: completed, result }));
+    if (result.nextQuest) {
+      eventBus.emit(Events.QUEST_STARTED, { quest: QUESTS[result.nextQuest - 1], silentAlert: true });
+    }
   }));
   const mapButtons = Array.isArray(els.map) ? els.map : [els.map];
   mapButtons.filter(Boolean).forEach((button) => button.addEventListener('click', openQuestMap));
+  eventBus.on(Events.RESEARCH_QUIZ_REQUESTED, ({ researchId, dataCenterIndex }) => {
+    const result = startResearchQuiz(gameState, researchId);
+    if (!result.ok) {
+      eventBus.emit(Events.TOAST_SHOW, { title: '연구 퀴즈를 열 수 없습니다.', text: result.reason });
+      return;
+    }
+    researchQuizReturnIndex = dataCenterIndex;
+    renderQuestQuizModal();
+  });
+  els.expand?.addEventListener('click', () => {
+    detailsExpanded = !detailsExpanded;
+    renderQuest();
+  });
 }
 
 function rewardText(quest) {
   const parts = [];
   if (quest.reward.credits) parts.push(formatCredits(quest.reward.credits));
-  if (quest.reward.unlockFacility) {
-    const facilityName = FACILITIES[quest.reward.unlockFacility]?.name || quest.reward.unlockFacility;
-    parts.push(`${facilityName} 해금`);
+  if (quest.reward.unlockFacilities.length) {
+    const facilityNames = quest.reward.unlockFacilities
+      .map((facility) => FACILITIES[facility]?.name || facility)
+      .join('·');
+    parts.push(`${facilityNames} 해금`);
   }
   if (quest.index === 7) parts.push('Lv.2 강화 허가');
   if (quest.index === 10) parts.push('전력 우선순위 운영');
@@ -85,14 +107,28 @@ export function renderQuest() {
   eachNode(els.contextAction, (node) => {
     node.classList.add('hidden');
   });
+  if (els.details) {
+    els.details.innerHTML = `
+      <strong>완료 조건</strong>
+      <ul>${quest.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join('')}</ul>
+      <div><span>퀘스트 보상</span><b>${escapeHtml(rewardText(quest))}</b></div>`;
+    els.details.classList.toggle('hidden', !detailsExpanded);
+  }
+  if (els.expand) {
+    els.expand.setAttribute('aria-expanded', String(detailsExpanded));
+    els.expand.querySelector('span').textContent = detailsExpanded ? '간단히 보기' : '전체 내용 펼치기';
+  }
+  eachNode(els.root, (node) => node.closest('[data-hud-panel="quest"]')?.classList.toggle('quest-details-expanded', detailsExpanded));
 }
 
 function renderQuestQuizModal() {
   const question = currentQuestQuizQuestion(gameState);
   if (!question) return;
+  const research = gameState.quizResearchId ? RESEARCH[gameState.quizResearchId] : null;
+  const accelerationHours = research ? research.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT : 0;
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow">CLIMATE QUIZ</span><h2>${escapeHtml(question.title)}</h2></div></div>
-    <div class="quiz-count">${gameState.quizIndex + 1} / ${gameState.quizPool.length} · 통과 ${gameState.quizPassThreshold}문항</div>
+    <div class="modal-head"><div><span class="eyebrow">${research ? 'RESEARCH ACCELERATION' : 'CLIMATE QUIZ'}</span><h2>${research ? `${escapeHtml(research.name)} · ` : ''}${escapeHtml(question.title)}</h2></div></div>
+    <div class="quiz-count">${gameState.quizIndex + 1} / ${gameState.quizPool.length} · ${research ? `정답마다 ${accelerationHours}시간 단축` : `통과 ${gameState.quizPassThreshold}문항`}</div>
     <div class="quiz-question">
       <h3>${escapeHtml(question.prompt)}</h3>
       <div class="quiz-options" id="questQuizOptions">${question.options.map((option, index) => `<button class="quiz-option" data-index="${index}">${String.fromCharCode(65 + index)}. ${escapeHtml(option.text)}</button>`).join('')}</div>
@@ -108,8 +144,8 @@ function renderQuestQuizModal() {
       $$modal('#questQuizOptions .quiz-option')[result.correctIndex]?.classList.add('correct');
       const accelerationText = result.acceleration
         ? result.acceleration.appliedJobs.length
-          ? `활성 연구 ${result.acceleration.appliedJobs.length}개에서 각각 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간 단축`
-          : `연구 가속 ${RESEARCH_RULES.QUIZ_ACCELERATION_HOURS}시간 적립`
+          ? `${RESEARCH[result.researchId]?.name || result.researchId} ${result.acceleration.hours}시간 단축`
+          : '이 연구는 이미 완료되었습니다.'
         : '';
       $modal('#questQuizExplain').innerHTML = `<div class="quiz-explain"><strong>${result.correct ? '정답' : '오답'}</strong><br>${escapeHtml(result.explain)}${accelerationText ? `<br><b>${escapeHtml(accelerationText)}</b>` : ''}</div>`;
       $modal('#questQuizNext').disabled = false;
@@ -123,6 +159,24 @@ function renderQuestQuizModal() {
 }
 
 function renderQuestQuizResultModal(result) {
+  if (result.researchId) {
+    const definition = RESEARCH[result.researchId];
+    const reducedHours = (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT) * result.correct;
+    setModal(`
+      <div class="modal-head"><div><span class="eyebrow">RESEARCH QUIZ COMPLETE</span><h2>${escapeHtml(definition.name)} 가속 결과</h2></div></div>
+      <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>단축</span><strong>${reducedHours}시간</strong></div></div>
+      <div class="callout"><strong>선택한 연구에만 반영되었습니다.</strong><p>다른 데이터센터의 연구 진행도는 바뀌지 않습니다.</p></div>
+      <div class="modal-actions"><button class="btn primary" id="questQuizFinish">연구 화면으로</button></div>
+    `, { id: 'research-quiz-result', pausesSimulation: true });
+    $modal('#questQuizFinish').addEventListener('click', () => {
+      const dataCenterIndex = researchQuizReturnIndex;
+      researchQuizReturnIndex = null;
+      closeModal();
+      eventBus.emit(Events.RESEARCH_QUIZ_CLOSED, { dataCenterIndex });
+      onChanged();
+    });
+    return;
+  }
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUIZ RESULT</span><h2>${result.passed ? '퀴즈 통과' : '다시 준비하세요'}</h2></div></div>
     <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>통과 기준</span><strong>${result.passThreshold}/${result.total}</strong></div></div>
@@ -138,19 +192,6 @@ function renderQuestQuizResultModal(result) {
     markQuestQuizResult(gameState, true);
     closeModal();
     onChanged();
-  });
-}
-
-function openRewardModal(quest, result, afterClose) {
-  setModal(`
-    <div class="modal-head"><div><span class="eyebrow">LEVEL UP</span><h2>${quest.title} 완료</h2></div></div>
-    <div class="final-rank"><div class="rank-icon">🎉</div><h2>${result.nextQuest ? `LEVEL ${result.nextQuest}` : '도시 생존 성공'}</h2><p>${rewardText(quest)}</p></div>
-    <div class="modal-actions"><button class="btn primary" id="questRewardClose">계속하기</button></div>
-  `);
-  $modal('#questRewardClose').addEventListener('click', () => {
-    closeModal();
-    if (result.nextQuest) eventBus.emit(Events.QUEST_STARTED, { quest: QUESTS[result.nextQuest - 1] });
-    afterClose?.();
   });
 }
 

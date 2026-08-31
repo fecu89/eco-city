@@ -76,24 +76,40 @@ export const TIME = Object.freeze({
   FAST_SCALE: 4,
 });
 
+export const AUDIO = Object.freeze({
+  AMBIENT_GAIN: 0.045,
+  AMBIENT_FADE_IN_SECONDS: 1.2,
+  AMBIENT_FADE_OUT_SECONDS: 0.6,
+  AMBIENT_STOP_DELAY_MS: 700,
+  AMBIENT_CHORD_STEP_MS: 4000,
+  AMBIENT_CHORDS: Object.freeze([
+    Object.freeze([110, 164.81, 220]),
+    Object.freeze([98, 146.83, 196]),
+    Object.freeze([123.47, 164.81, 246.94]),
+    Object.freeze([110, 146.83, 220]),
+  ]),
+});
+
 export const QUEST_REQUIREMENTS = Object.freeze({
   OPERATING_HOURS: 2,
   WATER_CYCLE_POWER_RATIO: 0.9,
   FIRST_SOLAR_LOW_CARBON_PERCENT: 30,
+  TRANSITION_LOW_CARBON_PERCENT: 40,
+  TRANSITION_CARBON_MAX: 12,
 });
 
 // 각 퀘스트에서 허용되는 시설별 누적 최대치다. 빈 항목은 이전 퀘스트 값을 유지한다.
 export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   1: Object.freeze({ residential: 2 }),
-  2: Object.freeze({ residential: 3, thermal: 1 }),
-  3: Object.freeze({ residential: 4, factory: 2 }),
+  2: Object.freeze({ residential: 3, factory: 1, thermal: 1 }),
+  3: Object.freeze({ residential: 4, factory: 2, green: 1 }),
   4: Object.freeze({ residential: 5, thermal: 2, data: 1 }),
   5: Object.freeze({ nuclear: 1 }),
-  6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2 }),
+  6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2, green: 2 }),
   7: Object.freeze({ residential: 7, solar: 2 }),
   8: Object.freeze({ solar: 3, battery: 2 }),
-  9: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2 }),
-  10: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3, green: 3 }),
+  9: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2, green: 3 }),
+  10: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3 }),
   11: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
   12: Object.freeze({ factory: 5, data: 4, cooling: 4, solar: 5, wind: 4, tidal: 2 }),
   13: Object.freeze({ residential: 10, battery: 4, green: 6 }),
@@ -109,7 +125,6 @@ export const RESEARCH_RULES = Object.freeze({
   HOURS_PER_DAY: 24,
   GAME_HOURS_PER_REAL_MINUTE: 60,
   QUIZ_QUESTION_COUNT: 4,
-  QUIZ_ACCELERATION_HOURS: 45,
   DURATION_HOURS: Object.freeze({
     STANDARD: 120,
     ADVANCED: 150,
@@ -152,9 +167,17 @@ export const FACILITY_ECONOMY = {
 };
 
 export const WORKFORCE_LEVELS = {
-  residential: [0, 4, 6, 8],
+  residential: [0, 10, 15, 22],
   factory: [0, 4, 6, 8],
-  data: [0, 6, 9, 12],
+  thermal: [0, 2, 3, 4],
+  data: [0, 3, 5, 7],
+  nuclear: [0, 5, 7, 9],
+  solar: [0, 1, 2, 3],
+  wind: [0, 1, 2, 3],
+  battery: [0, 1, 2, 3],
+  cooling: [0, 1, 2, 3],
+  green: [0, 0, 0, 0],
+  tidal: [0, 2, 3, 4],
 };
 
 export const ECONOMY_RULES = {
@@ -211,22 +234,49 @@ export const CITY_AMBIENT = {
 };
 
 export const CITY_AMBIENT_MOTION = Object.freeze({
-  MIN_DELAY_MS: 4000,
-  MAX_DELAY_MS: 9000,
+  MIN_DELAY_MS: 2500,
+  MAX_DELAY_MS: 5000,
   FRAME_INTERVAL_MS: 100,
   MAX_ACTIVE_EFFECTS: 3,
   MIN_DURATION_MS: 600,
   MAX_DURATION_MS: 1600,
-  MAX_SMOKE_INSTANCES: 6,
+  MAX_SMOKE_INSTANCES: 18,
   MAX_STATUS_LIGHTS: BOARD.EXPANDED_CELLS * 2,
   SMOKE_TYPES: Object.freeze(['factory', 'thermal', 'nuclear']),
-  SMOKE_PARTICLES_PER_EFFECT: 2,
   STATUS_LIGHTS_PER_EFFECT: 2,
-  SMOKE_BASE_HEIGHT: 0.46,
-  SMOKE_RISE: 0.42,
-  SMOKE_BASE_SCALE: 0.055,
-  SMOKE_GROWTH: 0.055,
-  SMOKE_WANDER: 0.035,
+  SMOKE_OPACITY: 0.52,
+  SMOKE: Object.freeze({
+    factory: Object.freeze({
+      particles: 3,
+      durationMs: Object.freeze([1800, 3000]),
+      stackOffset: Object.freeze([0.13, -0.08]),
+      heightPadding: 0.02,
+      rise: 0.48,
+      baseScale: 0.06,
+      growth: 0.075,
+      wander: 0.045,
+    }),
+    thermal: Object.freeze({
+      particles: 6,
+      durationMs: Object.freeze([2400, 4000]),
+      stackOffset: Object.freeze([0, 0]),
+      heightPadding: 0.04,
+      rise: 0.72,
+      baseScale: 0.075,
+      growth: 0.12,
+      wander: 0.065,
+    }),
+    nuclear: Object.freeze({
+      particles: 3,
+      durationMs: Object.freeze([1800, 3000]),
+      stackOffset: Object.freeze([0, 0]),
+      heightPadding: 0.03,
+      rise: 0.56,
+      baseScale: 0.075,
+      growth: 0.09,
+      wander: 0.05,
+    }),
+  }),
   STATUS_BASE_HEIGHT: 0.38,
   STATUS_ORBIT_RADIUS: 0.25,
   STATUS_SCALE: Object.freeze([0.035, 0.025, 0.02]),
@@ -259,6 +309,11 @@ export const QUEST_PANEL_LAYOUT = Object.freeze({
   EDGE_MARGIN: 8,
   SAFE_GAP: 8,
   KEYBOARD_STEP: 12,
+});
+
+export const FLOATING_PANEL_STORAGE = Object.freeze({
+  STATUS: 'ai-city-status-panel-layout-v1',
+  SETTINGS: 'ai-city-settings-panel-layout-v1',
 });
 
 export const THEME_STORAGE_KEY = 'ai-city-theme';

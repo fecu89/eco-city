@@ -5,6 +5,7 @@ import { startAmbient, stopAmbient } from './bgm.js';
 
 let ctx = null;
 let masterGain = null;
+let resumePromise = null;
 
 function ensureContext() {
   if (ctx) return ctx;
@@ -18,6 +19,19 @@ function ensureContext() {
 
 function startAmbientIfReady() {
   if (ctx && gameState.sound && gameState.musicEnabled) startAmbient(ctx, masterGain);
+}
+
+function resumeAndStart() {
+  ensureContext();
+  if (!resumePromise) {
+    resumePromise = Promise.resolve(ctx.state === 'suspended' ? ctx.resume() : undefined)
+      .catch((error) => console.warn('오디오 컨텍스트를 시작하지 못했습니다.', error))
+      .finally(() => {
+        resumePromise = null;
+        startAmbientIfReady();
+      });
+  }
+  return resumePromise;
 }
 
 export function initAudioManager() {
@@ -35,17 +49,13 @@ export function initAudioManager() {
   });
 
   // 브라우저 자동재생 정책 — 첫 사용자 입력에서 AudioContext를 시작/재개한다.
-  const resume = () => {
-    ensureContext();
-    if (ctx.state === 'suspended') ctx.resume();
-    window.removeEventListener('pointerdown', resume);
-  };
+  const resume = () => { resumeAndStart(); };
   window.addEventListener('pointerdown', resume, { once: true });
 }
 
 export function toggleMusic() {
   gameState.musicEnabled = !gameState.musicEnabled;
-  if (gameState.musicEnabled) startAmbientIfReady();
+  if (gameState.musicEnabled) resumeAndStart();
   else stopAmbient();
   return gameState.musicEnabled;
 }

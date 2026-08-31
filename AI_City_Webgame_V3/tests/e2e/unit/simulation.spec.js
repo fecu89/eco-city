@@ -17,7 +17,8 @@ test('one settlement advances exactly one hour and applies power income once', (
   expect(state.tickIndex).toBe(1);
   expect(result.power.facilityPower[1].ratio).toBe(1);
   // 화력·주거 인접 페널티와 건강 비용은 첫 정산부터 공개·적용된다.
-  expect(state.lastTickSummary.netCredits).toBe(-0.84);
+  expect(state.lastTickSummary.netCredits).toBe(-0.8);
+  expect(state.lastTickSummary).toMatchObject({ capacity: 10, used: 2 });
 });
 
 test('hourly settlement applies research demand before power and advances research before quest progress', () => {

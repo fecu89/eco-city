@@ -13,8 +13,7 @@ let detailFacilityKey = null;
 const FACILITY_UNLOCK_ORDER = new Map([
   ['residential', 0],
   ...QUESTS
-    .filter((quest) => quest.reward.unlockFacility)
-    .map((quest) => [quest.reward.unlockFacility, quest.index]),
+    .flatMap((quest) => quest.reward.unlockFacilities.map((facility) => [facility, quest.index])),
 ]);
 
 export function initDockView(el, sharedDetailEl = null) {
@@ -30,7 +29,10 @@ function facilityPresentation(key, facility) {
   const labor = WORKFORCE_LEVELS[key];
   const money = economy.income ? `+${formatCredits(economy.income, { suffix: false })}/h` : economy.upkeep ? `-${formatCredits(economy.upkeep, { suffix: false })}/h` : `±${formatCredits(0, { suffix: false })}/h`;
   const power = facility.supply ? `+${facility.supply}E/h` : facility.demand ? `-${facility.demand}E/h` : '0E/h';
-  const laborText = key === 'residential' ? `인구 +${labor?.[1] || 0}` : labor ? `일자리 +${labor[1]}` : '무인 시설';
+  const requiredWorkers = labor?.[1] || 0;
+  const laborText = key === 'residential'
+    ? `인구 +${requiredWorkers}`
+    : requiredWorkers > 0 ? `필요 인력 ${requiredWorkers}명` : '필요 인력 없음';
   return { money, power, laborText };
 }
 

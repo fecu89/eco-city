@@ -2,6 +2,7 @@ import { FACILITIES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
 import { calcMetrics, getBoardCoordinates, validatePlacement } from './BoardSystem.js';
 import { getFacilityPermitForCount, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
+import { validateWorkforceTransition } from './WorkforceSystem.js';
 
 function copyPlan(plan) {
   return (plan || []).map(({ index, type }) => ({ index, type }));
@@ -51,6 +52,17 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
     if (!dependency.ok) errors.push({ index: null, type: 'nuclear', ...dependency });
   }
 
+  const workforce = validateWorkforceTransition(state.grid, projectedGrid);
+  if (!workforce.ok) {
+    errors.push({
+      index: null,
+      type: null,
+      ...workforce,
+      reason: 'insufficient_workforce',
+      message: `인력이 ${workforce.shortage}명 부족합니다. 주거지를 계획에 함께 추가하세요.`,
+    });
+  }
+
   const projectedCredits = roundCredits(state.credits - totalCost);
   if (totalCost > state.credits) {
     errors.push({
@@ -71,6 +83,7 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
     totalCost,
     projectedCredits,
     projectedGrid,
+    workforce,
   };
 }
 

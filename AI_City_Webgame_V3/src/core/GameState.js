@@ -26,6 +26,7 @@ export class GameState {
     this.quizCorrect = 0;
     this.quizAnswered = false;
     this.quizKind = null;
+    this.quizResearchId = null;
     this.quizPassThreshold = 0;
     this.quizAttempts = {};
     this.quizResults = {};
@@ -35,7 +36,7 @@ export class GameState {
     this.diagnosisScannerActive = true;
 
     this.sound = true;
-    this.musicEnabled = false;
+    this.musicEnabled = true;
 
     this.expandedCells = new Set();
 
@@ -103,6 +104,7 @@ export class GameState {
       quizIndex: this.quizIndex,
       quizCorrect: this.quizCorrect,
       quizKind: this.quizKind,
+      quizResearchId: this.quizResearchId,
       quizPassThreshold: this.quizPassThreshold,
       quizAttempts: this.quizAttempts,
       quizResults: this.quizResults,
@@ -161,6 +163,7 @@ export class GameState {
       this.quizIndex = data.quizIndex ?? 0;
       this.quizCorrect = data.quizCorrect ?? 0;
       this.quizKind = data.quizKind ?? null;
+      this.quizResearchId = data.quizResearchId ?? null;
       this.quizPassThreshold = data.quizPassThreshold ?? 0;
       this.quizAttempts = data.quizAttempts ?? {};
       this.quizResults = data.quizResults ?? {};
@@ -168,7 +171,7 @@ export class GameState {
       this.diagnosisHintUsed = !!data.diagnosisHintUsed;
       this.diagnosisScannerActive = data.diagnosisScannerActive ?? true;
       this.sound = data.sound ?? true;
-      this.musicEnabled = !!data.musicEnabled;
+      this.musicEnabled = data.musicEnabled ?? this.musicEnabled;
       this.questIndex = data.questIndex ?? 1;
       if (this.questIndex === 6 && this.stage === STAGES.DIAGNOSIS) this.stage = STAGES.REDESIGN;
       this.questStatus = data.questStatus ?? 'active';

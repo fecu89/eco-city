@@ -1,36 +1,63 @@
+import { AUDIO } from '../core/Constants.js';
+
 let nodes = null;
 
-// 저볼륨 앰비언트 드론 — 기본값은 꺼짐(선택적). 교실에서 소리가 부담스러우면 켜지 않아도 된다.
+function applyChord(oscs, chord, ctx) {
+  oscs.forEach((oscillator, index) => {
+    const frequency = chord[index];
+    oscillator.frequency.cancelScheduledValues?.(ctx.currentTime);
+    oscillator.frequency.setTargetAtTime?.(frequency, ctx.currentTime, 0.7);
+    if (!oscillator.frequency.setTargetAtTime) oscillator.frequency.value = frequency;
+  });
+}
+
 export function startAmbient(ctx, destination) {
-  if (nodes) return;
+  if (nodes) return false;
   const gain = ctx.createGain();
   gain.gain.value = 0;
   gain.connect(destination);
-  const oscs = [110, 165, 220].map((freq) => {
-    const o = ctx.createOscillator();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    o.connect(gain);
-    o.start();
-    return o;
+  const firstChord = AUDIO.AMBIENT_CHORDS[0];
+  const types = ['sine', 'triangle', 'sine'];
+  const oscs = firstChord.map((frequency, index) => {
+    const oscillator = ctx.createOscillator();
+    oscillator.type = types[index];
+    oscillator.frequency.value = frequency;
+    oscillator.connect(gain);
+    oscillator.start();
+    return oscillator;
   });
-  gain.gain.linearRampToValueAtTime(0.025, ctx.currentTime + 1.2);
-  nodes = { gain, oscs };
+  gain.gain.linearRampToValueAtTime(AUDIO.AMBIENT_GAIN, ctx.currentTime + AUDIO.AMBIENT_FADE_IN_SECONDS);
+  let chordIndex = 0;
+  const timer = window.setInterval(() => {
+    chordIndex = (chordIndex + 1) % AUDIO.AMBIENT_CHORDS.length;
+    applyChord(oscs, AUDIO.AMBIENT_CHORDS[chordIndex], ctx);
+  }, AUDIO.AMBIENT_CHORD_STEP_MS);
+  nodes = { gain, oscs, timer };
+  return true;
 }
 
 export function stopAmbient() {
-  if (!nodes) return;
-  const { gain, oscs } = nodes;
-  const ctx = gain.context;
-  gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
-  setTimeout(() => {
-    oscs.forEach((o) => {
+  if (!nodes) return false;
+  const current = nodes;
+  nodes = null;
+  window.clearInterval(current.timer);
+  const ctx = current.gain.context;
+  current.gain.gain.cancelScheduledValues?.(ctx.currentTime);
+  current.gain.gain.linearRampToValueAtTime(0, ctx.currentTime + AUDIO.AMBIENT_FADE_OUT_SECONDS);
+  window.setTimeout(() => {
+    current.oscs.forEach((oscillator) => {
       try {
-        o.stop();
-      } catch (err) {
-        // already stopped
+        oscillator.stop();
+        oscillator.disconnect?.();
+      } catch {
+        // The node may already have been stopped by the browser during teardown.
       }
     });
-  }, 700);
-  nodes = null;
+    current.gain.disconnect?.();
+  }, AUDIO.AMBIENT_STOP_DELAY_MS);
+  return true;
+}
+
+export function getAmbientPlaybackState() {
+  return { playing: Boolean(nodes), oscillatorCount: nodes?.oscs.length || 0 };
 }

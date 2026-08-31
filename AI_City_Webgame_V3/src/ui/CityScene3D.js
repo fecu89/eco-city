@@ -23,7 +23,7 @@ import {
 } from '../level/CityAssetLoader.js';
 import { createCameraController } from '../systems/CameraController.js';
 import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
-import { createAmbientMotionController } from '../systems/CityAmbientMotionSystem.js';
+import { ambientDurationBounds, createAmbientMotionController } from '../systems/CityAmbientMotionSystem.js';
 import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
 import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
 import { createCityEnvironment3D } from './CityEnvironment3D.js';
@@ -437,7 +437,7 @@ function createSceneLayers() {
   const smokeMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: 0.42,
+    opacity: CITY_AMBIENT_MOTION.SMOKE_OPACITY,
     depthWrite: false,
   }));
   smokeEffectMesh = makeInstancedMesh(
@@ -665,12 +665,24 @@ function updateAmbientEffectInstances(now = performance.now()) {
     const { x: centerX, z: centerZ } = worldPosition(effect.cellIndex);
     const progress = ambientProgress(effect, now);
     if (CITY_AMBIENT_MOTION.SMOKE_TYPES.includes(effect.type)) {
-      for (let particle = 0; particle < CITY_AMBIENT_MOTION.SMOKE_PARTICLES_PER_EFFECT; particle += 1) {
-        const particleProgress = (progress + particle * 0.36) % 1;
-        const scale = CITY_AMBIENT_MOTION.SMOKE_BASE_SCALE + particleProgress * CITY_AMBIENT_MOTION.SMOKE_GROWTH;
-        const x = centerX + Math.sin(particleProgress * Math.PI * 2 + effect.cellIndex) * CITY_AMBIENT_MOTION.SMOKE_WANDER;
-        const y = CITY_AMBIENT_MOTION.SMOKE_BASE_HEIGHT + particleProgress * CITY_AMBIENT_MOTION.SMOKE_RISE;
-        setAmbientInstance(smokeEffectMesh, smokeCount, x, y, centerZ, scale, scale, scale);
+      const smoke = CITY_AMBIENT_MOTION.SMOKE[effect.type];
+      const config = visualConfigAt(currentConfigs, effect.cellIndex);
+      const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
+      const rotation = facilityRotationY(effect.type, effect.cellIndex);
+      const [localX, localZ] = smoke.stackOffset;
+      const emitterX = localX * Math.cos(rotation) - localZ * Math.sin(rotation);
+      const emitterZ = localX * Math.sin(rotation) + localZ * Math.cos(rotation);
+      const stackHeight = visualYAt(effect.cellIndex, now)
+        + CITY_ASSETS[effect.type].height * level.scale
+        + smoke.heightPadding;
+      for (let particle = 0; particle < smoke.particles; particle += 1) {
+        const particleProgress = (progress + particle / smoke.particles) % 1;
+        const phase = particleProgress * Math.PI * 2 + effect.cellIndex;
+        const scale = smoke.baseScale + particleProgress * smoke.growth;
+        const x = centerX + emitterX + Math.sin(phase) * smoke.wander;
+        const y = stackHeight + particleProgress * smoke.rise;
+        const z = centerZ + emitterZ + Math.cos(phase) * smoke.wander;
+        setAmbientInstance(smokeEffectMesh, smokeCount, x, y, z, scale, scale, scale);
         smokeEffectMesh.setColorAt(smokeCount, _color.setHex(CITY_AMBIENT_MOTION.SMOKE_COLORS[effect.type]));
         smokeCount++;
       }
@@ -755,10 +767,11 @@ function startFacilityAmbientEffect({ id, type, cellIndex, durationMs }) {
     || activeAmbientEffects.size >= CITY_AMBIENT_MOTION.MAX_ACTIVE_EFFECTS
     || ambientEffectForCell(cellIndex)
   ) return false;
+  const [minimumDuration, maximumDuration] = ambientDurationBounds(type);
   const boundedDuration = THREE.MathUtils.clamp(
     Number(durationMs) || CITY_AMBIENT_MOTION.MIN_DURATION_MS,
-    CITY_AMBIENT_MOTION.MIN_DURATION_MS,
-    CITY_AMBIENT_MOTION.MAX_DURATION_MS,
+    minimumDuration,
+    maximumDuration,
   );
   const effect = {
     id: id || `city-ambient-manual-${++ambientEffectSequence}`,
@@ -1348,6 +1361,16 @@ export function getCityRendererStats() {
       };
     });
   });
+  const smokeVisualSamples = Array.from({ length: smokeEffectMesh?.count || 0 }, (_, instanceIndex) => {
+    smokeEffectMesh.getMatrixAt(instanceIndex, sampleMatrix);
+    sampleMatrix.decompose(samplePosition, sampleQuaternion, sampleScale);
+    return {
+      x: Number(samplePosition.x.toFixed(3)),
+      y: Number(samplePosition.y.toFixed(3)),
+      z: Number(samplePosition.z.toFixed(3)),
+      scale: Number(sampleScale.x.toFixed(3)),
+    };
+  });
   return {
     drawCalls: renderer?.info.render.calls ?? 0,
     geometryCount: renderer?.info.memory.geometries ?? 0,
@@ -1371,6 +1394,7 @@ export function getCityRendererStats() {
     ambientEffectCount: activeAmbientEffects.size,
     ambientEffectKinds: [...activeAmbientEffects.values()].map((effect) => effect.type),
     smokeEffectCount: smokeEffectMesh?.count ?? 0,
+    smokeVisualSamples,
     statusLightCount: statusLightMesh?.count ?? 0,
     ambientFrameIntervalMs: CITY_AMBIENT_MOTION.FRAME_INTERVAL_MS,
     ambientFrameUpdateCount,

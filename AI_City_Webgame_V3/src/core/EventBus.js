@@ -18,6 +18,8 @@ export const Events = {
   RESEARCH_PROGRESS: 'research:progress',
   RESEARCH_COMPLETED: 'research:completed',
   RESEARCH_ACCELERATED: 'research:accelerated',
+  RESEARCH_QUIZ_REQUESTED: 'research:quizRequested',
+  RESEARCH_QUIZ_CLOSED: 'research:quizClosed',
   CARBON_WARNING: 'carbon:warning',
   GAME_OVER: 'game:over',
 

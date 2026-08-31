@@ -5,27 +5,13 @@ import {
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
+import { calculateWorkforce } from './WorkforceSystem.js';
 import { roundCredits } from '../core/Money.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
 
-export function calculateLabor(grid) {
-  let workforce = 0;
-  let jobs = 0;
-  grid.forEach((cell) => {
-    if (!cell) return;
-    if (cell.type === 'residential') workforce += WORKFORCE_LEVELS.residential[cell.level];
-    if (cell.type === 'factory') jobs += WORKFORCE_LEVELS.factory[cell.level];
-    if (cell.type === 'data') jobs += WORKFORCE_LEVELS.data[cell.level];
-  });
-  return {
-    workforce,
-    jobs,
-    industryFill: jobs ? round1(Math.min(1, workforce / jobs)) : 0,
-    employmentRate: workforce ? round1(Math.min(1, jobs / workforce)) : 0,
-  };
-}
+export const calculateLabor = calculateWorkforce;
 
 function topologyFor(grid, coords) {
   if (coords) return coords;
@@ -36,7 +22,7 @@ function topologyFor(grid, coords) {
 
 export function settleEconomy({ grid, coords = null, facilityPower = {}, credits = 0 }) {
   const boardCoords = topologyFor(grid, coords);
-  const labor = calculateLabor(grid);
+  const labor = calculateWorkforce(grid);
   const counts = {};
   const pollutedHomes = new Set();
   const pollutionPairs = new Set();
@@ -63,7 +49,8 @@ export function settleEconomy({ grid, coords = null, facilityPower = {}, credits
     const power = facilityPower[index];
     const powerRatio = power ? Math.max(0, Math.min(1, power.ratio ?? (power.demand ? power.delivered / power.demand : 1))) : (FACILITIES[cell.type].demand ? 0 : 1);
     const running = powerRatio >= ECONOMY_RULES.STOP_POWER_RATIO;
-    const laborMultiplier = ['factory', 'data'].includes(cell.type) ? labor.industryFill : 1;
+    const needsWorkers = cell.type !== 'residential' && (WORKFORCE_LEVELS[cell.type]?.[cell.level] ?? 0) > 0;
+    const laborMultiplier = needsWorkers ? labor.industryFill : 1;
     const pollutionMultiplier = cell.type === 'residential' && pollutedHomes.has(index)
       ? ECONOMY_RULES.POLLUTION_TAX_MULTIPLIER
       : 1;

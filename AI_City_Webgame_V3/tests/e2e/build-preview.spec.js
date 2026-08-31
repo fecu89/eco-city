@@ -28,11 +28,12 @@ for (const viewport of [
 
   await expect(page.locator('#buildConfirm')).toBeVisible();
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(0);
-  await expect(page.locator('#buildConfirmMetrics [data-metric]')).toHaveCount(4);
+  await expect(page.locator('#buildConfirmMetrics [data-metric]')).toHaveCount(5);
   await expect(page.locator('#buildConfirmMetrics [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
-    .resolves.toEqual(['credit', 'power', 'carbon', 'water']);
+    .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
   await expect(page.locator('#buildConfirmMetrics [data-metric="credit"]')).toContainText('/h');
   await expect(page.locator('#buildConfirmMetrics [data-metric="carbon"]')).toContainText('CO₂');
+  await expect(page.locator('#buildConfirmMetrics [data-metric="labor"]')).toContainText('0/10');
   await page.locator('#confirmBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
   await expect(page.locator('#buildConfirm')).toBeHidden();

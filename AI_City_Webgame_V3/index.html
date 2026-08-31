@@ -41,7 +41,7 @@
           <span class="sim-metric" data-metric="power" aria-label="전력" title="전력 공급 / 수요"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">0/0E</b></span>
           <span class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="시간당 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/h</b></span>
           <span class="sim-metric" data-metric="water" aria-label="물" title="시간당 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/h</b></span>
-          <span class="sim-metric" data-metric="labor" aria-label="인력" title="인력 / 일자리"><i class="sim-metric-icon" data-lucide="users" aria-hidden="true"></i><b id="simLabor">0/0</b></span>
+          <span class="sim-metric" data-metric="labor" aria-label="사용 인력 / 전체 인구" title="사용 인력 / 전체 인구"><i class="sim-metric-icon" data-lucide="users" aria-hidden="true"></i><b id="simLabor">0/0</b></span>
         </div>
 
         <div class="time-controls" id="timeControls" aria-label="시간 속도">
@@ -54,7 +54,6 @@
 
       <div class="hud-controls" id="hudControls">
         <nav class="hud-rail" id="hudRail" aria-label="도시 제어">
-          <span class="hud-rail-label" aria-hidden="true">CITY CONTROL</span>
           <button data-hud-target="build" aria-controls="buildPanel" aria-expanded="false" title="건설"><i data-lucide="hammer"></i><span>건설</span></button>
           <button data-hud-target="quest" aria-controls="questPanel" aria-expanded="false" title="퀘스트"><i data-lucide="map"></i><span>퀘스트</span></button>
           <button data-hud-target="status" aria-controls="statusPanel" aria-expanded="false" title="도시 상태"><i data-lucide="chart-no-axes-combined"></i><span>도시</span></button>
@@ -87,16 +86,20 @@
                 <button class="btn primary" id="questPanelClaimBtn" type="button" disabled>진행 중</button>
                 <button class="btn secondary" id="questPanelMapBtn" type="button">전체 퀘스트</button>
               </div>
+              <div class="quest-panel-details hidden" id="questPanelDetails"></div>
+              <button class="quest-panel-expand" id="questPanelExpandBtn" type="button" aria-expanded="false" aria-controls="questPanelDetails">
+                <span>전체 내용 펼치기</span><i data-lucide="chevron-down"></i>
+              </button>
             </div>
           </section>
 
           <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
-            <div class="panel-title compact"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">시간당 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
+            <div class="panel-title compact floating-panel-header" tabindex="0" aria-label="도시 상태 창. 방향키로 이동 가능"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">시간당 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
             <canvas id="cityChart" height="190"></canvas>
           </section>
 
           <section class="glass panel-block hud-panel menu-panel" id="settingsPanel" data-hud-panel="settings">
-            <div class="panel-title"><div><span class="eyebrow">SYSTEM</span><h3>설정과 운영 가이드</h3></div><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div>
+            <div class="panel-title floating-panel-header" tabindex="0" aria-label="설정 창. 방향키로 이동 가능"><div><span class="eyebrow">SYSTEM</span><h3>설정과 운영 가이드</h3></div><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div>
             <div class="mission-header"><div class="mission-copy"><span class="eyebrow">MISSION</span><h2 id="missionTitle">저탄소 도시로 전환하라</h2></div><div class="turn-box"><span>건설</span><strong id="turnCount">0</strong></div></div>
             <div class="teacher-note" id="teacherNote"><i data-lucide="building-2"></i><p>주거, 전력, 일자리를 연결하세요.</p></div>
             <div class="graphics-setting">
@@ -130,6 +133,7 @@
               <span data-metric="power" aria-label="예상 전력 공급과 수요"><small>전력</small><b data-value>0/0E</b><em data-delta>±0E</em></span>
               <span data-metric="carbon" aria-label="예상 시간당 이산화탄소"><small>CO₂/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
               <span data-metric="water" aria-label="예상 시간당 물"><small>물/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
+              <span data-metric="labor" aria-label="예상 필요 인력과 전체 인구"><small>인력/인구</small><b data-value>0/0명</b><em data-delta>±0</em></span>
             </div>
           </div>
           <button class="btn secondary" id="cancelBuildBtn" type="button">계획 전체 취소</button>

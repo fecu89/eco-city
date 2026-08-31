@@ -67,16 +67,15 @@ export function startResearch(state, researchId, dataCenterIndex) {
   if (state.credits < definition.cost) return { ok: false, reason: 'insufficient_credits', cost: definition.cost };
 
   state.credits = roundCredits(state.credits - definition.cost);
-  const bankedHours = Math.max(0, Number(state.research.quizAccelerationBankHours) || 0);
   state.research.quizAccelerationBankHours = 0;
   jobs[researchId] = {
     id: researchId,
     dataCenterIndex,
-    elapsedEffectiveHours: Math.min(definition.durationHours, bankedHours),
+    elapsedEffectiveHours: 0,
     status: 'running',
     paidCost: definition.cost,
   };
-  return { ok: true, researchId, dataCenterIndex, cost: definition.cost, bankedHoursApplied: bankedHours };
+  return { ok: true, researchId, dataCenterIndex, cost: definition.cost, bankedHoursApplied: 0 };
 }
 
 export function cancelResearch(state, researchId) {
@@ -133,37 +132,28 @@ export function completeResearchJob(state, researchId) {
   return { researchId, outcome: definition.outcome };
 }
 
-export function accelerateResearchFromQuiz(state, hours = RESEARCH_RULES.QUIZ_ACCELERATION_HOURS) {
-  const accelerationHours = Math.max(0, Number(hours) || 0);
-  const active = [...activeResearchJobs(state)];
-  if (!active.length) {
-    state.research.quizAccelerationBankHours = Math.max(
-      0,
-      (Number(state.research.quizAccelerationBankHours) || 0) + accelerationHours,
-    );
-    return {
-      appliedJobs: [],
-      bankedHours: state.research.quizAccelerationBankHours,
-      completed: [],
-    };
+export function accelerateResearchFromQuiz(state, researchId, hours = null) {
+  const job = researchJobs(state)[researchId];
+  const definition = RESEARCH[researchId];
+  if (!job || !definition) {
+    return { appliedJobs: [], hours: 0, completed: [], reason: 'research_not_active' };
   }
-
+  const accelerationHours = Math.max(
+    0,
+    Number(hours ?? (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT)) || 0,
+  );
+  job.elapsedEffectiveHours = Math.min(
+    definition.durationHours,
+    job.elapsedEffectiveHours + accelerationHours,
+  );
   const completed = [];
-  active.forEach((job) => {
-    const definition = RESEARCH[job.id];
-    if (!definition) return;
-    job.elapsedEffectiveHours = Math.min(
-      definition.durationHours,
-      job.elapsedEffectiveHours + accelerationHours,
-    );
-    if (job.elapsedEffectiveHours >= definition.durationHours) {
-      const completion = completeResearchJob(state, job.id);
-      if (completion) completed.push(completion);
-    }
-  });
+  if (job.elapsedEffectiveHours >= definition.durationHours) {
+    const completion = completeResearchJob(state, researchId);
+    if (completion) completed.push(completion);
+  }
   return {
-    appliedJobs: active.map(({ id }) => id),
-    bankedHours: 0,
+    appliedJobs: [researchId],
+    hours: accelerationHours,
     completed,
   };
 }

@@ -16,12 +16,19 @@ test('two data centers run independent research without pausing the city', async
     window.__clickCell(0);
   });
 
+  await expect(page.locator('.facility-console')).toBeVisible();
+  await expect(page.locator('.facility-console-header')).toContainText('데이터센터');
+  await expect(page.locator('.facility-console-tabs [data-facility-tab]')).toHaveCount(3);
+  await expect(page.locator('.facility-console-footer')).toBeVisible();
+  await page.locator('[data-facility-tab="research"]').click();
   await expect(page.locator('.research-panel')).toContainText('데이터센터 #0 연구');
+  await expect(page.locator('.facility-console-scroll')).toHaveCSS('overflow-y', 'auto');
   await expect(page.locator('[data-research-start="solar2"]').locator('xpath=..')).toContainText('120시간 · 1× 2분');
   await page.locator('[data-research-start="solar2"]').click();
   await expect(page.locator('[data-research-job="solar2"]')).toContainText('데이터센터 #0');
   await page.locator('.modal-card .close-modal').click();
   await page.evaluate(() => window.__clickCell(1));
+  await page.locator('[data-facility-tab="research"]').click();
   await expect(page.locator('.research-elsewhere')).toContainText('고효율 태양전지 (#0)');
   await page.locator('[data-research-start="wind2"]').click();
 
@@ -72,6 +79,7 @@ test('an underpowered research center is emphasized on both the city and researc
   expect(await page.evaluate(() => window.__getCellVisual(0).researchWarning)).toBe(true);
 
   await page.evaluate(() => window.__clickCell(0));
+  await page.locator('[data-facility-tab="research"]').click();
   const active = page.locator('[data-research-job="solar2"]');
   await expect(active).toHaveClass(/underpowered/);
   await expect(active.locator('[data-research-live-status]')).toContainText('전력 부족 · 연구 일시정지');
@@ -83,4 +91,34 @@ test('an underpowered research center is emphasized on both the city and researc
   });
   await expect(active).not.toHaveClass(/underpowered/);
   expect(await page.evaluate(() => window.__getCellVisual(0).researchWarning)).toBe(false);
+});
+
+test('research acceleration opens its assigned four-question quiz and affects only that job', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.questIndex = 8;
+    state.stage = 5;
+    state.researchMenuUnlocked = true;
+    state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+    state.grid[1] = { type: 'data', level: 1, priority: 'normal' };
+    state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 0, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
+    state.research.jobs.wind2 = { id: 'wind2', dataCenterIndex: 1, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await page.locator('[data-facility-tab="research"]').click();
+  await expect(page.locator('[data-research-accelerate="solar2"]')).toHaveText('퀴즈로 가속');
+  await page.locator('[data-research-accelerate="solar2"]').click();
+  await expect(page.locator('#modalCard')).toContainText('고효율 태양전지');
+  await expect(page.locator('.quiz-count')).toContainText('1 / 4');
+  expect(await page.evaluate(() => window.__GAME_STATE__.quizResearchId)).toBe('solar2');
+
+  const correctIndex = await page.evaluate(() => window.__GAME_STATE__.quizPool[0].options.findIndex((option) => option.correct));
+  await page.locator(`#questQuizOptions [data-index="${correctIndex}"]`).click();
+  expect(await page.evaluate(() => ({
+    solar: window.__GAME_STATE__.research.jobs.solar2.elapsedEffectiveHours,
+    wind: window.__GAME_STATE__.research.jobs.wind2.elapsedEffectiveHours,
+  }))).toEqual({ solar: 30, wind: 0 });
 });

@@ -1,5 +1,5 @@
 import './style.css';
-import { LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -29,6 +29,7 @@ import { getWorldLightingMode, initWorldLightingManager } from './ui/WorldLighti
 import { initFeedbackBridge } from './ui/FeedbackBridge.js';
 import { initQuestCelebration } from './ui/QuestCelebration.js';
 import { initQuestPanelController } from './ui/QuestPanelController.js';
+import { createFloatingPanelController } from './ui/FloatingPanelController.js';
 import { getOnboardingState, initOnboardingView, openStory, syncTutorialHighlight } from './ui/OnboardingView.js';
 import {
   initStageModals,
@@ -128,6 +129,16 @@ function refreshAll() {
   renderQuest();
   renderSimulationHud();
   updateChart();
+  refreshAudioControls();
+}
+
+function refreshAudioControls() {
+  els.musicBtn.classList.toggle('active', gameState.musicEnabled);
+  els.musicBtn.setAttribute('aria-pressed', String(gameState.musicEnabled));
+  els.musicBtn.title = gameState.musicEnabled ? '배경음 끄기' : '배경음 켜기';
+  els.soundBtn.classList.toggle('active', gameState.sound);
+  els.soundBtn.setAttribute('aria-pressed', String(gameState.sound));
+  els.soundBtn.title = gameState.sound ? '효과음 끄기' : '효과음 켜기';
 }
 
 function settleSimulationHour() {
@@ -296,8 +307,8 @@ function bindEvents() {
   });
 
   els.musicBtn.addEventListener('click', () => {
-    const enabled = toggleMusic();
-    els.musicBtn.classList.toggle('active', enabled);
+    toggleMusic();
+    refreshAudioControls();
     refreshIcons();
   });
 
@@ -348,10 +359,11 @@ function boot() {
     contextAction: els.questPanelContextAction,
     claim: els.questPanelClaimBtn,
     map: els.questPanelMapBtn,
+    details: document.querySelector('#questPanelDetails'),
+    expand: document.querySelector('#questPanelExpandBtn'),
   }, (change) => {
     refreshAll();
-    if (change?.phase !== 'reward_closed') return;
-    if (change.quest.index === 15) openReportModal();
+    if (change?.phase === 'claimed' && change.result?.campaignComplete) openReportModal();
   });
   initSimulationHudView({ time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, water: els.simWater, labor: els.simLabor, carbon: els.simCarbon, alert: els.simAlert });
   initChartView(els.cityChart);
@@ -377,6 +389,18 @@ function boot() {
     topSafeElement: document.querySelector('.world-status'),
     rightSafeElement: els.hudRail,
   });
+  [
+    ['status', document.querySelector('#statusPanel'), FLOATING_PANEL_STORAGE.STATUS],
+    ['settings', document.querySelector('#settingsPanel'), FLOATING_PANEL_STORAGE.SETTINGS],
+  ].forEach(([panelName, panel, storageKey]) => createFloatingPanelController({
+    panel,
+    panelName,
+    storageKey,
+    dragSurface: panel,
+    keyboardSurface: panel.querySelector('.panel-title'),
+    topSafeElement: document.querySelector('.world-status'),
+    rightSafeElement: els.hudRail,
+  }));
   initThreeBackground(els.threeBg);
 
   loadSavedGame();

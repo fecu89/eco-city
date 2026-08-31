@@ -28,7 +28,7 @@ test.describe('mobile city controls', () => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       window.__GAME_STATE__.lastSettlementDelta = -0.15;
-      window.__GAME_STATE__.lastTickSummary = { hourlyCarbon: 4.2, hourlyWater: 1.8, deliveredPower: 7, demand: 6, lowCarbonPercent: 70, workforce: 5, jobs: 4 };
+      window.__GAME_STATE__.lastTickSummary = { hourlyCarbon: 4.2, hourlyWater: 1.8, deliveredPower: 7, demand: 6, lowCarbonPercent: 70, capacity: 5, used: 4 };
       window.__refreshGameForTest();
     });
 
@@ -36,7 +36,7 @@ test.describe('mobile city controls', () => {
     await expect(page.locator('#simCarbonRate')).toHaveText('4.2/h');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simWater')).toHaveText('1.8/h');
-    await expect(page.locator('#simLabor')).toHaveText('5/4');
+    await expect(page.locator('#simLabor')).toHaveText('4/5');
     const box = await page.locator('#simulationHud').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
@@ -103,7 +103,9 @@ test.describe('mobile city controls', () => {
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
     await page.locator('#questPanelClaimBtn').click();
 
-    await expect(page.locator('#modalCard')).toContainText('2040, 첫 시민 완료');
+    await expect(page.locator('#modal')).toBeHidden();
+    await expect(page.locator('.toast.quest-reward-alert')).toContainText('2040, 첫 시민 완료');
+    await expect(page.locator('.toast.quest-reward-alert')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questCelebration')).toHaveClass(/show/);
   });
 

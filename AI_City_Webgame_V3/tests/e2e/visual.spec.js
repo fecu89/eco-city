@@ -74,6 +74,23 @@ test.describe('visual', () => {
     await expect(page).toHaveScreenshot('world-hud-menu.png', { maxDiffPixels: 18000 });
   });
 
+  test('data center research console keeps navigation and actions around a scrollable catalog', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 15;
+      state.credits = 100;
+      state.researchMenuUnlocked = true;
+      state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+      state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
+      window.__refreshGameForTest();
+      window.__clickCell(0);
+    });
+    await page.locator('[data-facility-tab="research"]').click();
+    await expect(page.locator('.research-panel')).toBeVisible();
+    await expect(page.locator('.facility-console-scroll')).toBeVisible();
+    await expect(page).toHaveScreenshot('facility-console-research.png', { maxDiffPixels: 18000 });
+  });
+
   test('quest completion owns a clear celebration layer', async ({ gamePage: page }) => {
     await page.locator('[data-hud-target="build"]').first().click();
     for (let index = 0; index < 2; index++) {
@@ -143,7 +160,8 @@ test.describe('visual mobile', () => {
 
   test('mobile quest details live inside the quest sheet', async ({ gamePage: page }) => {
     await page.locator('.mobile-bar [data-hud-target="quest"]').click();
-    await expect(page).toHaveScreenshot('world-hud-mobile-quest.png', { maxDiffPixels: 18000 });
+    await page.locator('#questPanelExpandBtn').click();
+    await expect(page).toHaveScreenshot('world-hud-mobile-quest-expanded.png', { maxDiffPixels: 18000 });
   });
 
   test('City Kit board fits the mobile gameplay viewport', async ({ gamePage: page }) => {

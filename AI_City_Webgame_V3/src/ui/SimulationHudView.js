@@ -26,13 +26,13 @@ export function renderSimulationHud() {
   const deliveredPower = summary?.deliveredPower ?? 0;
   const demand = summary?.demand ?? 0;
   const hourlyWater = summary?.hourlyWater ?? 0;
-  const workforce = summary?.workforce ?? 0;
-  const jobs = summary?.jobs ?? 0;
+  const capacity = summary?.capacity ?? summary?.workforce ?? 0;
+  const used = summary?.used ?? summary?.jobs ?? 0;
   els.net.textContent = `${creditPrefix}${formatCredits(Math.abs(net), { suffix: false, compact: true })}/h`;
   els.carbonRate.textContent = `${compactMetric(hourlyCarbon)}/h`;
   els.power.textContent = `${compactMetric(deliveredPower)}/${compactMetric(demand)} E`;
   els.water.textContent = `${compactMetric(hourlyWater)}/h`;
-  els.labor.textContent = `${compactMetric(workforce)}/${compactMetric(jobs)}`;
+  els.labor.textContent = `${compactMetric(used)}/${compactMetric(capacity)}`;
   const creditsTitle = `보유 ${exactNumberLabel(gameState.credits, 2)} · 시간당 ${net >= 0 ? '+' : ''}${exactNumberLabel(net, 2)}`;
   setMetricLabel(els.net, `크레딧 ${creditsTitle}`, creditsTitle);
   setMetricLabel(
@@ -42,7 +42,7 @@ export function renderSimulationHud() {
   );
   setMetricLabel(els.carbonRate, `이산화탄소 시간당 ${exactNumberLabel(hourlyCarbon, 1)}`, `시간당 CO₂ ${exactNumberLabel(hourlyCarbon, 1)}`);
   setMetricLabel(els.water, `물 시간당 ${exactNumberLabel(hourlyWater, 1)}`, `시간당 물 ${exactNumberLabel(hourlyWater, 1)}`);
-  setMetricLabel(els.labor, `인력 ${exactNumberLabel(workforce, 0)}, 일자리 ${exactNumberLabel(jobs, 0)}`, `인력 ${exactNumberLabel(workforce, 0)} / 일자리 ${exactNumberLabel(jobs, 0)}`);
+  setMetricLabel(els.labor, `사용 인력 ${exactNumberLabel(used, 0)}, 전체 인구 ${exactNumberLabel(capacity, 0)}`, `사용 인력 ${exactNumberLabel(used, 0)} / 전체 인구 ${exactNumberLabel(capacity, 0)}`);
   els.carbon.textContent = `${summary?.lowCarbonPercent ?? 0}%`;
   const labels = { normal: '평상시', heat_watch: '폭염 주의', extreme_heat: '극한 폭염' };
   const carbonActive = gameState.carbonCrisisHours > 0;

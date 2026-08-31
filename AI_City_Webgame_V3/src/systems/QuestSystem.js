@@ -1,5 +1,5 @@
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { ECONOMY_RULES, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
+import { QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
@@ -16,8 +16,10 @@ export function evaluateCurrentQuest(state) {
   const wasReady = state.questStatus === 'ready_to_claim';
   let ready = state.questStatus === 'ready_to_claim';
   if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
-  if (state.questIndex === 8) ready = !!state.questProgress.quizPassed
-    && state.research.completedIds.has('solar2')
+  if (state.questIndex === 2) ready = state.grid.some((cell, index) => (
+    cell?.type === 'factory' && hasAdjacent(state, index, new Set(['thermal']))
+  ));
+  if (state.questIndex === 8) ready = state.research.completedIds.has('solar2')
     && facilities(state, 'solar').some((cell) => cell.level >= 2);
   if (state.questIndex === 10) ready = state.research.completedIds.has('wind2')
     && facilities(state, 'wind').some((cell) => cell.level >= 2);
@@ -41,7 +43,7 @@ export function claimCurrentQuest(state) {
   if (state.questStatus !== 'ready_to_claim') return { ok: false, reason: 'not_ready' };
   state.claimedQuestIds.add(quest.id);
   state.credits = roundCredits(state.credits + quest.reward.credits);
-  if (quest.reward.unlockFacility) state.unlockedFacilities.add(quest.reward.unlockFacility);
+  quest.reward.unlockFacilities.forEach((facility) => state.unlockedFacilities.add(facility));
   if (state.questIndex === 4) {
     state.firstCitySnapshot = state.grid.map((cell) => (cell ? { ...cell } : null));
     state.baseline = { ...(state.metrics || {}), ...(state.lastTickSummary || {}) };
@@ -52,7 +54,7 @@ export function claimCurrentQuest(state) {
   if (state.questIndex === 15) {
     state.campaignComplete = true;
     state.questStatus = 'claimed';
-    const result = { ok: true, credits: quest.reward.credits, unlockedFacility: null, nextQuest: null, campaignComplete: true };
+    const result = { ok: true, credits: quest.reward.credits, unlockedFacility: null, unlockedFacilities: [], nextQuest: null, campaignComplete: true };
     eventBus.emit(Events.QUEST_CLAIMED, { quest, result });
     return result;
   }
@@ -66,6 +68,7 @@ export function claimCurrentQuest(state) {
     ok: true,
     credits: quest.reward.credits,
     unlockedFacility: quest.reward.unlockFacility,
+    unlockedFacilities: [...quest.reward.unlockFacilities],
     nextQuest: state.questIndex,
     expandGrid: quest.index === 6,
   };
@@ -81,11 +84,8 @@ export function applySimulationQuestProgress(state, summary) {
   let condition = false;
   let required = 3;
   switch (state.questIndex) {
-    case 2: {
-      const ratios = allRatios(state, 'residential', summary);
-      condition = facilities(state, 'thermal').length > 0 && ratios.length > 0 && ratios.every((ratio) => ratio >= 0.9);
-      break;
-    }
+    case 2:
+      return evaluateCurrentQuest(state);
     case 3:
       condition = Object.entries(summary.facilityEconomy || {}).some(([index, item]) => state.grid[index]?.type === 'factory'
         && hasAdjacent(state, Number(index), POWER_PLANTS)
@@ -98,7 +98,8 @@ export function applySimulationQuestProgress(state, summary) {
       break;
     case 5:
       condition = facilities(state, 'nuclear').length > 0
-        && summary.hourlyCarbon <= ECONOMY_RULES.CARBON_SAFE_RATE
+        && summary.lowCarbonPercent >= QUEST_REQUIREMENTS.TRANSITION_LOW_CARBON_PERCENT
+        && summary.hourlyCarbon <= QUEST_REQUIREMENTS.TRANSITION_CARBON_MAX
         && summary.netCredits > 0;
       break;
     case 6: {
@@ -165,7 +166,6 @@ export function applySimulationQuestProgress(state, summary) {
 }
 
 export function markQuestQuizResult(state, passed) {
-  if (state.questIndex === 8) state.questProgress.quizPassed = !!passed;
   if (passed && state.questIndex === 15) state.questStatus = 'ready_to_claim';
   return evaluateCurrentQuest(state);
 }

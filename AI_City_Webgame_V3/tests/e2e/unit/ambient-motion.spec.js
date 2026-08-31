@@ -22,10 +22,32 @@ function timerHarness() {
   };
 }
 
-test('facility ambient delay spans exactly four to nine seconds', () => {
-  expect(nextAmbientDelay(() => 0)).toBe(4000);
-  expect(nextAmbientDelay(() => 1)).toBe(9000);
-  expect(nextAmbientDelay(() => 0.5)).toBe(6500);
+test('facility ambient delay spans exactly two and a half to five seconds', () => {
+  expect(nextAmbientDelay(() => 0)).toBe(2500);
+  expect(nextAmbientDelay(() => 1)).toBe(5000);
+  expect(nextAmbientDelay(() => 0.5)).toBe(3750);
+});
+
+test('a smoke facility is guaranteed in each batch and thermal runs for at least 2.4 seconds', () => {
+  const clock = timerHarness();
+  const starts = [];
+  const controller = createAmbientMotionController({
+    random: () => 0,
+    getCandidates: () => [
+      { type: 'data', cellIndex: 1 },
+      { type: 'residential', cellIndex: 2 },
+      { type: 'thermal', cellIndex: 3 },
+    ],
+    onStart: (effect) => starts.push(effect),
+    setTimer: clock.setTimer,
+    clearTimer: clock.clearTimer,
+  });
+
+  controller.start();
+  clock.fireFirst();
+  expect(starts).toEqual([
+    expect.objectContaining({ type: 'thermal', cellIndex: 3, durationMs: 2400 }),
+  ]);
 });
 
 test('one ambient batch starts at most three unique non-green cells', () => {
@@ -47,12 +69,21 @@ test('one ambient batch starts at most three unique non-green cells', () => {
   });
 
   controller.start();
-  expect([...clock.timers.values()][0].ms).toBe(4000);
+  expect([...clock.timers.values()][0].ms).toBe(2500);
   clock.fireFirst();
   expect(starts).toHaveLength(3);
   expect(new Set(starts.map((effect) => effect.cellIndex)).size).toBe(3);
   expect(starts.some((effect) => effect.type === 'green')).toBe(false);
-  expect(starts.every((effect) => effect.durationMs >= 600 && effect.durationMs <= 1600)).toBe(true);
+  const durationRanges = {
+    factory: [1800, 3000],
+    thermal: [2400, 4000],
+    wind: [600, 1600],
+    data: [600, 1600],
+  };
+  expect(starts.every((effect) => {
+    const [minimum, maximum] = durationRanges[effect.type];
+    return effect.durationMs >= minimum && effect.durationMs <= maximum;
+  })).toBe(true);
   expect(controller.getState()).toMatchObject({ activeCount: 3, scheduled: false });
 });
 
