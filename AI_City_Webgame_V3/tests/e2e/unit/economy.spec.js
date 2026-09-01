@@ -11,12 +11,12 @@ test('residential tax falls to its 25 percent floor without jobs', () => {
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
   expect(result.labor).toEqual({
-    capacity: 20,
+    capacity: 12,
     used: 0,
-    available: 20,
+    available: 12,
     shortage: 0,
     utilization: 0,
-    workforce: 20,
+    workforce: 12,
     jobs: 0,
     industryFill: 0,
     employmentRate: 0,
@@ -24,28 +24,40 @@ test('residential tax falls to its 25 percent floor without jobs', () => {
   expect(result.grossIncome).toBe(0.25);
 });
 
-test('a staffed level-one factory and data center use seven of ten residents', () => {
+test('an unpowered residential facility still earns its base tax instead of zero', () => {
+  const grid = cells(['residential']);
+  const result = settleEconomy({ grid, facilityPower: {}, credits: 10 });
+
+  expect(result.facilityEconomy[0]).toMatchObject({
+    income: 0.13,
+    powerRatio: 0,
+  });
+  expect(result.netCredits).toBe(0.13);
+  expect(result.nextCredits).toBe(10.13);
+});
+
+test('one level-one home cannot fully staff both a factory and data center', () => {
   const grid = cells(['residential', 'factory', 'data']);
   const labor = calculateLabor(grid);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
-  expect(labor).toMatchObject({ capacity: 10, used: 7, available: 3, shortage: 0, industryFill: 1 });
-  expect(result.facilityEconomy[1].income).toBe(1);
-  expect(result.facilityEconomy[2].income).toBe(2);
+  expect(labor).toMatchObject({ capacity: 6, used: 8, available: 0, shortage: 2, industryFill: 0.8 });
+  expect(result.facilityEconomy[1].income).toBe(0.8);
+  expect(result.facilityEconomy[2].income).toBe(1.6);
 });
 
-test('six factories add 1.2 credits per hour in overcrowding cost', () => {
+test('six factories add 1.2 credits per day in overcrowding cost', () => {
   const grid = cells(['factory', 'factory', 'factory', 'factory', 'factory', 'factory']);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
   expect(result.overcrowding).toBe(1.2);
 });
 
-test('hourly credit settlement preserves cent precision', () => {
+test('daily credit settlement preserves cent precision', () => {
   const grid = cells(['residential', 'factory', 'data']);
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 1.005 });
 
-  expect(result.nextCredits).toBe(4.39);
+  expect(result.nextCredits).toBe(3.91);
   expect(Number(result.nextCredits.toFixed(2))).toBe(result.nextCredits);
 });
 
@@ -71,15 +83,16 @@ test('demolition returns floor half of every invested credit', () => {
 test('level three production increases live income and environmental load', () => {
   const grid = [
     { type: 'residential', level: 3, priority: 'essential' },
+    { type: 'residential', level: 1, priority: 'essential' },
     { type: 'factory', level: 3, priority: 'normal' },
     { type: 'data', level: 3, priority: 'normal' },
   ];
   const result = settleEconomy({ grid, facilityPower: fullyPowered(grid), credits: 10 });
 
-  expect(result.facilityEconomy[1].income).toBe(1.92);
-  expect(result.facilityEconomy[2].income).toBe(3.84);
-  expect(result.hourlyCarbon).toBe(2.6);
-  expect(result.hourlyWater).toBe(9.1);
+  expect(result.facilityEconomy[2].income).toBe(1.92);
+  expect(result.facilityEconomy[3].income).toBe(3.84);
+  expect(result.dailyCarbon).toBe(2.6);
+  expect(result.dailyWater).toBe(10.1);
 });
 
 test('cooling reduces water only for adjacent data centers and nuclear plants', () => {
@@ -95,13 +108,13 @@ test('cooling reduces water only for adjacent data centers and nuclear plants', 
   const linked = settleEconomy({ grid: linkedGrid, coords, facilityPower: fullyPowered(linkedGrid), credits: 10 });
   const separated = settleEconomy({ grid: separatedGrid, coords, facilityPower: fullyPowered(separatedGrid), credits: 10 });
 
-  expect(linked.hourlyWater).toBe(1);
-  expect(separated.hourlyWater).toBe(5);
+  expect(linked.dailyWater).toBe(1);
+  expect(separated.dailyWater).toBe(5);
 
   const nuclearGrid = Array(19).fill(null);
   nuclearGrid[0] = { type: 'nuclear', level: 1, priority: 'normal' };
   nuclearGrid[adjacent] = { type: 'cooling', level: 1, priority: 'essential' };
-  expect(settleEconomy({ grid: nuclearGrid, coords, facilityPower: fullyPowered(nuclearGrid), credits: 10 }).hourlyWater).toBe(3);
+  expect(settleEconomy({ grid: nuclearGrid, coords, facilityPower: fullyPowered(nuclearGrid), credits: 10 }).dailyWater).toBe(3);
 });
 
 for (const [ratio, expectedDataWater] of [[1, 1], [0.5, 0.5], [0.2, 0.2], [0, 0]]) {
@@ -121,11 +134,11 @@ for (const [ratio, expectedDataWater] of [[1, 1], [0.5, 0.5], [0.2, 0.2], [0, 0]
 
     expect(result.facilityEnvironment[0].water).toBe(expectedDataWater);
     expect(result.facilityEnvironment[0].water).toBeGreaterThanOrEqual(0);
-    expect(result.hourlyWater).toBe(1 + expectedDataWater);
+    expect(result.dailyWater).toBe(1 + expectedDataWater);
   });
 }
 
-test('green space reduces live hourly carbon without making the city negative', () => {
+test('green space reduces live daily carbon without making the city negative', () => {
   const poweredFactory = [
     { type: 'residential', level: 1, priority: 'essential' },
     { type: 'factory', level: 1, priority: 'normal' },
@@ -133,8 +146,8 @@ test('green space reduces live hourly carbon without making the city negative', 
   ];
   const greenOnly = [{ type: 'green', level: 1, priority: 'normal' }];
 
-  expect(settleEconomy({ grid: poweredFactory, facilityPower: fullyPowered(poweredFactory), credits: 10 }).hourlyCarbon).toBe(1);
-  expect(settleEconomy({ grid: greenOnly, facilityPower: fullyPowered(greenOnly), credits: 10 }).hourlyCarbon).toBe(0);
+  expect(settleEconomy({ grid: poweredFactory, facilityPower: fullyPowered(poweredFactory), credits: 10 }).dailyCarbon).toBe(1);
+  expect(settleEconomy({ grid: greenOnly, facilityPower: fullyPowered(greenOnly), credits: 10 }).dailyCarbon).toBe(0);
 });
 
 test('a minimal transition grid pays no climate recovery cost at 10 CO2', () => {
@@ -144,6 +157,7 @@ test('a minimal transition grid pays no climate recovery cost at 10 CO2', () => 
   grid[1] = { type: 'factory', level: 1, priority: 'normal' };
   grid[3] = { type: 'residential', level: 1, priority: 'normal' };
   grid[4] = { type: 'residential', level: 1, priority: 'normal' };
+  grid[5] = { type: 'residential', level: 1, priority: 'normal' };
   const atSafeLine = settleEconomy({
     grid,
     coords,
@@ -158,9 +172,9 @@ test('a minimal transition grid pays no climate recovery cost at 10 CO2', () => 
     credits: 10,
   });
 
-  expect(atSafeLine.hourlyCarbon).toBe(10);
+  expect(atSafeLine.dailyCarbon).toBe(10);
   expect(atSafeLine.climateRecovery).toBe(0);
-  expect(aboveSafeLine.hourlyCarbon).toBe(11);
+  expect(aboveSafeLine.dailyCarbon).toBe(11);
   expect(aboveSafeLine.climateRecovery).toBeGreaterThan(0);
 });
 
@@ -174,12 +188,13 @@ test('static preview and fully powered live operation share carbon and water rul
   grid[14] = { type: 'thermal', level: 1, priority: 'normal' };
   grid[1] = { type: 'green', level: 1, priority: 'normal' };
   grid[2] = { type: 'residential', level: 3, priority: 'essential' };
+  grid[6] = { type: 'residential', level: 1, priority: 'essential' };
 
   const preview = calcMetrics(grid, coords);
   const live = settleEconomy({ grid, coords, facilityPower: fullyPowered(grid), credits: 10 });
 
   expect({ carbon: preview.carbon, water: preview.water }).toEqual({
-    carbon: live.hourlyCarbon,
-    water: live.hourlyWater,
+    carbon: live.dailyCarbon,
+    water: live.dailyWater,
   });
 });

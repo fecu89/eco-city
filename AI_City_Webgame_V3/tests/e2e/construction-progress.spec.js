@@ -21,7 +21,7 @@ test('confirmed construction remains a zero-effect build site until its completi
     cell: window.__GAME_STATE__.grid[0],
     completions: window.__constructionCompletions,
   }));
-  expect(started.cell.project).toMatchObject({ kind: 'build', elapsedHours: 0, durationHours: 5 });
+  expect(started.cell.project).toMatchObject({ kind: 'build', elapsedDays: 0, durationDays: 5 });
   expect(started.completions).toBe(0);
   await expect.poll(() => page.evaluate(() => window.__getCityRendererStats().constructionSiteCount)).toBe(1);
   expect(await page.evaluate(() => window.__getCityRendererStats().facilityInstances)).toBe(0);
@@ -35,13 +35,13 @@ test('confirmed construction remains a zero-effect build site until its completi
   await expect(page.locator('[data-project-remaining]')).toContainText('5시간');
 
   await page.evaluate(() => {
-    for (let hour = 0; hour < 4; hour += 1) window.__settleSimulationHour();
+    for (let day = 0; day < 4; day += 1) window.__settleSimulationDay();
   });
-  expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].project.elapsedHours)).toBe(4);
+  expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].project.elapsedDays)).toBe(4);
   expect(await page.evaluate(() => window.__constructionCompletions)).toBe(0);
   expect(await page.evaluate(() => window.__getCityRendererStats().constructionStages)).toEqual({ shell: 1 });
 
-  await page.evaluate(() => window.__settleSimulationHour());
+  await page.evaluate(() => window.__settleSimulationDay());
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].project)).toBeNull();
   expect(await page.evaluate(() => window.__constructionCompletions)).toBe(1);
   expect(await page.evaluate(() => window.__getCityRendererStats().facilityInstances)).toBe(1);
@@ -175,16 +175,16 @@ test('upgrade starts an eight-hour limited-operation project and changes level o
 
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0])).toMatchObject({
     level: 1,
-    project: { kind: 'upgrade', fromLevel: 1, toLevel: 2, elapsedHours: 0, durationHours: 8 },
+    project: { kind: 'upgrade', fromLevel: 1, toLevel: 2, elapsedDays: 0, durationDays: 8 },
   });
   expect(await page.evaluate(() => window.__GAME_STATE__.credits)).toBe(18);
   await page.evaluate(() => window.__clickCell(0));
   await expect(page.locator('[data-construction-console="upgrade"]')).toContainText('제한 가동 중');
 
   await page.evaluate(() => {
-    for (let hour = 0; hour < 7; hour += 1) window.__settleSimulationHour();
+    for (let day = 0; day < 7; day += 1) window.__settleSimulationDay();
   });
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].level)).toBe(1);
-  await page.evaluate(() => window.__settleSimulationHour());
+  await page.evaluate(() => window.__settleSimulationDay());
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0])).toMatchObject({ level: 2, project: null });
 });

@@ -5,11 +5,11 @@ test('seven unsafe carbon days pause the city and show a blocking reset modal', 
     window.__setTimeScale(0);
     const state = window.__GAME_STATE__;
     state.questIndex = 6;
-    state.carbonCrisisHours = 167;
+    state.carbonCrisisDays = 167;
     state.grid[0] = { type: 'thermal', level: 1, priority: 'normal' };
     state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
     state.grid[2] = { type: 'residential', level: 1, priority: 'essential' };
-    window.__settleSimulationHour();
+    window.__settleSimulationDay();
   });
 
   await expect(page.locator('#modal')).toBeVisible();
@@ -18,7 +18,7 @@ test('seven unsafe carbon days pause the city and show a blocking reset modal', 
   expect(await page.evaluate(() => window.__getSimulationState().pauseReasons)).toContain('game-over');
   expect(JSON.parse(await page.evaluate(() => window.render_game_to_text()))).toMatchObject({
     mode: 'game_over',
-    carbonCrisisHours: 168,
+    carbonCrisisDays: 168,
     carbonCrisisLimit: 168,
   });
 });

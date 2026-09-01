@@ -13,11 +13,11 @@ import { escapeHtml, formatCredits } from './format.js';
 
 function progressFor(job) {
   if (!job) return 0;
-  return Math.min(100, Math.round((job.elapsedEffectiveHours / RESEARCH[job.id].durationHours) * 100));
+  return Math.min(100, Math.round((job.elapsedEffectiveDays / RESEARCH[job.id].durationDays) * 100));
 }
 
-function realDurationLabel(hours) {
-  const totalSeconds = Math.round(hours / RESEARCH_RULES.GAME_HOURS_PER_REAL_MINUTE * 60);
+function realDurationLabel(days) {
+  const totalSeconds = Math.round(days / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE * 60);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return seconds ? `${minutes}분 ${seconds}초` : `${minutes}분`;
@@ -37,7 +37,7 @@ function activeJobMarkup(job, dataCenterIndex) {
     <article class="research-active ${['underpowered', 'mode_paused'].includes(job.status) ? 'underpowered' : ''}" data-research-job="${job.id}">
       <div><strong>${definition.name}</strong><span data-research-live-status>${jobStatus(job)}</span></div>
       <div class="research-progress"><span data-research-live-progress style="width:${progressFor(job)}%"></span></div>
-      <small data-research-live-hours>${Math.round(job.elapsedEffectiveHours)} / ${definition.durationHours}시간</small>
+      <small data-research-live-days>${Math.round(job.elapsedEffectiveDays)} / ${definition.durationDays}일</small>
       <div class="research-actions">
         ${assignedHere ? `<button class="btn primary" data-research-accelerate="${job.id}">퀴즈로 가속</button>` : ''}
         ${job.dataCenterIndex == null ? `<button class="btn secondary" data-research-assign="${job.id}">이 시설에 배정</button>` : ''}
@@ -79,7 +79,7 @@ function researchCardMarkup(item, centerJob) {
       aria-label="${escapeHtml(`${item.name}, ${status}`)}">
       <span class="research-card-icon" aria-hidden="true"><i data-lucide="${item.icon}"></i></span>
       <strong class="research-card-title">${escapeHtml(item.name)}</strong>
-      <span class="research-card-meta">${formatCredits(item.cost)} · ${realDurationLabel(item.durationHours)}</span>
+      <span class="research-card-meta">${formatCredits(item.cost)} · ${realDurationLabel(item.durationDays)}</span>
       <span class="sr-only">${status}</span>
       ${lockReason ? `<span class="research-lock-tip" id="${tooltipId}" role="tooltip">${escapeHtml(lockReason)}</span>` : ''}
     </button>`;
@@ -117,7 +117,7 @@ export function refreshResearchPanelLive(root) {
     article.classList.toggle('underpowered', ['underpowered', 'mode_paused'].includes(job.status));
     article.querySelector('[data-research-live-status]').textContent = jobStatus(job);
     article.querySelector('[data-research-live-progress]').style.width = `${progressFor(job)}%`;
-    article.querySelector('[data-research-live-hours]').textContent = `${Math.round(job.elapsedEffectiveHours)} / ${definition.durationHours}시간`;
+    article.querySelector('[data-research-live-days]').textContent = `${Math.round(job.elapsedEffectiveDays)} / ${definition.durationDays}일`;
   });
   return structureChanged;
 }

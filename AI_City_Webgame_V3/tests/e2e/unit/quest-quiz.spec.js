@@ -16,25 +16,25 @@ test('the final council is the only quest quiz while every research owns four qu
   expect(state.quizResearchId).toBeNull();
 
   expect(Object.keys(RESEARCH_QUIZZES).sort()).toEqual([
-    'battery2', 'battery3', 'demandResponse', 'smartGrid', 'solar2', 'solar3', 'tidal1', 'wind2', 'wind3',
+    'battery2', 'battery3', 'demandResponse', 'green2', 'green3', 'smartGrid', 'solar2', 'solar3', 'tidal1', 'wind2', 'wind3',
   ]);
   const ids = [];
   Object.entries(RESEARCH_QUIZZES).forEach(([researchId, questions]) => {
     expect(questions, researchId).toHaveLength(4);
     questions.forEach((question) => ids.push(question.id));
   });
-  expect(new Set(ids).size).toBe(36);
+  expect(new Set(ids).size).toBe(44);
 });
 
 test('answer options are shuffled per session without changing the correct answer or source bank', () => {
   const original = RESEARCH_QUIZZES.solar2[0].options.map(({ text, correct }) => ({ text, correct }));
   const first = new GameState();
-  first.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveHours: 0 };
+  first.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveDays: 0 };
   startResearchQuiz(first, 'solar2', () => 0.999999);
   const firstQuestion = currentQuestQuizQuestion(first);
 
   const second = new GameState();
-  second.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveHours: 0 };
+  second.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveDays: 0 };
   startResearchQuiz(second, 'solar2', () => 0);
   const secondQuestion = currentQuestQuizQuestion(second);
 
@@ -62,9 +62,9 @@ test('a correct research answer accelerates only its assigned research by one qu
   const correctIndex = question.options.findIndex((option) => option.correct);
   const result = answerQuestQuiz(state, correctIndex);
 
-  expect(result.acceleration).toMatchObject({ appliedJobs: ['solar2'], hours: 30 });
-  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(30);
-  expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(0);
+  expect(result.acceleration).toMatchObject({ appliedJobs: ['solar2'], days: 30 });
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(30);
+  expect(state.research.jobs.wind2.elapsedEffectiveDays).toBe(0);
 });
 
 test('four correct answers can finish the longest research without accelerating another center', () => {
@@ -86,32 +86,32 @@ test('four correct answers can finish the longest research without accelerating 
 
   expect(state.research.completedIds.has('battery3')).toBe(true);
   expect(state.research.jobs.battery3).toBeUndefined();
-  expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(0);
+  expect(state.research.jobs.wind2.elapsedEffectiveDays).toBe(0);
 });
 
 test('research acceleration does not bank when its selected job is missing', () => {
   const state = new GameState();
   expect(accelerateResearchFromQuiz(state, 'solar2')).toEqual({
     appliedJobs: [],
-    hours: 0,
+    days: 0,
     completed: [],
     reason: 'research_not_active',
   });
-  expect(state.research.quizAccelerationBankHours).toBe(0);
+  expect(state.research.quizAccelerationBankDays).toBe(0);
 });
 
 test('a research question grants acceleration only once across retries', () => {
   const state = new GameState();
-  state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveHours: 0 };
+  state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveDays: 0 };
   startResearchQuiz(state, 'solar2', () => 0);
   const first = currentQuestQuizQuestion(state);
   const correctIndex = first.options.findIndex((option) => option.correct);
-  expect(answerQuestQuiz(state, correctIndex).acceleration.hours).toBe(30);
+  expect(answerQuestQuiz(state, correctIndex).acceleration.days).toBe(30);
 
   state.quizPool = [first];
   state.quizIndex = 0;
   state.quizAnswered = false;
   const repeated = answerQuestQuiz(state, correctIndex);
-  expect(repeated.acceleration).toMatchObject({ hours: 0, reason: 'question_already_credited' });
-  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(30);
+  expect(repeated.acceleration).toMatchObject({ days: 0, reason: 'question_already_credited' });
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(30);
 });

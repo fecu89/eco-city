@@ -43,14 +43,14 @@ function syncForecastMetrics(assessment) {
   buildConfirmEls.timeline?.classList.toggle('hidden', !forecast);
   if (!forecast) return;
   const { current, projected } = forecast;
-  setForecastMetric('credit', `${signed(projected.netCredits, 2)}/h`, `Δ ${signed(projected.netCredits - current.netCredits, 2)}`);
+  setForecastMetric('credit', `${signed(projected.netCredits, 2)}/일`, `Δ ${signed(projected.netCredits - current.netCredits, 2)}`);
   setForecastMetric(
     'power',
     `${round1(projected.deliveredPower)}/${round1(projected.demand)}E`,
     `공급 Δ ${signed(projected.deliveredPower - current.deliveredPower)}E`,
   );
-  setForecastMetric('carbon', `CO₂ ${round1(projected.hourlyCarbon)}/h`, `Δ ${signed(projected.hourlyCarbon - current.hourlyCarbon)}`);
-  setForecastMetric('water', `${round1(projected.hourlyWater)}/h`, `Δ ${signed(projected.hourlyWater - current.hourlyWater)}`);
+  setForecastMetric('carbon', `CO₂ ${round1(projected.dailyCarbon)}/일`, `Δ ${signed(projected.dailyCarbon - current.dailyCarbon)}`);
+  setForecastMetric('water', `${round1(projected.dailyWater)}/일`, `Δ ${signed(projected.dailyWater - current.dailyWater)}`);
   setForecastMetric(
     'labor',
     `${formatCompactNumber(projected.labor.used, { fractionDigits: 0 })}/${formatCompactNumber(projected.labor.capacity, { fractionDigits: 0 })}명`,
@@ -65,13 +65,13 @@ function syncForecastMetrics(assessment) {
       city_event_started: '기상이변 시작',
     };
     const risk = forecast.worstInterval?.warnings?.length
-      ? ` · 위험 ${forecast.worstInterval.hourOffset}h`
+      ? ` · 위험 ${forecast.worstInterval.dayOffset}일`
       : ' · 안정';
-    buildConfirmEls.timeline.querySelector('[data-forecast-summary]').textContent = `${forecast.horizonHours}시간${risk}`;
-    buildConfirmEls.timeline.querySelector('[data-forecast-events]').innerHTML = forecast.timeline.map(({ hourOffset, completed, warnings }) => {
+    buildConfirmEls.timeline.querySelector('[data-forecast-summary]').textContent = `${forecast.horizonDays}일${risk}`;
+    buildConfirmEls.timeline.querySelector('[data-forecast-events]').innerHTML = forecast.timeline.map(({ dayOffset, completed, warnings }) => {
       const names = completed.map(({ type }) => FACILITIES[type]?.name || type).join(' · ');
       const warning = warnings.length ? ` · ${warnings.map((item) => warningLabels[item] || item).join(', ')}` : '';
-      return `<li><b>+${hourOffset}시간</b><span>${names} 완공${warning}</span></li>`;
+      return `<li><b>+${dayOffset}일</b><span>${names} 완공${warning}</span></li>`;
     }).join('');
   }
 }
@@ -109,6 +109,15 @@ function handleSceneCellClick(index) {
     return;
   }
   const assessment = upsertPlannedFacility(gameState, gameState.selectedFacility, index);
+  if (assessment.rejected) {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '건설 허가 한도',
+      text: assessment.rejected.message,
+      priority: true,
+    });
+    renderGrid();
+    return;
+  }
   gameState.selectedCell = gameState.constructionPlan.some((item) => item.index === index) ? index : null;
   eventBus.emit(Events.BUILD_PLAN_CHANGED, assessment);
   renderGrid();
@@ -195,7 +204,7 @@ function buildCellConfigs() {
       level: cell.level,
       project: cell.project ? {
         ...cell.project,
-        progress: cell.project.elapsedHours / cell.project.durationHours,
+        progress: cell.project.elapsedDays / cell.project.durationDays,
       } : null,
     };
   });

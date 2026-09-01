@@ -121,11 +121,11 @@ export function initFeedbackBridge() {
     });
   });
 
-  eventBus.on(Events.RESEARCH_ACCELERATED, ({ appliedJobs, hours }) => {
+  eventBus.on(Events.RESEARCH_ACCELERATED, ({ appliedJobs, days }) => {
     eventBus.emit(Events.TOAST_SHOW, {
       title: '퀴즈 연구 가속',
       text: appliedJobs.length
-        ? `${RESEARCH[appliedJobs[0]]?.name || appliedJobs[0]} 연구를 ${hours}시간 단축했습니다.`
+        ? `${RESEARCH[appliedJobs[0]]?.name || appliedJobs[0]} 연구를 ${days}일 단축했습니다.`
         : '선택한 연구가 이미 완료되었습니다.',
     });
   });

@@ -24,10 +24,10 @@ test.describe('quest economy HUD', () => {
     await page.locator('[data-hud-target="build"]').first().click();
     await expect(page.locator('#facilityDock .facility-btn')).toHaveCount(11);
     await expect(page.locator('#facilityDock .facility-btn[aria-disabled="false"]')).toHaveCount(1);
-    expect(await page.evaluate(() => typeof window.__settleSimulationHour)).toBe('function');
-    const before = await page.evaluate(() => window.__GAME_STATE__.elapsedGameHours);
-    await page.evaluate(() => window.__settleSimulationHour());
-    expect(await page.evaluate(() => window.__GAME_STATE__.elapsedGameHours)).toBe(before + 1);
+    expect(await page.evaluate(() => typeof window.__settleSimulationDay)).toBe('function');
+    const before = await page.evaluate(() => window.__GAME_STATE__.elapsedGameDays);
+    await page.evaluate(() => window.__settleSimulationDay());
+    expect(await page.evaluate(() => window.__GAME_STATE__.elapsedGameDays)).toBe(before + 1);
   });
 
   test('claiming the first quest unlocks factory and thermal without a reward modal', async ({ gamePage: page }) => {
@@ -100,8 +100,8 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#questPanel')).not.toContainText('퀴즈 시작');
 
     await page.evaluate(() => {
-      window.__settleSimulationHour();
-      window.__settleSimulationHour();
+      window.__settleSimulationDay();
+      window.__settleSimulationDay();
     });
     await expect(page.locator('#questPanelClaimBtn')).toHaveText('보상 받기');
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
@@ -170,7 +170,7 @@ test.describe('quest economy HUD', () => {
       state.questIndex = 4;
       state.questStatus = 'ready_to_claim';
       state.metrics = { reliableSupply: 10, demand: 8, balance: 2, carbon: 7, water: 5 };
-      state.lastTickSummary = { deliveredPower: 10, demand: 8, hourlyCarbon: 7, hourlyWater: 5, routes: [] };
+      state.lastTickSummary = { deliveredPower: 10, demand: 8, dailyCarbon: 7, dailyWater: 5, routes: [] };
       window.__refreshGameForTest();
     });
 
@@ -197,8 +197,8 @@ test.describe('quest economy HUD', () => {
       state.progression.chapter = 4;
       state.progression.objectiveSetId = null;
       state.stressTest = {
-        status: 'passed', phaseIndex: 5, phaseHour: 0,
-        result: { passed: true, blackoutHours: 0, minimumEssentialSupply: 92, averageEssentialSupply: 98, averageNetIncome: 3, carbonRiskHours: 0, waterViolationHours: 0, batteryEnergyUsed: 10, recoveryHours: 1, maxConsecutiveBankruptcyHours: 0, finalCredits: 20 },
+        status: 'passed', phaseIndex: 5, phaseDay: 0,
+        result: { passed: true, blackoutDays: 0, minimumEssentialSupply: 92, averageEssentialSupply: 98, averageNetIncome: 3, carbonRiskDays: 0, waterViolationDays: 0, batteryEnergyUsed: 10, recoveryDays: 1, maxConsecutiveBankruptcyDays: 0, finalCredits: 20 },
       };
       state.campaignComplete = true;
       state.baseline = { dev: 5, balance: -2, carbon: 8, water: 9 };
@@ -209,7 +209,7 @@ test.describe('quest economy HUD', () => {
         lowCarbonPercent: 150,
         employmentRate: 1.5,
         industryFill: 1.4,
-        essentialOutageHours: 0,
+        essentialOutageDays: 0,
         overcrowding: 1,
         health: 0.4,
         deliveredEnergy: 20,
@@ -240,8 +240,8 @@ test.describe('quest economy HUD', () => {
       state.progression.chapter = 4;
       state.progression.objectiveSetId = null;
       state.stressTest = {
-        status: 'passed', phaseIndex: 5, phaseHour: 0,
-        result: { passed: true, blackoutHours: 0, minimumEssentialSupply: 90, averageEssentialSupply: 95, averageNetIncome: 2, carbonRiskHours: 0, waterViolationHours: 0, batteryEnergyUsed: 5, recoveryHours: 2, maxConsecutiveBankruptcyHours: 0, finalCredits: 10 },
+        status: 'passed', phaseIndex: 5, phaseDay: 0,
+        result: { passed: true, blackoutDays: 0, minimumEssentialSupply: 90, averageEssentialSupply: 95, averageNetIncome: 2, carbonRiskDays: 0, waterViolationDays: 0, batteryEnergyUsed: 5, recoveryDays: 2, maxConsecutiveBankruptcyDays: 0, finalCredits: 10 },
       };
       state.campaignComplete = true;
       state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };

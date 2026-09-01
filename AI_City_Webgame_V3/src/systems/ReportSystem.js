@@ -1,7 +1,7 @@
 import { REPORT_RULES, REPORT_TIERS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
-import { carbonPressureForHours } from './CarbonCrisisSystem.js';
+import { carbonPressureForDays } from './CarbonCrisisSystem.js';
 
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -15,9 +15,9 @@ function axis(value, max) {
 
 function operationSnapshot(state, metrics) {
   const totals = state.simulationTotals;
-  const hours = Math.max(1, totals.hours || 0);
+  const days = Math.max(1, totals.days || 0);
   const deliveredEnergy = totals.deliveredEnergy || 0;
-  const averageLowCarbonPercent = round1((totals.lowCarbonPercent || 0) / hours);
+  const averageLowCarbonPercent = round1((totals.lowCarbonPercent || 0) / days);
   const peakDemand = totals.peakDemand || metrics.demand || 0;
   const peakAvailableSupply = totals.peakAvailableSupply || metrics.reliableSupply || 0;
   const playerDecisionCount = (state.decisionCounts.modeChanges || 0)
@@ -25,13 +25,13 @@ function operationSnapshot(state, metrics) {
     + (state.decisionCounts.researchPauses || 0)
     + (state.decisionCounts.batteryPolicyChanges || 0);
   return {
-    hours: totals.hours || 0,
-    averageNetIncome: round2((totals.netCredits || 0) / hours),
-    averageTransmissionEfficiency: round1((totals.transmissionEfficiency || 0) / hours * 100),
+    days: totals.days || 0,
+    averageNetIncome: round2((totals.netCredits || 0) / days),
+    averageTransmissionEfficiency: round1((totals.transmissionEfficiency || 0) / days * 100),
     averageLowCarbonPercent,
-    averageEmploymentRate: round1((totals.employmentRate || 0) / hours * 100),
-    averageIndustryFill: round1((totals.industryFill || 0) / hours * 100),
-    essentialOutageHours: totals.essentialOutageHours || 0,
+    averageEmploymentRate: round1((totals.employmentRate || 0) / days * 100),
+    averageIndustryFill: round1((totals.industryFill || 0) / days * 100),
+    essentialOutageDays: totals.essentialOutageDays || 0,
     overcrowdingCost: round1(totals.overcrowding || 0),
     healthCost: round1(totals.health || 0),
     deliveredEnergy: round2(deliveredEnergy),
@@ -39,7 +39,7 @@ function operationSnapshot(state, metrics) {
     nuclearShare: round1(percent(totals.nuclearDeliveredEnergy || 0, deliveredEnergy)),
     batteryEnergyUsed: round2(totals.batteryEnergyUsed || 0),
     batteryDeliveredShare: round1(percent(totals.batteryEnergyUsed || 0, deliveredEnergy)),
-    outageRate: round1(percent(totals.essentialOutageHours || 0, hours)),
+    outageRate: round1(percent(totals.essentialOutageDays || 0, days)),
     reserveMargin: round1(peakDemand > 0 ? (peakAvailableSupply - peakDemand) / peakDemand * 100 : 0),
     installedPeakRatio: round2(peakDemand > 0 ? (metrics.reliableSupply || peakAvailableSupply) / peakDemand : 0),
     factoryIncomeShare: round1(percent(totals.factoryIncome || 0, totals.grossIncome || 0)),
@@ -50,42 +50,42 @@ function operationSnapshot(state, metrics) {
 }
 
 function fallbackStress(operations, state) {
-  const hours = Math.max(1, operations.hours);
+  const days = Math.max(1, operations.days);
   return {
-    blackoutHours: operations.essentialOutageHours,
-    minimumEssentialSupply: operations.essentialOutageHours ? 0 : 100,
+    blackoutDays: operations.essentialOutageDays,
+    minimumEssentialSupply: operations.essentialOutageDays ? 0 : 100,
     averageEssentialSupply: clamp(100 - operations.outageRate),
     averageNetIncome: operations.averageNetIncome,
-    carbonRiskHours: state.carbonCrisisHours || 0,
-    waterViolationHours: 0,
+    carbonRiskDays: state.carbonCrisisDays || 0,
+    waterViolationDays: 0,
     batteryEnergyUsed: operations.batteryEnergyUsed,
-    recoveryHours: 4,
-    maxConsecutiveBankruptcyHours: 0,
+    recoveryDays: 4,
+    maxConsecutiveBankruptcyDays: 0,
     finalCredits: state.credits,
     passed: state.campaignComplete,
-    hours,
+    days,
   };
 }
 
 function scoreAxes(operations, stress, state) {
-  const stressHours = 27;
-  const outageSafety = clamp(100 - percent(stress.blackoutHours || 0, stressHours));
+  const stressDays = 27;
+  const outageSafety = clamp(100 - percent(stress.blackoutDays || 0, stressDays));
   const powerStability = clamp(
     (stress.averageEssentialSupply || 0) * 0.5
       + outageSafety * 0.3
       + (stress.minimumEssentialSupply || 0) * 0.2,
   );
-  const carbonSafety = clamp(100 - percent(stress.carbonRiskHours || 0, stressHours));
+  const carbonSafety = clamp(100 - percent(stress.carbonRiskDays || 0, stressDays));
   const environment = clamp(operations.averageLowCarbonPercent * 0.65 + carbonSafety * 0.35);
   const incomeHealth = clamp((operations.averageNetIncome + 2) / 7 * 100);
   const creditRecovery = clamp((stress.finalCredits || 0) / 20 * 100);
   const economy = incomeHealth * 0.7 + creditRecovery * 0.3;
-  const waterSafety = clamp(100 - percent(stress.waterViolationHours || 0, stressHours));
-  const socialCostPerHour = (operations.overcrowdingCost + operations.healthCost) / Math.max(1, operations.hours);
-  const socialSafety = clamp(100 - socialCostPerHour / 2 * 100);
+  const waterSafety = clamp(100 - percent(stress.waterViolationDays || 0, stressDays));
+  const socialCostPerDay = (operations.overcrowdingCost + operations.healthCost) / Math.max(1, operations.days);
+  const socialSafety = clamp(100 - socialCostPerDay / 2 * 100);
   const resourceUse = operations.averageTransmissionEfficiency * 0.6 + waterSafety * 0.25 + socialSafety * 0.15;
   const decisionScore = clamp(operations.playerDecisionCount / 5 * 100);
-  const recoveryScore = clamp((5 - (stress.recoveryHours || 4)) / 4 * 100);
+  const recoveryScore = clamp((5 - (stress.recoveryDays || 4)) / 4 * 100);
   const reserveResponse = clamp((stress.batteryEnergyUsed || 0) / 10 * 100);
   const operatingResponse = decisionScore * 0.5 + recoveryScore * 0.3 + reserveResponse * 0.2;
   const weights = REPORT_RULES.AXIS_WEIGHTS;
@@ -145,7 +145,7 @@ export function classifyCity(report) {
         && report.factoryIncomeShare >= thresholds.industrial.factoryIncomeShare,
       (report.averageNetIncome / thresholds.industrial.netIncome
         + report.factoryIncomeShare / thresholds.industrial.factoryIncomeShare) / 2 - 1,
-      [`평균 순수익 ${report.averageNetIncome}/h`, `공장 수입 비중 ${report.factoryIncomeShare}%`],
+      [`평균 순수익 ${report.averageNetIncome}/일`, `공장 수입 비중 ${report.factoryIncomeShare}%`],
     ),
   ];
   const qualified = candidates.filter(({ qualifies }) => qualifies);
@@ -158,8 +158,8 @@ export function computeReport() {
   const live = gameState.lastTickSummary;
   const metrics = {
     ...staticMetrics,
-    carbon: live?.hourlyCarbon ?? staticMetrics.carbon,
-    water: live?.hourlyWater ?? staticMetrics.water,
+    carbon: live?.dailyCarbon ?? staticMetrics.carbon,
+    water: live?.dailyWater ?? staticMetrics.water,
     demand: live?.demand ?? staticMetrics.demand,
     reliableSupply: live?.deliveredPower ?? staticMetrics.reliableSupply,
     balance: live ? round1(live.deliveredPower - live.demand) : staticMetrics.balance,
@@ -168,7 +168,7 @@ export function computeReport() {
   const stress = gameState.stressTest?.result || fallbackStress(operations, gameState);
   const axes = scoreAxes(operations, stress, gameState);
   const penalties = (gameState.emergencySupport?.economyScorePenalty || 0)
-    + carbonPressureForHours(gameState.carbonCrisisHours).reportPenalty;
+    + carbonPressureForDays(gameState.carbonCrisisDays).reportPenalty;
   const rawOperating = Object.values(axes).reduce((sum, item) => sum + item.score, 0);
   const operatingTotal = round1(clamp(rawOperating - penalties));
   const finalQuiz = gameState.quizResults?.['climate-council'];

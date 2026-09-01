@@ -1,5 +1,6 @@
 import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { QUESTS } from '../core/QuestDefinitions.js';
 import { roundCredits } from '../core/Money.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
@@ -30,6 +31,10 @@ function prerequisiteLabel(prerequisite) {
   if (kind === 'facility') return `${FACILITIES[id]?.name || id} 해금 필요`;
   if (kind === 'research') return `${RESEARCH[id]?.name || id} 완료 필요`;
   if (kind === 'tech') return `${FACILITIES[id]?.name || id} 기술 Lv.${rawLevel} 필요`;
+  if (kind === 'quest') {
+    const quest = QUESTS.find(({ id: questId }) => questId === id);
+    return `퀘스트 ‘${quest?.title || id}’ 완료 필요`;
+  }
   return prerequisite;
 }
 
@@ -45,16 +50,23 @@ export function activeResearchJobs(state) {
 export function listResearchAvailability(state) {
   const jobs = researchJobs(state);
   return Object.values(RESEARCH).map((definition) => {
-    const reasonCodes = unmetPrerequisites(state, definition);
+    const prerequisiteCodes = unmetPrerequisites(state, definition);
+    const questCodes = definition.unlockAfterQuestId && !state.claimedQuestIds.has(definition.unlockAfterQuestId)
+      ? [`quest:${definition.unlockAfterQuestId}`]
+      : [];
+    const reasonCodes = [...prerequisiteCodes, ...questCodes];
     const completed = state.research.completedIds.has(definition.id);
-    const reasonLabels = reasonCodes.map(prerequisiteLabel);
+    const reasonLabels = [
+      ...groupLabel(definition, prerequisiteCodes.map(prerequisiteLabel)),
+      ...questCodes.map(prerequisiteLabel),
+    ];
     return {
       ...definition,
       completed,
       active: Boolean(jobs[definition.id]),
       available: !completed && !jobs[definition.id] && reasonCodes.length === 0,
       reasonCodes,
-      reasonLabels: groupLabel(definition, reasonLabels),
+      reasonLabels,
     };
   });
 }
@@ -91,15 +103,15 @@ export function startResearch(state, researchId, dataCenterIndex) {
   if (state.credits < definition.cost) return { ok: false, reason: 'insufficient_credits', cost: definition.cost };
 
   state.credits = roundCredits(state.credits - definition.cost);
-  state.research.quizAccelerationBankHours = 0;
+  state.research.quizAccelerationBankDays = 0;
   jobs[researchId] = {
     id: researchId,
     dataCenterIndex,
-    elapsedEffectiveHours: 0,
+    elapsedEffectiveDays: 0,
     status: 'running',
     paidCost: definition.cost,
   };
-  return { ok: true, researchId, dataCenterIndex, cost: definition.cost, bankedHoursApplied: 0 };
+  return { ok: true, researchId, dataCenterIndex, cost: definition.cost, bankedDaysApplied: 0 };
 }
 
 export function cancelResearch(state, researchId) {
@@ -158,33 +170,33 @@ export function completeResearchJob(state, researchId) {
   return { researchId, outcome: definition.outcome };
 }
 
-export function accelerateResearchFromQuiz(state, researchId, hours = null) {
+export function accelerateResearchFromQuiz(state, researchId, days = null) {
   const job = researchJobs(state)[researchId];
   const definition = RESEARCH[researchId];
   if (!job || !definition) {
-    return { appliedJobs: [], hours: 0, completed: [], reason: 'research_not_active' };
+    return { appliedJobs: [], days: 0, completed: [], reason: 'research_not_active' };
   }
-  const accelerationHours = Math.max(
+  const accelerationDays = Math.max(
     0,
-    Number(hours ?? (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT)) || 0,
+    Number(days ?? (definition.durationDays / RESEARCH_RULES.QUIZ_QUESTION_COUNT)) || 0,
   );
-  job.elapsedEffectiveHours = Math.min(
-    definition.durationHours,
-    job.elapsedEffectiveHours + accelerationHours,
+  job.elapsedEffectiveDays = Math.min(
+    definition.durationDays,
+    job.elapsedEffectiveDays + accelerationDays,
   );
   const completed = [];
-  if (job.elapsedEffectiveHours >= definition.durationHours) {
+  if (job.elapsedEffectiveDays >= definition.durationDays) {
     const completion = completeResearchJob(state, researchId);
     if (completion) completed.push(completion);
   }
   return {
     appliedJobs: [researchId],
-    hours: accelerationHours,
+    days: accelerationDays,
     completed,
   };
 }
 
-export function advanceResearchOneHour(state, facilityPower, modifierContext = null) {
+export function advanceResearchOneDay(state, facilityPower, modifierContext = null) {
   const results = {};
   const completed = [];
 
@@ -195,7 +207,7 @@ export function advanceResearchOneHour(state, facilityPower, modifierContext = n
     if (!validDataCenter(state, active.dataCenterIndex)) {
       active.dataCenterIndex = null;
       active.status = 'unassigned';
-      results[active.id] = { status: 'unassigned', advancedHours: 0, completed: false };
+      results[active.id] = { status: 'unassigned', advancedDays: 0, completed: false };
       continue;
     }
     const ratio = facilityPower?.[active.dataCenterIndex]?.ratio ?? 0;
@@ -203,7 +215,7 @@ export function advanceResearchOneHour(state, facilityPower, modifierContext = n
       active.status = 'underpowered';
       results[active.id] = {
         status: 'underpowered',
-        advancedHours: 0,
+        advancedDays: 0,
         completed: false,
         ratio,
         dataCenterIndex: active.dataCenterIndex,
@@ -221,7 +233,7 @@ export function advanceResearchOneHour(state, facilityPower, modifierContext = n
       active.status = 'mode_paused';
       results[active.id] = {
         status: 'mode_paused',
-        advancedHours: 0,
+        advancedDays: 0,
         completed: false,
         ratio,
         dataCenterIndex: active.dataCenterIndex,
@@ -229,26 +241,26 @@ export function advanceResearchOneHour(state, facilityPower, modifierContext = n
       continue;
     }
     const dataCenterLevel = state.grid[active.dataCenterIndex]?.level || 1;
-    const advancedHours = (RESEARCH_RULES.DATA_CENTER_SPEED[dataCenterLevel] || 1) * researchSpeed;
-    active.elapsedEffectiveHours = Math.min(definition.durationHours, active.elapsedEffectiveHours + advancedHours);
+    const advancedDays = (RESEARCH_RULES.DATA_CENTER_SPEED[dataCenterLevel] || 1) * researchSpeed;
+    active.elapsedEffectiveDays = Math.min(definition.durationDays, active.elapsedEffectiveDays + advancedDays);
     active.status = 'running';
-    if (active.elapsedEffectiveHours < definition.durationHours) {
+    if (active.elapsedEffectiveDays < definition.durationDays) {
       results[active.id] = {
         status: 'running',
-        advancedHours,
+        advancedDays,
         completed: false,
         ratio,
         dataCenterIndex: active.dataCenterIndex,
         becameUnderpowered: false,
         recoveredPower: previousStatus === 'underpowered',
-        elapsedEffectiveHours: active.elapsedEffectiveHours,
+        elapsedEffectiveDays: active.elapsedEffectiveDays,
       };
       continue;
     }
     const completion = completeResearchJob(state, active.id);
     const result = {
       status: 'completed',
-      advancedHours,
+      advancedDays,
       completed: true,
       researchId: definition.id,
       outcome: definition.outcome,

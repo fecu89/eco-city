@@ -17,7 +17,7 @@ function renderControl() {
 export function setWorldLightingMode(mode, { persist = true } = {}) {
   const next = WORLD_LIGHTING_MODES[mode] ? mode : 'day';
   currentMode = next;
-  applyHour(WORLD_LIGHTING_MODES[next].hour);
+  applyHour(WORLD_LIGHTING_MODES[next].visualHour);
   if (persist) localStorage.setItem(WORLD_LIGHTING_STORAGE_KEY, next);
   renderControl();
   return currentMode;

@@ -1,4 +1,4 @@
-import { CITY_EVENTS, EVENT_FORECAST_HOURS, STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import { gameState } from '../core/GameState.js';
 
 let root = null;
@@ -9,7 +9,7 @@ export function initForecastView(element) {
 
 function nextEvent() {
   const completed = new Set((gameState.events.completed || []).map((item) => typeof item === 'string' ? item : item.id));
-  return gameState.events.schedule.find((item) => !completed.has(item.id) && item.endAt > gameState.elapsedGameHours) || null;
+  return gameState.events.schedule.find((item) => !completed.has(item.id) && item.endAt > gameState.elapsedGameDays) || null;
 }
 
 export function renderForecast() {
@@ -23,11 +23,11 @@ export function renderForecast() {
   const label = root.querySelector('b');
   if (gameState.stressTest?.status === 'running') {
     const phase = STRESS_PHASES[gameState.stressTest.phaseIndex];
-    const remaining = Math.max(0, phase.durationHours - gameState.stressTest.phaseHour);
+    const remaining = Math.max(0, phase.durationDays - gameState.stressTest.phaseDay);
     root.classList.add('active');
     root.classList.remove('forecasting');
     small.textContent = `최종 테스트 · ${gameState.stressTest.phaseIndex + 1}/${STRESS_PHASES.length}`;
-    label.textContent = `${phase.label} · ${remaining}시간 남음`;
+    label.textContent = `${phase.label} · ${remaining}일 남음`;
     root.title = '운영 모드·우선순위·배터리 정책을 조정할 수 있습니다.';
     icon?.setAttribute?.('data-lucide', phase.icon);
     return;
@@ -40,19 +40,19 @@ export function renderForecast() {
   }
   if (active) {
     const definition = CITY_EVENTS[active.type];
-    const remaining = Math.max(0, active.endAt - gameState.elapsedGameHours);
+    const remaining = Math.max(0, active.endAt - gameState.elapsedGameDays);
     small.textContent = '현재 이벤트';
-    label.textContent = `${definition.label} · ${remaining}시간 남음`;
+    label.textContent = `${definition.label} · ${remaining}일 남음`;
     root.title = definition.description;
     icon?.setAttribute?.('data-lucide', definition.icon);
     return;
   }
   if (next) {
     const definition = CITY_EVENTS[next.type];
-    const until = Math.max(0, next.startAt - gameState.elapsedGameHours);
-    small.textContent = until <= EVENT_FORECAST_HOURS ? `${EVENT_FORECAST_HOURS}시간 기후 예보` : '다음 이벤트';
-    label.textContent = `${until}시간 후 ${definition.label}`;
-    root.title = `${definition.description} · ${definition.durationHours}시간 지속`;
+    const until = Math.max(0, next.startAt - gameState.elapsedGameDays);
+    small.textContent = until <= EVENT_FORECAST_DAYS ? `${EVENT_FORECAST_DAYS}일 기후 예보` : '다음 이벤트';
+    label.textContent = `${until}일 후 ${definition.label}`;
+    root.title = `${definition.description} · ${definition.durationDays}일 지속`;
     icon?.setAttribute?.('data-lucide', definition.icon);
     return;
   }

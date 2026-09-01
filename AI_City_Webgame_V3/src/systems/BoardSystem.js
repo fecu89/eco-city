@@ -131,7 +131,7 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
     facilityOperations: previewOperations,
     modifierContext,
   });
-  let dev = 0, demand = 0, supply = 0, carbon = environment.hourlyCarbon, water = environment.hourlyWater, renewableSupply = 0, dataCount = 0, thermalCount = 0;
+  let dev = 0, demand = 0, supply = 0, carbon = environment.dailyCarbon, water = environment.dailyWater, renewableSupply = 0, dataCount = 0, thermalCount = 0;
   let synergyScore = 0, synergyLinks = 0, conflictPairs = 0, heatCluster = 0;
   const linkedRenewables = new Set();
   const consumerHubBatteries = new Set();
@@ -310,7 +310,7 @@ export function validateUpgrade(state, index) {
   if (cell.level >= facility.maxLevel) return { ok: false, reason: 'max_level', facility };
   const nextLevel = cell.level + 1;
   if (nextLevel > state.upgradePermitLevel) return { ok: false, reason: 'city_permit_required', requiredLevel: nextLevel, facility };
-  if (['solar', 'wind', 'battery'].includes(cell.type)
+  if (['solar', 'wind', 'battery', 'green'].includes(cell.type)
     && nextLevel > (state.research?.techLevels?.[cell.type] || 0)) {
     return { ok: false, reason: 'technology_required', requiredLevel: nextLevel, facility };
   }
@@ -337,9 +337,9 @@ export function upgradeRequirementMessage(state, validation) {
     const cell = state.grid.find((item) => item?.type === validation.facility && item) || null;
     const type = cell?.type || Object.entries(FACILITIES).find(([, facility]) => facility === validation.facility)?.[0];
     const researchId = validation.requiredLevel >= 3 ? {
-      solar: 'solar3', wind: 'wind3', battery: 'battery3',
+      solar: 'solar3', wind: 'wind3', battery: 'battery3', green: 'green3',
     }[type] : {
-      solar: 'solar2', wind: 'wind2', battery: 'battery2',
+      solar: 'solar2', wind: 'wind2', battery: 'battery2', green: 'green2',
     }[type];
     const name = RESEARCH[researchId]?.name || '해당 기술';
     return `${name} 연구를 완료해야 ${validation.facility.name} Lv.${validation.requiredLevel} 강화가 가능합니다.`;
@@ -405,7 +405,7 @@ export function upgradeCell(index) {
     type: f.name,
     level: cell.level,
     targetLevel: cell.project.toLevel,
-    durationHours: cell.project.durationHours,
+    durationDays: cell.project.durationDays,
     cost,
     metrics,
   };

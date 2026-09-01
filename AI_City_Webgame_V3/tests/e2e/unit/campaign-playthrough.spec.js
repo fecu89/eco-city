@@ -3,7 +3,7 @@ import { gameState } from '../../../src/core/GameState.js';
 import { commitConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
-import { createHourSettler } from '../../../src/systems/SimulationSystem.js';
+import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 import {
   applySimulationQuestProgress,
   claimCurrentQuest,
@@ -12,7 +12,7 @@ import {
 import { demolishCell, expandBoard, upgradeCell } from '../../../src/systems/BoardSystem.js';
 import {
   accelerateResearchFromQuiz,
-  advanceResearchOneHour,
+  advanceResearchOneDay,
   researchDemandByIndex,
   startResearch,
 } from '../../../src/systems/ResearchSystem.js';
@@ -28,11 +28,11 @@ import { CAMPAIGN_PACING } from '../../../src/core/Constants.js';
 import { computeReport } from '../../../src/systems/ReportSystem.js';
 import { setFacilityPriority } from '../../../src/systems/CityModifierSystem.js';
 
-const settle = createHourSettler({
+const settle = createDaySettler({
   calculatePowerNetwork,
   settleEconomy,
   getResearchDemand: researchDemandByIndex,
-  advanceResearch: advanceResearchOneHour,
+  advanceResearch: advanceResearchOneDay,
   evaluateQuest: applySimulationQuestProgress,
 });
 
@@ -41,21 +41,21 @@ function build(...items) {
   const result = commitConstructionPlan(gameState);
   expect(result.ok, result.errors?.map(({ message }) => message).join(' | ')).toBe(true);
   expect(gameState.credits, 'construction must use earned credits').toBeGreaterThanOrEqual(0);
-  const constructionHours = Math.max(...result.projects.map(({ durationHours }) => durationHours));
-  settleHours(constructionHours);
+  const constructionHours = Math.max(...result.projects.map(({ durationDays }) => durationDays));
+  settleDays(constructionHours);
   result.projects.forEach(({ index }) => expect(gameState.grid[index]?.project, `build ${index} must complete`).toBeNull());
   return result;
 }
 
-function settleHours(hours) {
+function settleDays(hours) {
   for (let hour = 0; hour < hours; hour += 1) {
     settle(gameState);
-    expect(gameState.gameOver, `game over at hour ${gameState.elapsedGameHours}: ${gameState.gameOverReason}`).toBe(false);
+    expect(gameState.gameOver, `game over at hour ${gameState.elapsedGameDays}: ${gameState.gameOverReason}`).toBe(false);
   }
 }
 
 function settleUntilCredits(target, maxHours = 96) {
-  for (let hour = 0; hour < maxHours && gameState.credits < target; hour += 1) settleHours(1);
+  for (let hour = 0; hour < maxHours && gameState.credits < target; hour += 1) settleDays(1);
   expect(gameState.credits, `credits after ${maxHours}h`).toBeGreaterThanOrEqual(target);
 }
 
@@ -65,13 +65,13 @@ function upgrade(...indices) {
     expect(result).toMatchObject({ ok: true, level: 1, targetLevel: 2 });
     return result;
   });
-  settleHours(Math.max(...results.map(({ durationHours }) => durationHours)));
+  settleDays(Math.max(...results.map(({ durationDays }) => durationDays)));
   indices.forEach((index) => expect(gameState.grid[index]).toMatchObject({ level: 2, project: null }));
   return results;
 }
 
 function settleUntilTutorialReady(maxHours = 48) {
-  for (let hour = 0; hour < maxHours && gameState.questStatus !== 'ready_to_claim'; hour += 1) settleHours(1);
+  for (let hour = 0; hour < maxHours && gameState.questStatus !== 'ready_to_claim'; hour += 1) settleDays(1);
   expect(
     gameState.questStatus,
     `quest ${gameState.questIndex} progress=${JSON.stringify(gameState.questProgress)} routes=${JSON.stringify(gameState.lastTickSummary?.routes)}`,
@@ -118,7 +118,7 @@ function completeTutorial(side) {
   claimTutorial();
 
   // 연구시설을 안정적으로 켜기 위한 임시 화력 1기를 증설하고, 다음 단계에서 50%만 회수한다.
-  settleHours(1);
+  settleDays(1);
   build([6, 'data'], [0, 'thermal']);
   settleUntilTutorialReady();
   claimTutorial();
@@ -138,15 +138,15 @@ function completeTutorial(side) {
 }
 
 function settleUntilObjectiveReady(maxHours = 72) {
-  for (let hour = 0; hour < maxHours && !currentObjectiveEvaluation(gameState)?.ready; hour += 1) settleHours(1);
+  for (let hour = 0; hour < maxHours && !currentObjectiveEvaluation(gameState)?.ready; hour += 1) settleDays(1);
   const evaluation = currentObjectiveEvaluation(gameState);
   expect(
     evaluation?.ready,
     `${evaluation?.setId} ${JSON.stringify(evaluation?.cards)} last=${JSON.stringify({
       net: gameState.lastTickSummary?.netCredits,
-      carbon: gameState.lastTickSummary?.hourlyCarbon,
+      carbon: gameState.lastTickSummary?.dailyCarbon,
       lowCarbon: gameState.lastTickSummary?.lowCarbonPercent,
-      water: gameState.lastTickSummary?.hourlyWater,
+      water: gameState.lastTickSummary?.dailyWater,
       battery: gameState.lastTickSummary?.batteryStored,
       essential: gameState.lastTickSummary?.essentialSupplyPercent,
     })}`,
@@ -164,7 +164,7 @@ function claimObjectives(expectedSetId) {
 function waitForTwoEventsAndResilience(maxHours = 72) {
   for (let hour = 0; hour < maxHours; hour += 1) {
     if (gameState.events.completed.length >= 2 && currentObjectiveEvaluation(gameState)?.ready) return;
-    settleHours(1);
+    settleDays(1);
   }
   expect(gameState.events.completed.length, 'two climate events must be experienced before the final test').toBeGreaterThanOrEqual(2);
   expect(currentObjectiveEvaluation(gameState)?.ready).toBe(true);
@@ -172,7 +172,7 @@ function waitForTwoEventsAndResilience(maxHours = 72) {
 
 function finishStressTest() {
   expect(startStressTest(gameState)).toMatchObject({ ok: true, attempts: 1 });
-  for (let hour = 0; hour < 30 && gameState.stressTest.status === 'running'; hour += 1) settleHours(1);
+  for (let hour = 0; hour < 30 && gameState.stressTest.status === 'running'; hour += 1) settleDays(1);
   expect(gameState.stressTest.status, JSON.stringify(gameState.stressTest.result)).toBe('passed');
   expect(gameState.stressTest.result).toMatchObject({ passed: true });
   expect(gameState.campaignComplete).toBe(true);
@@ -204,7 +204,7 @@ test('stable reference campaign earns its way through east expansion, two events
 
   waitForTwoEventsAndResilience();
   expect(gameState.events.completed.length).toBeGreaterThanOrEqual(2);
-  expect(gameState.lastTickSummary.hourlyWater).toBeLessThanOrEqual(10);
+  expect(gameState.lastTickSummary.dailyWater).toBeLessThanOrEqual(10);
   expect(currentObjectiveEvaluation(gameState).cards.filter(({ completed }) => completed).map(({ id }) => id))
     .toEqual(expect.arrayContaining([
       'resilience-profit',

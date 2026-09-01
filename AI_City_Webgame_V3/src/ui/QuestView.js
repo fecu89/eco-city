@@ -16,15 +16,20 @@ import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { claimObjectiveSet, isObjectiveCampaignActive } from '../systems/ObjectiveSystem.js';
-import { clearObjectivePanelMode, openObjectiveMap, renderObjectivePanel } from './ObjectiveView.js';
+import { clearObjectivePanelMode } from './ObjectiveView.js';
 import { STRESS_PHASES } from '../core/EventDefinitions.js';
+import {
+  acknowledgeClimateBriefing,
+  currentClimateQuestEvaluation,
+  isClimateQuestActive,
+  retryClimateQuest,
+} from '../systems/ClimateQuestSystem.js';
 
 let els;
 let onChanged = () => {};
 let detailsExpanded = false;
 let researchQuizReturnIndex = null;
-const QUIZ_KINDS = { 15: 'climate-council' };
+const QUIZ_KINDS = {};
 const nodes = (value) => (Array.isArray(value) ? value : [value]).filter(Boolean);
 const eachNode = (value, callback) => nodes(value).forEach(callback);
 
@@ -32,14 +37,6 @@ export function initQuestView(elements, changed) {
   els = elements;
   onChanged = changed || (() => {});
   eachNode(els.claim, (claim) => claim.addEventListener('click', () => {
-    if (isObjectiveCampaignActive(gameState)) {
-      const result = claimObjectiveSet(gameState);
-      if (!result.ok) return;
-      if (result.expansion?.ok) eventBus.emit(Events.BOARD_EXPANDED, result.expansion);
-      detailsExpanded = false;
-      onChanged({ phase: 'objective-claimed', result });
-      return;
-    }
     if (['ready', 'failed'].includes(gameState.stressTest?.status)) {
       eventBus.emit(Events.STRESS_TEST_START_REQUESTED, {});
       return;
@@ -47,6 +44,23 @@ export function initQuestView(elements, changed) {
     if (gameState.stressTest?.status === 'passed') {
       eventBus.emit(Events.REPORT_OPEN_REQUESTED, {});
       return;
+    }
+    if (isClimateQuestActive(gameState)) {
+      const campaign = gameState.climateCampaign;
+      if (campaign.status === 'briefing') {
+        const result = acknowledgeClimateBriefing(gameState);
+        if (!result.ok) {
+          eventBus.emit(Events.TOAST_SHOW, { title: '기후 대비를 시작할 수 없습니다.', text: result.reason, priority: true });
+          return;
+        }
+        onChanged({ phase: 'climate-forecast', result });
+        return;
+      }
+      if (campaign.status === 'result' && campaign.lastResult?.passed === false) {
+        const result = retryClimateQuest(gameState);
+        if (result.ok) onChanged({ phase: 'climate-retry', result });
+        return;
+      }
     }
     const quizKind = QUIZ_KINDS[gameState.questIndex];
     if (quizKind && gameState.questStatus !== 'ready_to_claim') {
@@ -94,36 +108,45 @@ function rewardText(quest) {
       .join('·');
     parts.push(`${facilityNames} 해금`);
   }
-  if (quest.index === 7) parts.push('Lv.2 강화 허가');
-  if (quest.index === 10) parts.push('전력 우선순위 운영');
-  if (quest.index === 13) parts.push('Lv.3');
+  if (quest.reward.unlockResearch?.length) {
+    parts.push(`${quest.reward.unlockResearch.map((id) => RESEARCH[id]?.name || id).join('·')} 해금`);
+  }
+  if (quest.reward.upgradePermitLevel) parts.push(`Lv.${quest.reward.upgradePermitLevel} 강화 허가`);
   return `보상 ${parts.join(' · ') || '최종 성적표'}`;
 }
 
 function progressForCurrent() {
   if (gameState.questStatus === 'ready_to_claim' || gameState.questStatus === 'claimed') return 100;
+  if (isClimateQuestActive(gameState)) {
+    const evaluation = currentClimateQuestEvaluation(gameState);
+    return Math.min(100, (evaluation.consecutiveDays || 0) / evaluation.quest.targetDays * 100);
+  }
   if (gameState.questIndex === 1) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'residential').length * 50);
   if (gameState.questIndex === 3) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'green').length * 100);
   if (gameState.questIndex === 9) {
-    const hours = Math.min(1, (gameState.questProgress.consecutiveHours || 0) / 3);
+    const days = Math.min(1, (gameState.questProgress.consecutiveDays || 0) / 3);
     const energy = Math.min(1, (gameState.questProgress.hubEnergy || 0) / 8);
-    return Math.min(hours, energy) * 100;
+    return Math.min(days, energy) * 100;
   }
-  const hours = gameState.questProgress.consecutiveHours || 0;
+  const days = gameState.questProgress.consecutiveDays || 0;
   const required = [2, 4, 5, 6, 7].includes(gameState.questIndex)
-    ? QUEST_REQUIREMENTS.OPERATING_HOURS
+    ? QUEST_REQUIREMENTS.OPERATING_DAYS
     : gameState.questIndex === 14 ? 4 : 3;
-  return Math.min(100, hours / required * 100);
+  return Math.min(100, days / required * 100);
 }
 
 export function renderQuest() {
   if (!els) return;
-  if (renderObjectivePanel(gameState, els)) return;
   clearObjectivePanelMode(els);
   if (renderStressTestPanel()) return;
   const evaluation = evaluateCurrentQuest(gameState);
   const quest = QUESTS[gameState.questIndex - 1];
-  eachNode(els.level, (node) => { node.textContent = `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`; });
+  const climatePosition = gameState.questIndex - 6;
+  eachNode(els.level, (node) => {
+    node.textContent = isClimateQuestActive(gameState)
+      ? `기후 대응 ${climatePosition} / 8`
+      : `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`;
+  });
   eachNode(els.title, (node) => { node.textContent = quest.title; });
   eachNode(els.goal, (node) => { node.textContent = quest.goal; });
   eachNode(els.reward, (node) => { node.textContent = rewardText(quest); });
@@ -132,8 +155,21 @@ export function renderQuest() {
   const quizPassed = Boolean(gameState.questProgress.quizPassed);
   const canStartQuiz = isQuizQuest && !quizPassed;
   eachNode(els.claim, (node) => {
-    node.disabled = !evaluation.ready && !canStartQuiz;
-    node.textContent = evaluation.ready ? '보상 받기' : canStartQuiz ? '퀴즈 시작' : quizPassed ? '도시 조건 진행 중' : '진행 중';
+    const campaign = isClimateQuestActive(gameState) ? gameState.climateCampaign : null;
+    const canBrief = campaign?.status === 'briefing';
+    const canRetry = campaign?.status === 'result' && campaign.lastResult?.passed === false;
+    node.disabled = !evaluation.ready && !canStartQuiz && !canBrief && !canRetry;
+    node.textContent = evaluation.ready
+      ? '보상 받기'
+      : canBrief
+        ? '24일 대비 시작'
+        : canRetry
+          ? '24일 준비부터 재도전'
+          : campaign?.status === 'preparation'
+            ? `${evaluation.startsInDays}일 후 시작`
+            : campaign?.status === 'active'
+              ? '기후 대응 중'
+              : canStartQuiz ? '퀴즈 시작' : quizPassed ? '도시 조건 진행 중' : '진행 중';
   });
   eachNode(els.root, (node) => node.classList.toggle('quest-ready', evaluation.ready));
   eachNode(els.contextAction, (node) => {
@@ -156,24 +192,28 @@ export function renderQuest() {
 function renderStressTestPanel() {
   const stress = gameState.stressTest;
   if (!stress || ['locked', 'legacy_complete'].includes(stress.status)) return false;
-  const totalHours = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationHours, 0);
-  const completedHours = STRESS_PHASES
+  const totalDays = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
+  const completedDays = STRESS_PHASES
     .slice(0, stress.phaseIndex)
-    .reduce((sum, phase) => sum + phase.durationHours, 0) + (stress.phaseHour || 0);
+    .reduce((sum, phase) => sum + phase.durationDays, 0) + (stress.phaseDay || 0);
   const phase = STRESS_PHASES[Math.min(stress.phaseIndex, STRESS_PHASES.length - 1)];
   const statusText = stress.status === 'running'
-    ? `${phase.label} ${stress.phaseHour}/${phase.durationHours}시간`
+    ? `${phase.label} ${stress.phaseDay}/${phase.durationDays}일`
     : stress.status === 'failed'
       ? '도시 보완 후 재도전 가능'
       : stress.status === 'passed'
         ? '생존 성공 · 운영 보고서 준비 완료'
-        : '5단계 복합 위기 시험 준비 완료';
-  eachNode(els.level, (node) => { node.textContent = 'CHAPTER 4 · FINAL'; });
-  eachNode(els.title, (node) => { node.textContent = '도시 스트레스 테스트'; });
+        : '41일 · 8구간 복합기후 시험 준비 완료';
+  eachNode(els.level, (node) => {
+    node.textContent = stress.status === 'running'
+      ? `최종 기후시험 · 구간 ${stress.phaseIndex + 1} / ${STRESS_PHASES.length}`
+      : `최종 기후시험 · ${stress.status === 'failed' ? '재도전' : stress.status === 'passed' ? '통과' : '준비'}`;
+  });
+  eachNode(els.title, (node) => { node.textContent = '대한민국 복합기후 시험'; });
   eachNode(els.goal, (node) => { node.textContent = statusText; });
   eachNode(els.reward, (node) => { node.textContent = '통과 후 도시 운영 프로필과 최종 보고서'; });
   eachNode(els.bar, (node) => {
-    node.style.width = `${stress.status === 'passed' ? 100 : Math.min(100, completedHours / totalHours * 100)}%`;
+    node.style.width = `${stress.status === 'passed' ? 100 : Math.min(100, completedDays / totalDays * 100)}%`;
   });
   eachNode(els.claim, (node) => {
     node.disabled = stress.status === 'running';
@@ -191,7 +231,7 @@ function renderStressTestPanel() {
   });
   eachNode(els.contextAction, (node) => node.classList.add('hidden'));
   if (els.details) {
-    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationHours}h</small></span>`).join('')}</div>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
+    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationDays}일</small></span>`).join('')}</div><p>평균 공급 82% · 최저 공급 50% · CO₂ 평균 8/일 · 안전일 35일 · 물 초과 6일 이하 · 조력 8E · 복구 3일 이내</p>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
     els.details.classList.remove('hidden');
   }
   els.expand?.classList.add('hidden');
@@ -202,10 +242,10 @@ function renderQuestQuizModal() {
   const question = currentQuestQuizQuestion(gameState);
   if (!question) return;
   const research = gameState.quizResearchId ? RESEARCH[gameState.quizResearchId] : null;
-  const accelerationHours = research ? research.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT : 0;
+  const accelerationDays = research ? research.durationDays / RESEARCH_RULES.QUIZ_QUESTION_COUNT : 0;
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">${research ? 'RESEARCH ACCELERATION' : 'CLIMATE QUIZ'}</span><h2>${research ? `${escapeHtml(research.name)} · ` : ''}${escapeHtml(question.title)}</h2></div></div>
-    <div class="quiz-count">${gameState.quizIndex + 1} / ${gameState.quizPool.length} · ${research ? `정답마다 ${accelerationHours}시간 단축` : `통과 ${gameState.quizPassThreshold}문항`}</div>
+    <div class="quiz-count">${gameState.quizIndex + 1} / ${gameState.quizPool.length} · ${research ? `정답마다 ${accelerationDays}일 단축` : `통과 ${gameState.quizPassThreshold}문항`}</div>
     <div class="quiz-question">
       <h3>${escapeHtml(question.prompt)}</h3>
       <div class="quiz-options" id="questQuizOptions">${question.options.map((option, index) => `<button class="quiz-option" data-index="${index}">${String.fromCharCode(65 + index)}. ${escapeHtml(option.text)}</button>`).join('')}</div>
@@ -221,7 +261,7 @@ function renderQuestQuizModal() {
       $$modal('#questQuizOptions .quiz-option')[result.correctIndex]?.classList.add('correct');
       const accelerationText = result.acceleration
         ? result.acceleration.appliedJobs.length
-          ? `${RESEARCH[result.researchId]?.name || result.researchId} ${result.acceleration.hours}시간 단축`
+          ? `${RESEARCH[result.researchId]?.name || result.researchId} ${result.acceleration.days}일 단축`
           : result.acceleration.reason === 'question_already_credited'
             ? '이 문항의 가속 보상은 이전 시도에서 이미 반영되었습니다.'
             : '이 연구는 이미 완료되었습니다.'
@@ -241,10 +281,10 @@ function renderQuestQuizResultModal(result) {
   if (result.researchId) {
     const definition = RESEARCH[result.researchId];
     const creditedCount = gameState.research.quizCreditQuestionIds?.[result.researchId]?.length || 0;
-    const reducedHours = (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT) * creditedCount;
+    const reducedDays = (definition.durationDays / RESEARCH_RULES.QUIZ_QUESTION_COUNT) * creditedCount;
     setModal(`
       <div class="modal-head"><div><span class="eyebrow">RESEARCH QUIZ COMPLETE</span><h2>${escapeHtml(definition.name)} 가속 결과</h2></div></div>
-      <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>단축</span><strong>${reducedHours}시간</strong></div></div>
+      <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>단축</span><strong>${reducedDays}일</strong></div></div>
       <div class="callout"><strong>선택한 연구에만 반영되었습니다.</strong><p>다른 데이터센터의 연구 진행도는 바뀌지 않습니다.</p></div>
       <div class="modal-actions"><button class="btn primary" id="questQuizFinish">연구 화면으로</button></div>
     `, { id: 'research-quiz-result', pausesSimulation: true });
@@ -290,10 +330,6 @@ function renderQuestQuizResultModal(result) {
 }
 
 export function openQuestMap() {
-  if (isObjectiveCampaignActive(gameState) || !['locked', 'legacy_complete'].includes(gameState.stressTest?.status)) {
-    openObjectiveMap(gameState);
-    return;
-  }
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUEST MAP</span><h2>기후 생존 퀘스트</h2></div><button class="icon-btn" id="questMapClose">×</button></div>
     <div class="quest-map-list">${QUESTS.map((quest) => `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`).join('')}</div>

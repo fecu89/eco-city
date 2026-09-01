@@ -2,7 +2,7 @@ import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constan
 import { roundCredits } from './Money.js';
 import { normalizeConstructionProject } from '../systems/ConstructionProjectSystem.js';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 const initialCellIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
 
@@ -31,6 +31,18 @@ function eventDefaults() {
     forecastAcknowledgedIds: [],
     currentMetrics: null,
     lastResult: null,
+  };
+}
+
+function climateCampaignDefaults() {
+  return {
+    status: 'locked',
+    eventType: null,
+    attempt: 0,
+    scheduledEventId: null,
+    progress: {},
+    lastResult: null,
+    completedEventTypes: [],
   };
 }
 
@@ -74,19 +86,20 @@ export class GameState {
     this.unlockedFacilities = new Set(['residential']);
     this.upgradePermitLevel = 1;
     this.campaignComplete = false;
-    this.elapsedGameHours = 0;
+    this.elapsedGameDays = 0;
     this.timeScale = TIME.DEFAULT_SCALE;
     this.lastSettlementDelta = 0;
     this.tickIndex = 0;
     this.lastTickSummary = null;
     this.climateAlert = 'normal';
-    this.consecutiveEssentialOutageHours = 0;
+    this.consecutiveEssentialOutageDays = 0;
     this.emergencySupportUsedQuestIds = new Set();
     this.progression = progressionDefaults();
     this.expansion = expansionDefaults();
     this.events = eventDefaults();
-    this.stressTest = { status: 'locked', phaseIndex: 0, phaseHour: 0, result: null, metrics: null, attempts: 0 };
-    this.operationalRisk = { negativeCreditHours: 0, essentialBlackoutHours: 0, warningIds: [] };
+    this.climateCampaign = climateCampaignDefaults();
+    this.stressTest = { status: 'locked', phaseIndex: 0, phaseDay: 0, result: null, metrics: null, attempts: 0 };
+    this.operationalRisk = { negativeCreditDays: 0, essentialBlackoutDays: 0, warningIds: [] };
     this.emergencySupport = { used: false, economyScorePenalty: 0 };
     this.decisionCounts = {
       modeChanges: 0,
@@ -103,22 +116,23 @@ export class GameState {
     this.research = {
       jobs: {},
       completedIds: new Set(),
-      techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0 },
-      quizAccelerationBankHours: 0,
+      techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0, green: 1 },
+      quizAccelerationBankDays: 0,
       quizCreditQuestionIds: {},
     };
-    this.carbonCrisisHours = 0;
+    this.carbonCrisisDays = 0;
+    this.workforceRebalanceGraceDays = 0;
     this.carbonWarningMilestones = new Set();
     this.gameOver = false;
     this.gameOverReason = null;
     this.simulationTotals = {
-      hours: 0,
+      days: 0,
       netCredits: 0,
       transmissionEfficiency: 0,
       lowCarbonPercent: 0,
       employmentRate: 0,
       industryFill: 0,
-      essentialOutageHours: 0,
+      essentialOutageDays: 0,
       overcrowding: 0,
       health: 0,
       deliveredEnergy: 0,
@@ -167,17 +181,18 @@ export class GameState {
       unlockedFacilities: [...this.unlockedFacilities],
       upgradePermitLevel: this.upgradePermitLevel,
       campaignComplete: this.campaignComplete,
-      elapsedGameHours: this.elapsedGameHours,
+      elapsedGameDays: this.elapsedGameDays,
       timeScale: this.timeScale,
       lastSettlementDelta: this.lastSettlementDelta,
       tickIndex: this.tickIndex,
       lastTickSummary: this.lastTickSummary,
       climateAlert: this.climateAlert,
-      consecutiveEssentialOutageHours: this.consecutiveEssentialOutageHours,
+      consecutiveEssentialOutageDays: this.consecutiveEssentialOutageDays,
       emergencySupportUsedQuestIds: [...this.emergencySupportUsedQuestIds],
       progression: structuredClone(this.progression),
       expansion: structuredClone(this.expansion),
       events: structuredClone(this.events),
+      climateCampaign: structuredClone(this.climateCampaign),
       stressTest: structuredClone(this.stressTest),
       operationalRisk: structuredClone(this.operationalRisk),
       emergencySupport: structuredClone(this.emergencySupport),
@@ -190,10 +205,11 @@ export class GameState {
         jobs: Object.fromEntries(Object.entries(this.research.jobs).map(([id, job]) => [id, { ...job }])),
         completedIds: [...this.research.completedIds],
         techLevels: { ...this.research.techLevels },
-        quizAccelerationBankHours: this.research.quizAccelerationBankHours,
+        quizAccelerationBankDays: this.research.quizAccelerationBankDays,
         quizCreditQuestionIds: structuredClone(this.research.quizCreditQuestionIds || {}),
       },
-      carbonCrisisHours: this.carbonCrisisHours,
+      carbonCrisisDays: this.carbonCrisisDays,
+      workforceRebalanceGraceDays: this.workforceRebalanceGraceDays,
       carbonWarningMilestones: [...this.carbonWarningMilestones],
       gameOver: this.gameOver,
       gameOverReason: this.gameOverReason,
@@ -232,7 +248,7 @@ export class GameState {
       this.unlockedFacilities = new Set(data.unlockedFacilities || ['residential']);
       this.upgradePermitLevel = data.upgradePermitLevel ?? 1;
       this.campaignComplete = !!data.campaignComplete;
-      this.elapsedGameHours = data.elapsedGameHours ?? 0;
+      this.elapsedGameDays = data.elapsedGameDays ?? 0;
       this.timeScale = TIME.ALLOWED_SCALES.includes(Number(data.timeScale))
         ? Number(data.timeScale)
         : TIME.DEFAULT_SCALE;
@@ -240,7 +256,7 @@ export class GameState {
       this.tickIndex = data.tickIndex ?? 0;
       this.lastTickSummary = data.lastTickSummary ?? null;
       this.climateAlert = data.climateAlert ?? 'normal';
-      this.consecutiveEssentialOutageHours = data.consecutiveEssentialOutageHours ?? 0;
+      this.consecutiveEssentialOutageDays = data.consecutiveEssentialOutageDays ?? 0;
       this.emergencySupportUsedQuestIds = new Set(data.emergencySupportUsedQuestIds || []);
       this.progression = {
         ...progressionDefaults(),
@@ -261,12 +277,18 @@ export class GameState {
         completed: [...(data.events?.completed || [])],
         forecastAcknowledgedIds: [...(data.events?.forecastAcknowledgedIds || [])],
       };
+      this.climateCampaign = {
+        ...climateCampaignDefaults(),
+        ...(data.climateCampaign || {}),
+        progress: { ...(data.climateCampaign?.progress || {}) },
+        completedEventTypes: [...(data.climateCampaign?.completedEventTypes || [])],
+      };
       this.stressTest = {
-        status: 'locked', phaseIndex: 0, phaseHour: 0, result: null, metrics: null, attempts: 0,
+        status: 'locked', phaseIndex: 0, phaseDay: 0, result: null, metrics: null, attempts: 0,
         ...(data.stressTest || {}),
       };
       this.operationalRisk = {
-        negativeCreditHours: 0, essentialBlackoutHours: 0, warningIds: [],
+        negativeCreditDays: 0, essentialBlackoutDays: 0, warningIds: [],
         ...(data.operationalRisk || {}),
         warningIds: [...(data.operationalRisk?.warningIds || [])],
       };
@@ -295,11 +317,13 @@ export class GameState {
           wind: data.research?.techLevels?.wind ?? 1,
           battery: data.research?.techLevels?.battery ?? 1,
           tidal: data.research?.techLevels?.tidal ?? 0,
+          green: data.research?.techLevels?.green ?? 1,
         },
-        quizAccelerationBankHours: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+        quizAccelerationBankDays: Math.max(0, Number(data.research?.quizAccelerationBankDays) || 0),
         quizCreditQuestionIds: structuredClone(data.research?.quizCreditQuestionIds || {}),
       };
-      this.carbonCrisisHours = Math.max(0, Number(data.carbonCrisisHours) || 0);
+      this.carbonCrisisDays = Math.max(0, Number(data.carbonCrisisDays) || 0);
+      this.workforceRebalanceGraceDays = Math.max(0, Number(data.workforceRebalanceGraceDays) || 0);
       this.carbonWarningMilestones = new Set(data.carbonWarningMilestones || []);
       this.gameOver = !!data.gameOver;
       this.gameOverReason = data.gameOverReason ?? null;

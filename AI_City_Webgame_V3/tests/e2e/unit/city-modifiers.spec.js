@@ -13,7 +13,7 @@ import {
 } from '../../../src/systems/CityModifierSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
-import { advanceResearchOneHour } from '../../../src/systems/ResearchSystem.js';
+import { advanceResearchOneDay } from '../../../src/systems/ResearchSystem.js';
 
 const factory = (level = 1, operationMode = 'normal') => ({
   type: 'factory', level, priority: 'normal', operationMode,
@@ -86,15 +86,15 @@ test('priority changes are validated and counted only when the player selects a 
 test('data eco mode stops research while focused research mode advances forty percent faster', () => {
   const eco = new GameState();
   eco.grid[3] = { type: 'data', level: 2, priority: 'normal', operationMode: 'eco' };
-  eco.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 3, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
+  eco.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 3, elapsedEffectiveDays: 0, status: 'running', paidCost: 10 };
   const ecoContext = buildCityModifierContext(eco);
-  const stopped = advanceResearchOneHour(eco, { 3: { ratio: 1 } }, ecoContext);
-  expect(stopped.jobs.solar2).toMatchObject({ status: 'mode_paused', advancedHours: 0 });
+  const stopped = advanceResearchOneDay(eco, { 3: { ratio: 1 } }, ecoContext);
+  expect(stopped.jobs.solar2).toMatchObject({ status: 'mode_paused', advancedDays: 0 });
 
   const focused = new GameState();
   focused.grid[3] = { type: 'data', level: 2, priority: 'normal', operationMode: 'research' };
-  focused.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 3, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
+  focused.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 3, elapsedEffectiveDays: 0, status: 'running', paidCost: 10 };
   const focusedContext = buildCityModifierContext(focused);
-  const advanced = advanceResearchOneHour(focused, { 3: { ratio: 1 } }, focusedContext);
-  expect(advanced.jobs.solar2.advancedHours).toBeCloseTo(1.25 * 1.4);
+  const advanced = advanceResearchOneDay(focused, { 3: { ratio: 1 } }, focusedContext);
+  expect(advanced.jobs.solar2.advancedDays).toBeCloseTo(1.25 * 1.4);
 });

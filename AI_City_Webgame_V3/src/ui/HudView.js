@@ -1,6 +1,8 @@
 import { gameState } from '../core/GameState.js';
 import { refreshIcons } from './Modal.js';
 import { exactNumberLabel, formatCredits } from './format.js';
+import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
+import { QUESTS } from '../core/QuestDefinitions.js';
 
 let els = null;
 let onStageUiChanged = () => {};
@@ -17,22 +19,79 @@ function guidanceForQuest(questIndex) {
   return QUEST_GUIDANCE.find(({ through }) => questIndex <= through) || QUEST_GUIDANCE.at(-1);
 }
 
+function campaignHeader() {
+  if (gameState.campaignComplete || gameState.stressTest?.status === 'passed') {
+    return {
+      phase: '도시 복구 완료',
+      mission: '기후 생존 도시 완성',
+      guidance: { icon: 'badge-check', text: '최종 운영 보고서에서 도시의 성과와 운영 프로필을 확인하세요.' },
+    };
+  }
+
+  const stress = gameState.stressTest;
+  if (stress && !['locked', 'legacy_complete'].includes(stress.status)) {
+    const phase = stress.status === 'failed'
+      ? '최종 기후시험 · 재도전'
+      : stress.status === 'running'
+        ? `최종 기후시험 · 구간 ${Math.min(stress.phaseIndex + 1, STRESS_PHASES.length)} / ${STRESS_PHASES.length}`
+        : '최종 기후시험 · 준비';
+    return {
+      phase,
+      mission: '대한민국 복합기후 시험',
+      guidance: {
+        icon: stress.status === 'failed' ? 'wrench' : 'shield-check',
+        text: stress.status === 'failed'
+          ? stress.result?.diagnosis?.label || '진단 결과를 확인하고 도시를 보완한 뒤 재도전하세요.'
+          : '41일 복합 위기를 버티면 다음 단계는 최종 운영 보고서입니다.',
+      },
+    };
+  }
+
+  if (gameState.questIndex >= 7 && gameState.questIndex <= 14) {
+    const quest = QUESTS[gameState.questIndex - 1];
+    const event = CITY_EVENTS[gameState.climateCampaign?.eventType || quest?.eventType];
+    const campaign = gameState.climateCampaign || {};
+    const scheduled = gameState.events.schedule.find(({ id }) => id === campaign.scheduledEventId);
+    const remaining = scheduled ? Math.max(0, scheduled.startAt - gameState.elapsedGameDays) : 24;
+    const text = campaign.status === 'briefing'
+      ? '퀘스트 창에서 예보를 확인하고 24일 대비를 시작하세요.'
+      : campaign.status === 'preparation'
+        ? `${remaining}일 뒤 ${event?.label || quest.title}이 시작됩니다. 건설·연구·운영모드를 준비하세요.`
+        : campaign.status === 'active'
+          ? `${event?.label || quest.title} 대응 중입니다. 퀘스트 조건을 실시간으로 유지하세요.`
+          : campaign.lastResult?.passed
+            ? '대응 조건을 달성했습니다. 퀘스트 창에서 보상을 받으세요.'
+            : '실패 원인을 확인하고 같은 도시로 24일 준비부터 재도전하세요.';
+    return {
+      phase: `기후 대응 ${gameState.questIndex - 6} / 8`,
+      mission: quest.title,
+      guidance: { icon: event?.icon || 'cloud-sun', text },
+    };
+  }
+
+  return {
+    phase: `복구 퀘스트 ${gameState.questIndex} / 6`,
+    mission: `기초 도시 복구 · ${gameState.questIndex}번째 퀘스트`,
+    guidance: guidanceForQuest(gameState.questIndex),
+  };
+}
+
 export function initHudView(elements, stageUiChanged) {
   els = elements;
   onStageUiChanged = stageUiChanged || (() => {});
 }
 
 export function renderHud() {
-  const guidance = guidanceForQuest(gameState.questIndex);
+  const header = campaignHeader();
 
   els.credits.textContent = formatCredits(gameState.credits, { suffix: false, compact: true });
   const creditMetric = els.credits.closest('[data-metric="credit"]');
   if (creditMetric) creditMetric.title = `보유 크레딧 ${exactNumberLabel(gameState.credits, 2)}`;
   els.turnCount.textContent = gameState.turn;
 
-  els.phaseText.textContent = `복구 단계 ${gameState.questIndex} / 15`;
-  els.missionTitle.textContent = `기후위기 생존 도시 · ${gameState.questIndex}번째 퀘스트`;
-  els.teacherNote.innerHTML = `<i data-lucide="${guidance.icon}"></i><p>${guidance.text}</p>`;
+  els.phaseText.textContent = header.phase;
+  els.missionTitle.textContent = header.mission;
+  els.teacherNote.innerHTML = `<i data-lucide="${header.guidance.icon}"></i><p>${header.guidance.text}</p>`;
   refreshIcons();
   onStageUiChanged();
 }

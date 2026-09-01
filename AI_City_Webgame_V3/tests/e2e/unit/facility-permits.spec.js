@@ -20,7 +20,7 @@ test('facility limits expose the approved cumulative capacity through all fiftee
   expect(getFacilityLimits(15)).toMatchObject({ residential: 10, nuclear: 2, solar: 6, tidal: 3 });
 });
 
-test('redesigned objective rewards grant usable permits instead of only unlocking cards', () => {
+test('legacy objective state cannot override the single quest-based permit cursor', () => {
   const state = new GameState();
   state.questIndex = 7;
   state.progression.objectiveSetId = 'specialization';
@@ -29,23 +29,18 @@ test('redesigned objective rewards grant usable permits instead of only unlockin
   state.unlockedFacilities.add('wind');
 
   expect(getFacilityPermit(state, 'battery')).toMatchObject({ ok: true, limit: 2 });
-  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: true, limit: 2 });
+  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: false, limit: 0 });
 });
 
-test('resilience and stress preparation raise redesigned city capacity without legacy quest advancement', () => {
+test('final test permits come from quest fifteen even if legacy objective state is present', () => {
   const state = new GameState();
-  state.questIndex = 7;
+  state.questIndex = 15;
   state.progression.objectiveSetId = 'resilience';
   state.progression.completedObjectiveSetIds = ['transition-choice', 'specialization'];
-  expect(getFacilityPermit(state, 'residential')).toMatchObject({ ok: true, limit: 9 });
-  expect(getFacilityPermit(state, 'battery')).toMatchObject({ ok: true, limit: 4 });
-  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: true, limit: 4 });
-
-  state.progression.objectiveSetId = null;
-  state.progression.completedObjectiveSetIds.push('resilience');
   state.stressTest.status = 'ready';
-  expect(getFacilityPermit(state, 'solar')).toMatchObject({ ok: true, limit: 6 });
-  expect(getFacilityPermit(state, 'tidal')).toMatchObject({ ok: true, limit: 3 });
+  expect(getFacilityPermit(state, 'residential')).toMatchObject({ limit: 10 });
+  expect(getFacilityPermit(state, 'solar')).toMatchObject({ limit: 6 });
+  expect(getFacilityPermit(state, 'tidal')).toMatchObject({ limit: 3 });
 });
 
 test('committed and planned facilities share one quest cap', () => {
@@ -155,8 +150,8 @@ test('a residence cannot be demolished when it would leave facilities understaff
     ok: false,
     reason: 'workforce_shortage_after_demolition',
     capacity: 0,
-    used: 7,
-    shortage: 7,
+    used: 8,
+    shortage: 8,
   });
 });
 

@@ -3,23 +3,23 @@ import { GameState } from '../../../src/core/GameState.js';
 import { eventBus, Events } from '../../../src/core/EventBus.js';
 import { createBuildProject, createUpgradeProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { forecastConstruction, forecastUpgrade } from '../../../src/systems/SimulationForecastSystem.js';
-import { createHourSettler } from '../../../src/systems/SimulationSystem.js';
+import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
-import { advanceResearchOneHour, researchDemandByIndex } from '../../../src/systems/ResearchSystem.js';
+import { advanceResearchOneDay, researchDemandByIndex } from '../../../src/systems/ResearchSystem.js';
 import { applySimulationQuestProgress } from '../../../src/systems/QuestSystem.js';
 
 function settler({ quests = false } = {}) {
-  return createHourSettler({
+  return createDaySettler({
     calculatePowerNetwork,
     settleEconomy,
     getResearchDemand: researchDemandByIndex,
-    advanceResearch: advanceResearchOneHour,
+    advanceResearch: advanceResearchOneDay,
     evaluateQuest: quests ? applySimulationQuestProgress : null,
   });
 }
 
-test('forecast uses the maximum remaining project time and records only completion hours', () => {
+test('forecast uses the maximum remaining project time and records only completion days', () => {
   const state = new GameState();
   state.credits = 20;
   state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
@@ -27,16 +27,16 @@ test('forecast uses the maximum remaining project time and records only completi
     type: 'thermal',
     level: 1,
     operationMode: 'normal',
-    project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedHours: 5 },
+    project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedDays: 5 },
   };
 
   const forecast = forecastConstruction(state, [
     { index: 2, type: 'factory', paidCost: 4 },
     { index: 3, type: 'green', paidCost: 2 },
-  ], { settleHour: settler() });
+  ], { settleDay: settler() });
 
-  expect(forecast.horizonHours).toBe(8);
-  expect(forecast.timeline.map(({ hourOffset }) => hourOffset)).toEqual([3, 7, 8]);
+  expect(forecast.horizonDays).toBe(8);
+  expect(forecast.timeline.map(({ dayOffset }) => dayOffset)).toEqual([3, 7, 8]);
   expect(forecast.timeline[0].completed).toEqual([expect.objectContaining({ index: 3, type: 'green' })]);
   expect(forecast.timeline[2].completed).toEqual([expect.objectContaining({ index: 2, type: 'factory' })]);
 });
@@ -48,7 +48,7 @@ test('prediction matches live settlement for economy, power, battery, and comple
   state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
   state.grid[1] = {
     ...thermal,
-    project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedHours: 0 },
+    project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedDays: 0 },
   };
   state.grid[2] = {
     type: 'battery', level: 1, operationMode: 'normal', batteryPolicy: 'auto',
@@ -56,20 +56,20 @@ test('prediction matches live settlement for economy, power, battery, and comple
   };
   const live = new GameState();
   expect(live.hydrate(state.serialize())).toBe(true);
-  const settleHour = settler();
+  const settleDay = settler();
 
-  const prediction = forecastConstruction(state, [], { settleHour });
+  const prediction = forecastConstruction(state, [], { settleDay });
   let liveResult = null;
-  for (let hour = 0; hour < prediction.horizonHours; hour += 1) liveResult = settleHour(live);
+  for (let day = 0; day < prediction.horizonDays; day += 1) liveResult = settleDay(live);
 
   expect(prediction.finalState.credits).toBe(live.credits);
   expect(prediction.finalState.grid).toEqual(live.grid);
-  expect(prediction.finalState.elapsedGameHours).toBe(live.elapsedGameHours);
+  expect(prediction.finalState.elapsedGameDays).toBe(live.elapsedGameDays);
   expect(prediction.finalSummary).toMatchObject({
     deliveredPower: liveResult.summary.deliveredPower,
     demand: liveResult.summary.demand,
-    hourlyCarbon: liveResult.summary.hourlyCarbon,
-    hourlyWater: liveResult.summary.hourlyWater,
+    dailyCarbon: liveResult.summary.dailyCarbon,
+    dailyWater: liveResult.summary.dailyWater,
     batteryStored: liveResult.summary.batteryStored,
   });
 });
@@ -85,7 +85,7 @@ test('prediction can evaluate cloned quest transitions without mutating or emitt
 
   const prediction = forecastConstruction(state, [
     { index: 1, type: 'residential', paidCost: 2 },
-  ], { settleHour: settler({ quests: true }) });
+  ], { settleDay: settler({ quests: true }) });
 
   eventBus.off(Events.QUEST_READY, onReady);
   expect(prediction.finalState.questStatus).toBe('ready_to_claim');
@@ -100,11 +100,11 @@ test('upgrade forecast charges only the clone and predicts limited operation thr
   state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
   const before = state.serialize();
 
-  const prediction = forecastUpgrade(state, 0, { paidCost: 5, settleHour: settler() });
+  const prediction = forecastUpgrade(state, 0, { paidCost: 5, settleDay: settler() });
 
-  expect(prediction.horizonHours).toBe(8);
+  expect(prediction.horizonDays).toBe(8);
   expect(prediction.finalState.credits).toBeLessThan(15);
-  expect(prediction.hourly[0].power.generationAvailable).toBeCloseTo(9.1);
+  expect(prediction.daily[0].power.generationAvailable).toBeCloseTo(9.1);
   expect(prediction.finalState.grid[0]).toMatchObject({ level: 2, project: null });
   expect(state.serialize()).toEqual(before);
 });

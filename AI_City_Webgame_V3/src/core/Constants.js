@@ -23,9 +23,9 @@ export const DISPLAY_UNITS = Object.freeze({
 
 export const WORLD_LIGHTING_STORAGE_KEY = 'ai-city-world-lighting';
 export const WORLD_LIGHTING_MODES = Object.freeze({
-  day: Object.freeze({ id: 'day', label: '낮', hour: 12, icon: 'sun' }),
-  dusk: Object.freeze({ id: 'dusk', label: '노을', hour: 17, icon: 'cloud-sun' }),
-  night: Object.freeze({ id: 'night', label: '밤', hour: 23, icon: 'moon' }),
+  day: Object.freeze({ id: 'day', label: '낮', visualHour: 12, icon: 'sun' }),
+  dusk: Object.freeze({ id: 'dusk', label: '노을', visualHour: 17, icon: 'cloud-sun' }),
+  night: Object.freeze({ id: 'night', label: '밤', visualHour: 23, icon: 'moon' }),
 });
 
 export const BOARD = Object.freeze({
@@ -58,8 +58,7 @@ export const COAST_PROP_ROTATION_OFFSETS = Object.freeze({
 });
 
 export const SIMULATION = {
-  HOUR_MS: 1000,
-  START_HOUR: 8,
+  DAY_MS: 1000,
 };
 
 export const CHART_MOTION = Object.freeze({
@@ -71,19 +70,18 @@ export const CALENDAR = Object.freeze({
   START_YEAR: 2040,
   START_MONTH: 1,
   START_DAY: 1,
-  START_HOUR: 8,
-  MS_PER_GAME_HOUR: 60 * 60 * 1000,
+  MS_PER_GAME_DAY: 24 * 60 * 60 * 1000,
 });
 
 export const TIME = Object.freeze({
-  BASE_HOUR_MS: 1000,
+  BASE_DAY_MS: 1000,
   ALLOWED_SCALES: Object.freeze([0, 1, 2, 4]),
   DEFAULT_SCALE: 1,
   FAST_SCALE: 4,
 });
 
 export const CONSTRUCTION = Object.freeze({
-  BUILD_HOURS: Object.freeze({
+  BUILD_DAYS: Object.freeze({
     green: 3,
     residential: 5,
     solar: 6,
@@ -96,7 +94,7 @@ export const CONSTRUCTION = Object.freeze({
     tidal: 15,
     nuclear: 18,
   }),
-  UPGRADE_HOURS: Object.freeze({ 1: 8, 2: 15 }),
+  UPGRADE_DAYS: Object.freeze({ 1: 8, 2: 15 }),
   UPGRADE_RATIOS: Object.freeze({ 1: 0.7, 2: 0.5 }),
   REFUND_RATIOS: Object.freeze({ EARLY: 0.8, MID: 0.65, LATE: 0.5 }),
 });
@@ -137,7 +135,7 @@ export const AUDIO = Object.freeze({
 });
 
 export const QUEST_REQUIREMENTS = Object.freeze({
-  OPERATING_HOURS: 2,
+  OPERATING_DAYS: 2,
   WATER_CYCLE_POWER_RATIO: 0.9,
   FIRST_SOLAR_LOW_CARBON_PERCENT: 30,
   TRANSITION_LOW_CARBON_PERCENT: 40,
@@ -157,8 +155,8 @@ export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   4: Object.freeze({ residential: 5, thermal: 2, data: 1 }),
   5: Object.freeze({ nuclear: 1 }),
   6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2, green: 2 }),
-  7: Object.freeze({ residential: 7, solar: 2 }),
-  8: Object.freeze({ solar: 3, battery: 2 }),
+  7: Object.freeze({ residential: 7, solar: 2, battery: 2 }),
+  8: Object.freeze({ solar: 3, wind: 2 }),
   9: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2, green: 3 }),
   10: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3 }),
   11: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
@@ -193,10 +191,9 @@ export const RESEARCH_RULES = Object.freeze({
   POWER_THRESHOLD: 0.9,
   EXTRA_DEMAND: 2,
   CANCEL_REFUND_RATIO: 0.5,
-  HOURS_PER_DAY: 24,
-  GAME_HOURS_PER_REAL_MINUTE: 60,
+  GAME_DAYS_PER_REAL_MINUTE: 60,
   QUIZ_QUESTION_COUNT: 4,
-  DURATION_HOURS: Object.freeze({
+  DURATION_DAYS: Object.freeze({
     STANDARD: 120,
     ADVANCED: 150,
     CAPSTONE: 180,
@@ -204,22 +201,22 @@ export const RESEARCH_RULES = Object.freeze({
 });
 
 export const CARBON_CRISIS = Object.freeze({
-  SAFE_HOURLY: 10,
-  GAME_OVER_HOURS: 168,
-  RECOVERY_PER_SAFE_HOUR: 2,
-  WARNING_HOURS: Object.freeze([24, 72, 144]),
+  SAFE_DAILY: 10,
+  GAME_OVER_DAYS: 168,
+  RECOVERY_PER_SAFE_DAY: 2,
+  WARNING_DAYS: Object.freeze([24, 72, 144]),
   ACTIVE_AFTER_QUEST: 5,
 });
 
 export const CITY_FAILURE_RULES = Object.freeze({
   ACTIVE_AFTER_QUEST_ID: 'power-on',
   ACTIVE_AFTER_QUEST_INDEX: 2,
-  CREDIT_WARNING_HOURS: 6,
-  CREDIT_PAUSE_HOURS: 12,
-  CREDIT_GAME_OVER_HOURS: 24,
-  ESSENTIAL_WARNING_HOURS: 3,
-  ESSENTIAL_PAUSE_HOURS: 6,
-  ESSENTIAL_GAME_OVER_HOURS: 12,
+  CREDIT_WARNING_DAYS: 6,
+  CREDIT_PAUSE_DAYS: 12,
+  CREDIT_GAME_OVER_DAYS: 24,
+  ESSENTIAL_WARNING_DAYS: 3,
+  ESSENTIAL_PAUSE_DAYS: 6,
+  ESSENTIAL_GAME_OVER_DAYS: 12,
   ESSENTIAL_BLACKOUT_PERCENT: 5,
 });
 
@@ -236,12 +233,29 @@ export const GRID_RESERVE_RULES = Object.freeze({
 });
 
 export const STRESS_TEST_RULES = Object.freeze({
-  PHASE_HOURS: Object.freeze({ NORMAL: 4, HEATWAVE: 8, NIGHT_PEAK: 5, LOW_WIND_NIGHT: 6, RECOVERY: 4 }),
+  PHASE_DAYS: Object.freeze({
+    BASELINE: 3,
+    HEAT_DOME: 6,
+    MONSOON_FRONT: 5,
+    COASTAL_SUPERSTORM: 6,
+    WINTER_DISASTER: 6,
+    STAGNANT_AIR: 5,
+    DRY_EMERGENCY: 5,
+    RECOVERY: 5,
+  }),
   CONSTRUCTION_COST_MULTIPLIER: 1.2,
-  PASS_ESSENTIAL_SUPPLY_PERCENT: 70,
-  BANKRUPTCY_FAILURE_HOURS: 6,
+  PASS_ESSENTIAL_SUPPLY_PERCENT: 82,
+  MINIMUM_ESSENTIAL_SUPPLY_PERCENT: 50,
+  BANKRUPTCY_FAILURE_DAYS: 4,
   HEALTHY_ESSENTIAL_SUPPLY_PERCENT: 90,
-  SAFE_CARBON_RATE: 10,
+  SAFE_CARBON_RATE: 8,
+  HIGH_CARBON_RATE: 10,
+  MIN_SAFE_CARBON_DAYS: 35,
+  MAX_HIGH_CARBON_DAYS: 3,
+  MAX_AVERAGE_CARBON: 8,
+  MAX_WATER_VIOLATION_DAYS: 6,
+  RECOVERY_DEADLINE_DAYS: 3,
+  MIN_TIDAL_DELIVERY: 8,
   DEFAULT_WATER_LIMIT: 10,
 });
 
@@ -250,6 +264,14 @@ export const STORAGE_LEVELS = {
   2: { capacity: 35, throughput: 12 },
   3: { capacity: 50, throughput: 16 },
 };
+
+export const COOLING_RULES = Object.freeze({
+  TARGET_WATER_REDUCTION_PER_LEVEL: Object.freeze({ data: 4, nuclear: 2 }),
+  LEVEL_TWO_EFFECT_MULTIPLIER: 1.25,
+  EXTENDED_RANGE_LEVEL: 3,
+  EXTENDED_RANGE_DISTANCE: 2,
+  EXTENDED_RANGE_MULTIPLIER: 0.5,
+});
 
 export const FACILITY_ECONOMY = {
   residential: { income: 0.5, upkeep: 0 },
@@ -266,17 +288,17 @@ export const FACILITY_ECONOMY = {
 };
 
 export const WORKFORCE_LEVELS = {
-  residential: [0, 10, 15, 22],
+  residential: [0, 6, 10, 15],
   factory: [0, 4, 6, 8],
-  thermal: [0, 2, 3, 4],
-  data: [0, 3, 5, 7],
-  nuclear: [0, 5, 7, 9],
+  thermal: [0, 3, 4, 5],
+  data: [0, 4, 6, 8],
+  nuclear: [0, 6, 8, 10],
   solar: [0, 1, 2, 3],
-  wind: [0, 1, 2, 3],
+  wind: [0, 2, 3, 4],
   battery: [0, 1, 2, 3],
-  cooling: [0, 1, 2, 3],
+  cooling: [0, 2, 3, 4],
   green: [0, 0, 0, 0],
-  tidal: [0, 2, 3, 4],
+  tidal: [0, 3, 4, 5],
 };
 
 export const ECONOMY_RULES = {
@@ -563,17 +585,17 @@ export const LEVEL_MULTIPLIERS = {
 };
 
 export const FACILITIES = {
-  residential: { name: '주거지', icon: '🏢', cost: 2, dev: 5, demand: 2, supply: 0, carbon: 0, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '🌳 인접 시 생활권 +4' },
-  factory: { name: '공장', icon: '🏭', cost: 4, dev: 2, demand: 4, supply: 0, carbon: 2, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '⚡ 발전소 인접 시 생산 +7' },
-  data: { name: '데이터센터', icon: '🖥️', cost: 6, dev: 10, demand: 8, supply: 0, carbon: 0, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '연구 수행 · 순환냉각 인접 시 물 부담 감소' },
-  thermal: { name: '화력발전', icon: '🔥', cost: 5, dev: 3, demand: 0, supply: 13, carbon: 8, water: 2, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '전력↑ · 탄소 부담 큼' },
-  nuclear: { name: '핵발전', icon: '⚛️', cost: 8, dev: 3, demand: 0, supply: 19, carbon: 1, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '💧 냉각시설 인접 시 물부담↓' },
-  solar: { name: '태양광', icon: '☀️', cost: 5, dev: 3, demand: 0, supply: 7, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '🔋 저장장치 인접 시 안정공급' },
-  wind: { name: '풍력', icon: '🌬️', cost: 5, dev: 3, demand: 0, supply: 8, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '🔋 저장장치 인접 시 안정공급' },
-  battery: { name: '에너지저장', icon: '🔋', cost: 4, dev: 2, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '☀️🌬️ 인접 재생에너지 안정화' },
-  cooling: { name: '순환냉각', icon: '💧', cost: 4, dev: 1, demand: 1, supply: 0, carbon: 0, water: -5, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '🖥️/⚛️ 인접 시 추가 효과' },
-  green: { name: '녹지', icon: '🌳', cost: 2, dev: 1, demand: 0, supply: 0, carbon: -1, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 1, desc: '🏢 주거 인접 시 생활권 +4' },
-  tidal: { name: '조력발전', icon: '🌊', cost: 7, dev: 3, demand: 0, supply: 10, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, placement: 'outer_ring', desc: '외곽 육각에서 일정한 저탄소 전력을 공급' },
+  residential: { name: '주거지', icon: '🏢', cost: 2, dev: 5, demand: 2, supply: 0, carbon: 0, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '인구와 기본 세금을 공급합니다. 전력·고용이 좋을수록 세금이 늘고 녹지 인접 시 추가 보너스를 받습니다.' },
+  factory: { name: '공장', icon: '🏭', cost: 4, dev: 2, demand: 4, supply: 0, carbon: 2, water: 1, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '전력과 인력이 충족될 때 수입을 만듭니다. 주거지 인접 시 오염 비용이 생깁니다.' },
+  data: { name: '데이터센터', icon: '🖥️', cost: 6, dev: 10, demand: 8, supply: 0, carbon: 0, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '수입과 연구를 제공합니다. 순환냉각 인접 시 실제 물 사용량이 줄어듭니다.' },
+  thermal: { name: '화력발전', icon: '🔥', cost: 5, dev: 3, demand: 0, supply: 13, carbon: 8, water: 2, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '안정적인 전력을 만들지만 고정 운영비와 큰 탄소 부담이 있습니다.' },
+  nuclear: { name: '핵발전', icon: '⚛️', cost: 8, dev: 3, demand: 0, supply: 19, carbon: 1, water: 5, unlockStage: STAGES.EXECUTION, maxLevel: 3, desc: '큰 저탄소 전력을 만들지만 운영비와 물을 사용합니다. 순환냉각으로 물을 줄일 수 있습니다.' },
+  solar: { name: '태양광', icon: '☀️', cost: 5, dev: 3, demand: 0, supply: 7, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '게임 시각에 따라 출력이 달라지는 저탄소 발전입니다. 저장장치로 변동을 보완할 수 있습니다.' },
+  wind: { name: '풍력', icon: '🌬️', cost: 5, dev: 3, demand: 0, supply: 8, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '풍황에 따라 출력이 달라지는 저탄소 발전입니다. 저장장치로 변동을 보완할 수 있습니다.' },
+  battery: { name: '에너지저장', icon: '🔋', cost: 4, dev: 2, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '보조전력을 사용해 잉여 전력을 저장하고, 인접 소비지의 송전 손실을 줄입니다.' },
+  cooling: { name: '순환냉각', icon: '💧', cost: 4, dev: 1, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '자체 물 감축 시설이 아닙니다. 전력이 공급되면 인접 데이터센터·핵발전의 물 사용을 줄입니다.' },
+  green: { name: '녹지', icon: '🌳', cost: 2, dev: 1, demand: 0, supply: 0, carbon: -1, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '도시 탄소를 줄이고 인접 주거지의 세금과 폭염 대응력을 높입니다. 연구로 수관과 생태축을 강화할 수 있습니다.' },
+  tidal: { name: '조력발전', icon: '🌊', cost: 7, dev: 3, demand: 0, supply: 10, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, placement: 'outer_ring', desc: '외곽 육각에서 일정한 저탄소 전력을 공급하며 고정 운영비가 듭니다.' },
 };
 
 export const QUIZ_BANK = [

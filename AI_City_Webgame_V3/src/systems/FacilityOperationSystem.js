@@ -1,3 +1,4 @@
+import { COOLING_RULES } from '../core/Constants.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
@@ -21,10 +22,15 @@ function strongestCoolingSupport(grid, index, coords, facilityOperations) {
     if (cooler?.type !== 'cooling') return strongest;
     const coolerLevel = safeLevel(cooler);
     const tileDistance = hexDistance(coords[index], coords[coolerIndex]);
-    if (tileDistance !== 1 && !(tileDistance === 2 && coolerLevel >= 3)) return strongest;
+    if (tileDistance !== 1 && !(
+      tileDistance === COOLING_RULES.EXTENDED_RANGE_DISTANCE
+      && coolerLevel >= COOLING_RULES.EXTENDED_RANGE_LEVEL
+    )) return strongest;
     const powerRatio = Math.max(0, Math.min(1, Number(facilityOperations[coolerIndex]?.powerRatio) || 0));
-    const levelBonus = coolerLevel >= 2 ? 1.25 : 1;
-    const rangeMultiplier = tileDistance === 2 ? 0.5 : 1;
+    const levelBonus = coolerLevel >= 2 ? COOLING_RULES.LEVEL_TWO_EFFECT_MULTIPLIER : 1;
+    const rangeMultiplier = tileDistance === COOLING_RULES.EXTENDED_RANGE_DISTANCE
+      ? COOLING_RULES.EXTENDED_RANGE_MULTIPLIER
+      : 1;
     const projectMultiplier = operationProfileForCell(cooler).functionality;
     return Math.max(strongest, powerRatio * levelBonus * rangeMultiplier * projectMultiplier);
   }, 0);
@@ -43,8 +49,8 @@ export function calculateEnvironmentalOperations({
   grid = operationalGrid(grid);
   const boardCoords = topologyFor(grid, coords);
   const byFacility = {};
-  let hourlyCarbon = 0;
-  let hourlyWater = 0;
+  let dailyCarbon = 0;
+  let dailyWater = 0;
 
   grid.forEach((cell, index) => {
     if (!cell) return;
@@ -71,7 +77,7 @@ export function calculateEnvironmentalOperations({
       );
       const effectiveCoolingRatio = Math.min(powerRatio, coolingSupport);
       const coolingEffectiveness = modifierContext?.city?.coolingEffectiveness ?? 1;
-      const reduction = (cell.type === 'data' ? 4 : 2)
+      const reduction = COOLING_RULES.TARGET_WATER_REDUCTION_PER_LEVEL[cell.type]
         * safeLevel(cell)
         * effectiveCoolingRatio
         * coolingEffectiveness;
@@ -80,14 +86,14 @@ export function calculateEnvironmentalOperations({
 
     carbon = round2(carbon);
     water = round2(water);
-    hourlyCarbon += carbon;
-    hourlyWater += water;
+    dailyCarbon += carbon;
+    dailyWater += water;
     byFacility[index] = { carbon, water };
   });
 
   return {
     byFacility,
-    hourlyCarbon: Math.max(0, round2(hourlyCarbon)),
-    hourlyWater: Math.max(0, round2(hourlyWater)),
+    dailyCarbon: Math.max(0, round2(dailyCarbon + (Number(modifierContext?.city?.carbonFlat) || 0))),
+    dailyWater: Math.max(0, round2(dailyWater)),
   };
 }

@@ -13,13 +13,13 @@ import {
 import { createHexCoordinates, hexDistance, neighborIndices } from './HexGridSystem.js';
 import { expansionUpkeep, zoneModifierForCell } from './ZoneSystem.js';
 import { activeEventContext } from './CityEventSystem.js';
-import { carbonPressureForHours } from './CarbonCrisisSystem.js';
+import { carbonPressureForDays } from './CarbonCrisisSystem.js';
 import { researchEffects } from './ResearchEffectSystem.js';
-import { stressModifierForFacility } from './StressTestSystem.js';
+import { stressCityModifier, stressModifierForFacility } from './StressTestSystem.js';
 import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
 
 const MULTIPLICATIVE_FIELDS = Object.freeze([
-  'supply', 'demand', 'income', 'upkeep', 'carbon', 'water', 'researchSpeed', 'workforce',
+  'supply', 'demand', 'income', 'upkeep', 'carbon', 'water', 'negative', 'researchSpeed', 'workforce',
 ]);
 const ADDITIVE_FIELDS = Object.freeze(['workforceFlat', 'healthCostFlat', 'buildCostFlat']);
 const FACILITY_PRIORITIES = new Set(['essential', 'normal', 'saving']);
@@ -32,6 +32,7 @@ export function identityModifier() {
     upkeep: 1,
     carbon: 1,
     water: 1,
+    negative: 1,
     researchSpeed: 1,
     workforce: 1,
     workforceFlat: 0,
@@ -111,7 +112,7 @@ export function effectiveFacilityStats(cell, modifier = {}) {
     demand: base.demand * combined.demand * project.demand,
     income: base.income * combined.income * project.income,
     upkeep: base.upkeep * combined.upkeep * project.upkeep,
-    carbon: base.carbon * combined.carbon * project.carbon,
+    carbon: base.carbon * (base.carbon < 0 ? combined.negative : combined.carbon) * project.carbon,
     water: base.water * combined.water * project.water,
     researchSpeed: base.researchSpeed * combined.researchSpeed * project.researchSpeed,
     workforce: Math.max(0, (base.workforce * combined.workforce + combined.workforceFlat) * project.workforce),
@@ -154,6 +155,24 @@ function hasGreenCluster(state, coords) {
     }
     return visited.size >= 3;
   });
+}
+
+function strongestResidentialGreenModifier(state, index, coords) {
+  let income = 1;
+  let heatDemand = 1.25;
+  state.grid.forEach((cell, greenIndex) => {
+    if (!isOperationalCell(cell) || cell.type !== 'green') return;
+    const level = safeLevel(cell);
+    const distance = hexDistance(coords[index], coords[greenIndex]);
+    if (distance === 1) {
+      income = Math.max(income, [1, 1.05, 1.07, 1.09][level]);
+      heatDemand = Math.min(heatDemand, level >= 2 ? 1.15 : 1.2);
+    } else if (distance === 2 && level >= 3) {
+      income = Math.max(income, 1.045);
+      heatDemand = Math.min(heatDemand, 1.2);
+    }
+  });
+  return { income, heatDemand, supported: income > 1 };
 }
 
 function resolvedOperationMode(cell) {
@@ -201,12 +220,19 @@ export function buildCityModifierContext(state, {
   const byFacility = {};
   const boardCoords = coordinatesFor(state, coords);
   const activeEvent = activeEventContext(state);
-  const carbonPressure = carbonPressureForHours(state.carbonCrisisHours);
+  const baselineWater = Number(state.baseline?.dailyWater);
+  const stressCity = stressCityModifier(state, {
+    baselineWater: Number.isFinite(baselineWater) && baselineWater > 0 ? baselineWater : 10,
+  });
+  const carbonPressure = carbonPressureForDays(state.carbonCrisisDays);
   const effects = researchEffects(state);
   const greenCluster = hasGreenCluster(state, boardCoords);
   const greenFactoryHealthMultiplierByIndex = {};
   state.grid.forEach((cell, index) => {
     if (!isOperationalCell(cell)) return;
+    const greenSupport = cell.type === 'residential'
+      ? strongestResidentialGreenModifier(state, index, boardCoords)
+      : { income: 1, heatDemand: 1.25, supported: false };
     const mode = cell.project?.kind === 'upgrade'
       ? identityModifier()
       : operationModeDefinition(cell.type, resolvedOperationMode(cell))?.modifier || identityModifier();
@@ -214,8 +240,8 @@ export function buildCityModifierContext(state, {
       ? modifierAt(eventModifiers, index)
       : activeEvent.byFacility?.(index) || identityModifier();
     const event = composeModifiers(eventBase, {
-      demand: activeEvent.event?.type === 'heatwave' && cell.type === 'residential' && greenCluster
-        ? 1.2 / 1.25
+      demand: activeEvent.event?.type === 'heatwave' && cell.type === 'residential' && greenSupport.supported
+        ? greenSupport.heatDemand / 1.25
         : 1,
       income: cell.type === 'residential' ? carbonPressure.residentialIncomeMultiplier : 1,
       water: carbonPressure.waterMultiplier,
@@ -231,7 +257,7 @@ export function buildCityModifierContext(state, {
         : cell.type === 'wind'
           ? effects.windSupply * (activeEvent.event?.type === 'lowWind' ? effects.lowWindSupply / 0.35 : 1)
           : 1,
-      income: cell.type === 'residential' && adjacentGreen ? 1.05 : 1,
+      income: cell.type === 'residential' ? greenSupport.income : 1,
       researchSpeed: cell.type === 'data' && (Number(cell.level) || 1) >= 3 && lowCarbonSurplus(state) >= 3
         ? 1.25
         : 1,
@@ -239,7 +265,7 @@ export function buildCityModifierContext(state, {
     const research = composeModifiers(systemResearch, modifierAt(researchModifiers, index));
     const stress = stressModifiers
       ? modifierAt(stressModifiers, index)
-      : stressModifierForFacility(state, cell.type);
+      : stressModifierForFacility(state, cell.type, cell.level);
     byFacility[index] = {
       mode,
       event,
@@ -257,8 +283,9 @@ export function buildCityModifierContext(state, {
       expansionUpkeep: expansionUpkeep(state),
       healthCostFlat: 0,
       buildCostFlat: 0,
-      waterLimit: activeEvent.city.waterLimit ?? null,
-      coolingEffectiveness: activeEvent.city.coolingEffectiveness ?? 1,
+      waterLimit: activeEvent.city.waterLimit ?? stressCity.waterLimit ?? null,
+      coolingEffectiveness: (activeEvent.city.coolingEffectiveness ?? 1) * (stressCity.coolingEffectiveness ?? 1),
+      carbonFlat: (activeEvent.city.carbonFlat ?? 0) + (stressCity.carbonFlat ?? 0),
       activeEvent: activeEvent.event,
       healthMultiplier: carbonPressure.healthMultiplier,
       carbonPressure,
@@ -290,7 +317,11 @@ function modeForecast(cell, beforeMode, afterMode) {
     supply: pair('supply'),
     powerMargin: { before: -before.demand, after: -after.demand, delta: before.demand - after.demand },
     income: pair('income'),
-    netIncome: pair('income'),
+    netIncome: {
+      before: before.income - before.upkeep,
+      after: after.income - after.upkeep,
+      delta: (after.income - after.upkeep) - (before.income - before.upkeep),
+    },
     carbon: pair('carbon'),
     water: pair('water'),
     workforce: pair('workforce'),

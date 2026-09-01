@@ -15,6 +15,10 @@ export function getSolarMultiplier(hour) {
   return 1;
 }
 
+export function getDailySolarMultiplier() {
+  return 11 / 24;
+}
+
 export function getWindMultiplier(tickIndex) {
   return WIND_PROFILE[((Math.trunc(tickIndex) % WIND_PROFILE.length) + WIND_PROFILE.length) % WIND_PROFILE.length];
 }
@@ -76,9 +80,13 @@ export function getDemandMultiplier(type, { heatwave = false, adjacentGreen = fa
   return 1.25;
 }
 
-export function getThreeHourForecast(hour, tickIndex) {
+export function getThreeDayForecast(dayIndex, tickIndex) {
   return [1, 2, 3].map((offset) => {
-    const nextHour = normalizeHour(hour + offset);
-    return { hour: nextHour, solar: getSolarMultiplier(nextHour), wind: getWindMultiplier(tickIndex + offset) };
+    const nextDayIndex = Math.max(0, Math.trunc(Number(dayIndex) || 0) + offset);
+    return {
+      dayIndex: nextDayIndex,
+      solar: getDailySolarMultiplier(),
+      wind: getWindMultiplier(tickIndex + offset),
+    };
   });
 }

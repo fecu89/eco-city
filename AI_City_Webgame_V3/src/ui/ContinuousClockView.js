@@ -1,8 +1,8 @@
-import { calendarAtElapsedHour, formatCalendarDate } from '../systems/CalendarSystem.js';
+import { calendarAtElapsedDay, formatCalendarDate } from '../systems/CalendarSystem.js';
 
 export function createContinuousClockView({
   timeElement,
-  getElapsedHours,
+  getElapsedDays,
   getProgress,
   onProgress = () => {},
   requestFrame = globalThis.requestAnimationFrame?.bind(globalThis),
@@ -14,15 +14,15 @@ export function createContinuousClockView({
 
   const render = () => {
     const tickProgress = Math.max(0, Math.min(1, Number(getProgress()) || 0));
-    const visualElapsedHours = Math.max(0, getElapsedHours() + tickProgress);
+    const visualElapsedDays = Math.max(0, getElapsedDays() + tickProgress);
     onProgress(tickProgress);
-    const snapshot = calendarAtElapsedHour(visualElapsedHours);
+    const snapshot = calendarAtElapsedDay(visualElapsedDays);
     const label = formatCalendarDate(snapshot);
     if (label !== lastLabel) {
       timeElement.textContent = label;
       lastLabel = label;
     }
-    return { visualElapsedHours, snapshot, label };
+    return { visualElapsedDays, snapshot, label };
   };
 
   const loop = () => {

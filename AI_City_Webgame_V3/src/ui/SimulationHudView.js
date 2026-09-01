@@ -47,22 +47,22 @@ export function renderSimulationHud() {
   const summary = gameState.lastTickSummary;
   const net = gameState.lastSettlementDelta;
   const creditPrefix = net > 0 ? '+' : net < 0 ? '-' : '±';
-  const hourlyCarbon = summary?.hourlyCarbon ?? 0;
+  const dailyCarbon = summary?.dailyCarbon ?? 0;
   const deliveredPower = summary?.deliveredPower ?? 0;
   const demand = summary?.demand ?? 0;
   const powerMargin = round1(deliveredPower - demand);
   const batteryStored = summary?.batteryStored ?? 0;
-  const hourlyWater = summary?.hourlyWater ?? 0;
+  const dailyWater = summary?.dailyWater ?? 0;
   const capacity = summary?.capacity ?? summary?.workforce ?? 0;
   const used = summary?.used ?? summary?.jobs ?? 0;
-  els.net.textContent = `${creditPrefix}${formatCredits(Math.abs(net), { suffix: false, compact: true })}/h`;
-  els.carbonRate.textContent = `${compactMetric(hourlyCarbon)}/h`;
+  els.net.textContent = `${creditPrefix}${formatCredits(Math.abs(net), { suffix: false, compact: true })}/일`;
+  els.carbonRate.textContent = `${compactMetric(dailyCarbon)}/일`;
   els.power.textContent = `${signedMetric(powerMargin)} E`;
   els.battery.textContent = `${compactMetric(batteryStored)} E`;
-  els.water.textContent = `${compactMetric(hourlyWater)}/h`;
+  els.water.textContent = `${compactMetric(dailyWater)}/일`;
   const laborText = els.labor.querySelector('span') || els.labor;
   laborText.textContent = `사용 인력 ${compactMetric(used)} / 전체 인구 ${compactMetric(capacity)}`;
-  const creditsTitle = `보유 ${exactNumberLabel(gameState.credits, 2)} · 시간당 ${net >= 0 ? '+' : ''}${exactNumberLabel(net, 2)}`;
+  const creditsTitle = `보유 ${exactNumberLabel(gameState.credits, 2)} · 일일 ${net >= 0 ? '+' : ''}${exactNumberLabel(net, 2)}`;
   setMetricLabel(els.net, `크레딧 ${creditsTitle}`, creditsTitle);
   setMetricLabel(
     els.power,
@@ -70,8 +70,8 @@ export function renderSimulationHud() {
     `전력 여유 ${powerMargin >= 0 ? '+' : ''}${exactNumberLabel(powerMargin, 1)} · 공급 ${exactNumberLabel(deliveredPower, 1)} / 수요 ${exactNumberLabel(demand, 1)}`,
   );
   setMetricLabel(els.battery, `배터리 저장량 ${exactNumberLabel(batteryStored, 1)}`, `배터리 저장량 ${exactNumberLabel(batteryStored, 1)} E`);
-  setMetricLabel(els.carbonRate, `이산화탄소 시간당 ${exactNumberLabel(hourlyCarbon, 1)}`, `시간당 CO₂ ${exactNumberLabel(hourlyCarbon, 1)}`);
-  setMetricLabel(els.water, `물 시간당 ${exactNumberLabel(hourlyWater, 1)}`, `시간당 물 ${exactNumberLabel(hourlyWater, 1)}`);
+  setMetricLabel(els.carbonRate, `이산화탄소 일일 ${exactNumberLabel(dailyCarbon, 1)}`, `일일 CO₂ ${exactNumberLabel(dailyCarbon, 1)}`);
+  setMetricLabel(els.water, `물 일일 ${exactNumberLabel(dailyWater, 1)}`, `일일 물 ${exactNumberLabel(dailyWater, 1)}`);
   els.labor.setAttribute('aria-label', `사용 인력 ${exactNumberLabel(used, 0)}, 전체 인구 ${exactNumberLabel(capacity, 0)}`);
   const hasBattery = gameState.grid.some((cell) => cell?.type === 'battery');
   const hasWaterLimit = summary?.waterLimit != null && Number.isFinite(Number(summary.waterLimit));
@@ -79,19 +79,19 @@ export function renderSimulationHud() {
   setMetricRisk(els.net, { danger: net < 0 });
   setMetricRisk(els.power, { danger: powerMargin < 0 });
   setMetricRisk(els.battery, { danger: hasBattery && batteryStored <= 0, warning: hasBattery && batteryStored < 5 });
-  setMetricRisk(els.carbonRate, { danger: hourlyCarbon > CARBON_CRISIS.SAFE_HOURLY });
-  setMetricRisk(els.water, { danger: waterLimit != null && hourlyWater > waterLimit });
+  setMetricRisk(els.carbonRate, { danger: dailyCarbon > CARBON_CRISIS.SAFE_DAILY });
+  setMetricRisk(els.water, { danger: waterLimit != null && dailyWater > waterLimit });
   els.carbon.textContent = `${summary?.lowCarbonPercent ?? 0}%`;
   const labels = { normal: '평상시', heat_watch: '폭염 주의', extreme_heat: '극한 폭염' };
-  const carbonActive = gameState.carbonCrisisHours > 0;
+  const carbonActive = gameState.carbonCrisisDays > 0;
   const risk = gameState.operationalRisk;
-  const operationalAlert = risk.negativeCreditHours > 0 || risk.essentialBlackoutHours > 0;
+  const operationalAlert = risk.negativeCreditDays > 0 || risk.essentialBlackoutDays > 0;
   els.alert.querySelector('b').textContent = carbonActive
-    ? `탄소 위험 ${gameState.carbonCrisisHours}/${CARBON_CRISIS.GAME_OVER_HOURS}h`
+    ? `탄소 위험 ${gameState.carbonCrisisDays}/${CARBON_CRISIS.GAME_OVER_DAYS}일`
     : operationalAlert
-      ? risk.negativeCreditHours >= risk.essentialBlackoutHours
-        ? `적자 위험 ${risk.negativeCreditHours}/24h`
-        : `필수전력 위험 ${risk.essentialBlackoutHours}/12h`
+      ? risk.negativeCreditDays >= risk.essentialBlackoutDays
+        ? `적자 위험 ${risk.negativeCreditDays}/24일`
+        : `필수전력 위험 ${risk.essentialBlackoutDays}/12일`
     : labels[gameState.climateAlert] || labels.normal;
   els.alert.className = `sr-only ${carbonActive || operationalAlert ? 'climate-carbon_crisis' : `climate-${gameState.climateAlert}`}`;
 }

@@ -106,13 +106,31 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
 
 export function upsertPlannedFacility(state, type, index) {
   const current = state.constructionPlan.find((item) => item.index === index);
+  let nextPlan;
   if (current?.type === type) {
-    state.constructionPlan = state.constructionPlan.filter((item) => item.index !== index);
+    nextPlan = state.constructionPlan.filter((item) => item.index !== index);
   } else if (current) {
-    state.constructionPlan = state.constructionPlan.map((item) => item.index === index ? { index, type } : item);
+    nextPlan = state.constructionPlan.map((item) => item.index === index ? { index, type } : item);
   } else {
-    state.constructionPlan = [...state.constructionPlan, { index, type }];
+    nextPlan = [...state.constructionPlan, { index, type }];
   }
+
+  // 같은 계획을 다시 누르는 제거 동작은 언제나 허용한다. 추가·교체는 시설 허가를 넘는
+  // 순간 계획에 넣지 않아, 유령 건물과 비활성 확정 버튼이 생기는 것을 막는다.
+  if (current?.type !== type) {
+    const candidate = assessConstructionPlan(state, nextPlan);
+    const permitError = candidate.errors.find((error) => (
+      error.reason === 'facility_limit' && error.type === type
+    ));
+    if (permitError) {
+      return {
+        ...assessConstructionPlan(state),
+        rejected: { ...permitError, attemptedIndex: index, attemptedType: type },
+      };
+    }
+  }
+
+  state.constructionPlan = nextPlan;
   return assessConstructionPlan(state);
 }
 
@@ -137,7 +155,7 @@ export function commitConstructionPlan(state) {
     key: type,
     type: FACILITIES[type].name,
     level: 1,
-    durationHours: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }).durationHours,
+    durationDays: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }).durationDays,
   }));
   assessment.items.forEach(({ index, type }) => {
     nextGrid[index] = {

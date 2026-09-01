@@ -7,7 +7,7 @@ test.describe('3D city motion language', () => {
     await page.evaluate(() => window.__clickCell(0));
     const during = await page.evaluate(() => {
       document.getElementById('confirmBuildBtn').click();
-      for (let hour = 0; hour < 5; hour += 1) window.__settleSimulationHour();
+      for (let day = 0; day < 5; day += 1) window.__settleSimulationDay();
       return window.__getCityRendererStats();
     });
     expect(during.activeMotions).toBe(1);

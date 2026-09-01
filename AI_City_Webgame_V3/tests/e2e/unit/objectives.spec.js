@@ -10,8 +10,8 @@ import { createBuildProject } from '../../../src/systems/ConstructionProjectSyst
 
 const summary = (overrides = {}) => ({
   netCredits: 0,
-  hourlyCarbon: 10,
-  hourlyWater: 5,
+  dailyCarbon: 10,
+  dailyWater: 5,
   lowCarbonPercent: 0,
   transmissionEfficiency: 100,
   employmentRate: 0,
@@ -34,7 +34,7 @@ test('transition set requires any two of three sustained goals', () => {
   const state = expandedState();
   let result;
   for (let hour = 0; hour < 3; hour += 1) {
-    result = evaluateObjectiveSet(state, summary({ lowCarbonPercent: 45, hourlyCarbon: 9, netCredits: 1 }));
+    result = evaluateObjectiveSet(state, summary({ lowCarbonPercent: 45, dailyCarbon: 9, netCredits: 1 }));
   }
   expect(result).toMatchObject({ setId: 'transition-choice', completedCount: 2, required: 2, ready: true });
   expect(result.cards.find(({ id }) => id === 'transition-economy').completed).toBe(false);
@@ -43,7 +43,7 @@ test('transition set requires any two of three sustained goals', () => {
 test('claiming transition reward pays once, unlocks operations, and opens the second side', () => {
   const state = expandedState('west');
   for (let hour = 0; hour < 3; hour += 1) {
-    evaluateObjectiveSet(state, summary({ lowCarbonPercent: 50, netCredits: 5, hourlyCarbon: 15 }));
+    evaluateObjectiveSet(state, summary({ lowCarbonPercent: 50, netCredits: 5, dailyCarbon: 15 }));
   }
   const before = state.credits;
   const result = claimObjectiveSet(state);
@@ -102,11 +102,17 @@ test('resilience set passes with three of four independent strategies and readie
     result = evaluateObjectiveSet(state, summary({
       netCredits: 1,
       lowCarbonPercent: 75,
-      hourlyWater: 6,
+      dailyWater: 6,
       waterLimit: 8,
     }));
   }
   expect(result).toMatchObject({ completedCount: 3, required: 3, ready: true });
-  expect(claimObjectiveSet(state)).toMatchObject({ ok: true, reward: { credits: 12 }, nextSetId: null });
+  expect(claimObjectiveSet(state)).toMatchObject({
+    ok: true,
+    reward: { credits: 12 },
+    nextSetId: null,
+    chapterChanged: true,
+  });
   expect(state.stressTest.status).toBe('ready');
+  expect(state.progression.chapter).toBe(4);
 });

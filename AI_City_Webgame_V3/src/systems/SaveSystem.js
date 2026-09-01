@@ -388,6 +388,147 @@ export function migrateV6ToV7(data) {
   };
 }
 
+function migrateLegacyProject(project) {
+  if (!project) return null;
+  const migrated = {
+    ...project,
+    elapsedDays: Math.max(0, Number(project.elapsedHours) || 0),
+    durationDays: Math.max(0, Number(project.durationHours) || 0),
+  };
+  delete migrated.elapsedHours;
+  delete migrated.durationHours;
+  return migrated;
+}
+
+function migrateLegacyResearchJob(job, id) {
+  const migrated = {
+    ...job,
+    id: job?.id || id,
+    elapsedEffectiveDays: Math.max(0, Number(job?.elapsedEffectiveHours) || 0),
+  };
+  if (job?.durationHours != null) migrated.durationDays = Math.max(0, Number(job.durationHours) || 0);
+  delete migrated.elapsedEffectiveHours;
+  delete migrated.durationHours;
+  return migrated;
+}
+
+function migrateLegacySummary(summary) {
+  if (!summary) return summary ?? null;
+  const migrated = {
+    ...summary,
+    dailyCarbon: Number(summary.dailyCarbon ?? summary.hourlyCarbon) || 0,
+    dailyWater: Number(summary.dailyWater ?? summary.hourlyWater) || 0,
+  };
+  delete migrated.hour;
+  delete migrated.hourlyCarbon;
+  delete migrated.hourlyWater;
+  return migrated;
+}
+
+function migrateLegacyStressTest(stressTest, campaignComplete) {
+  const source = stressTest || {};
+  const metrics = source.metrics ? {
+    ...source.metrics,
+    days: Number(source.metrics.days ?? source.metrics.hours) || 0,
+    blackoutDays: Number(source.metrics.blackoutDays ?? source.metrics.blackoutHours) || 0,
+    carbonRiskDays: Number(source.metrics.carbonRiskDays ?? source.metrics.carbonRiskHours) || 0,
+    waterViolationDays: Number(source.metrics.waterViolationDays ?? source.metrics.waterViolationHours) || 0,
+    recoveryDays: source.metrics.recoveryDays ?? source.metrics.recoveryHours ?? null,
+    consecutiveBankruptcyDays: Number(source.metrics.consecutiveBankruptcyDays ?? source.metrics.consecutiveBankruptcyHours) || 0,
+    maxConsecutiveBankruptcyDays: Number(source.metrics.maxConsecutiveBankruptcyDays ?? source.metrics.maxConsecutiveBankruptcyHours) || 0,
+  } : null;
+  if (metrics) {
+    for (const key of ['hours', 'blackoutHours', 'carbonRiskHours', 'waterViolationHours', 'recoveryHours', 'consecutiveBankruptcyHours', 'maxConsecutiveBankruptcyHours']) {
+      delete metrics[key];
+    }
+  }
+  const migrated = {
+    ...source,
+    status: campaignComplete ? 'passed' : 'locked',
+    phaseDay: Number(source.phaseDay ?? source.phaseHour) || 0,
+    metrics,
+  };
+  delete migrated.phaseHour;
+  delete migrated.startedAtHour;
+  return migrated;
+}
+
+export function migrateV7ToV8(data) {
+  const campaignComplete = Boolean(data.campaignComplete);
+  const legacyQuestIndex = Math.max(1, Math.min(15, Math.trunc(Number(data.questIndex) || 1)));
+  const questIndex = campaignComplete ? 15 : legacyQuestIndex <= 6 ? legacyQuestIndex : 7;
+  const simulationTotals = {
+    ...(data.simulationTotals || {}),
+    days: Number(data.simulationTotals?.days ?? data.simulationTotals?.hours) || 0,
+    essentialOutageDays: Number(
+      data.simulationTotals?.essentialOutageDays ?? data.simulationTotals?.essentialOutageHours,
+    ) || 0,
+  };
+  delete simulationTotals.hours;
+  delete simulationTotals.essentialOutageHours;
+
+  const questProgress = {
+    ...(questIndex === legacyQuestIndex ? data.questProgress || {} : {}),
+  };
+  if (questProgress.consecutiveHours != null) {
+    questProgress.consecutiveDays = Math.max(0, Number(questProgress.consecutiveHours) || 0);
+    delete questProgress.consecutiveHours;
+  }
+
+  const migrated = {
+    ...data,
+    v: 8,
+    questIndex,
+    questStatus: campaignComplete ? 'claimed' : 'active',
+    questProgress,
+    elapsedGameDays: Math.floor(Math.max(0, Number(data.elapsedGameHours) || 0) / 24),
+    grid: (data.grid || []).map((cell) => cell ? {
+      ...cell,
+      project: migrateLegacyProject(cell.project),
+    } : null),
+    lastTickSummary: migrateLegacySummary(data.lastTickSummary),
+    consecutiveEssentialOutageDays: Math.max(0, Number(data.consecutiveEssentialOutageHours) || 0),
+    climateCampaign: {
+      status: campaignComplete ? 'complete' : questIndex >= 7 ? 'briefing' : 'locked',
+      eventType: null,
+      attempt: 0,
+      scheduledEventId: null,
+      progress: {},
+      lastResult: null,
+      completedEventTypes: [],
+    },
+    stressTest: migrateLegacyStressTest(data.stressTest, campaignComplete),
+    operationalRisk: {
+      negativeCreditDays: Math.max(0, Number(data.operationalRisk?.negativeCreditHours) || 0),
+      essentialBlackoutDays: Math.max(0, Number(data.operationalRisk?.essentialBlackoutHours) || 0),
+      warningIds: [...(data.operationalRisk?.warningIds || [])],
+    },
+    research: {
+      ...(data.research || {}),
+      jobs: Object.fromEntries(Object.entries(data.research?.jobs || {}).map(([id, job]) => [
+        id,
+        migrateLegacyResearchJob(job, id),
+      ])),
+      techLevels: {
+        solar: Math.max(1, Number(data.research?.techLevels?.solar) || 1),
+        wind: Math.max(1, Number(data.research?.techLevels?.wind) || 1),
+        battery: Math.max(1, Number(data.research?.techLevels?.battery) || 1),
+        tidal: Math.max(0, Number(data.research?.techLevels?.tidal) || 0),
+        green: 1,
+      },
+      quizAccelerationBankDays: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
+    },
+    carbonCrisisDays: Math.max(0, Number(data.carbonCrisisHours) || 0),
+    workforceRebalanceGraceDays: 24,
+    simulationTotals,
+  };
+  delete migrated.elapsedGameHours;
+  delete migrated.consecutiveEssentialOutageHours;
+  delete migrated.carbonCrisisHours;
+  delete migrated.research.quizAccelerationBankHours;
+  return migrated;
+}
+
 export function migrateSaveData(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid save payload');
   let migrated = structuredClone(data);
@@ -397,6 +538,7 @@ export function migrateSaveData(data) {
   if (migrated.v === 4) migrated = migrateV4ToV5(migrated);
   if (migrated.v === 5) migrated = migrateV5ToV6(migrated);
   if (migrated.v === 6) migrated = migrateV6ToV7(migrated);
+  if (migrated.v === 7) migrated = migrateV7ToV8(migrated);
   if (migrated.v !== SAVE_VERSION) throw new Error(`Unsupported save version: ${migrated.v}`);
   return stripObsoleteState(migrated);
 }

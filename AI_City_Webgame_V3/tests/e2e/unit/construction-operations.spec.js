@@ -4,7 +4,7 @@ import { effectiveFacilityStats } from '../../../src/systems/CityModifierSystem.
 import { calculateWorkforce } from '../../../src/systems/WorkforceSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
-import { advanceResearchOneHour } from '../../../src/systems/ResearchSystem.js';
+import { advanceResearchOneDay } from '../../../src/systems/ResearchSystem.js';
 import { createBuildProject, createUpgradeProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { calculateEnvironmentalOperations } from '../../../src/systems/FacilityOperationSystem.js';
 
@@ -45,7 +45,7 @@ test('general upgrades reduce variable operation but retain fixed upkeep and wor
   expect(stats.carbon).toBeCloseTo(5.6, 8);
   expect(stats.water).toBeCloseTo(1.4, 8);
   expect(stats.upkeep).toBe(0.5);
-  expect(stats.workforce).toBe(2);
+  expect(stats.workforce).toBe(3);
 });
 
 test('residential upgrades retain eighty percent population and operating values', () => {
@@ -56,8 +56,8 @@ test('residential upgrades retain eighty percent population and operating values
   expect(stats.demand).toBeCloseTo(1.6, 8);
   expect(stats.income).toBeCloseTo(0.4, 8);
   expect(stats.water).toBeCloseTo(0.8, 8);
-  expect(stats.workforce).toBe(8);
-  expect(labor.capacity).toBe(8);
+  expect(stats.workforce).toBeCloseTo(4.8, 8);
+  expect(labor.capacity).toBeCloseTo(4.8, 8);
 });
 
 test('data-center upgrades use their dedicated demand, income, water, and research ratios', () => {
@@ -67,7 +67,7 @@ test('data-center upgrades use their dedicated demand, income, water, and resear
   expect(stats.income).toBeCloseTo(1.2, 8);
   expect(stats.water).toBeCloseTo(3.5, 8);
   expect(stats.researchSpeed).toBe(0.5);
-  expect(stats.workforce).toBe(3);
+  expect(stats.workforce).toBe(4);
 });
 
 test('build sites do not generate power or create economy count and health effects', () => {
@@ -84,7 +84,7 @@ test('build sites do not generate power or create economy count and health effec
 
   expect(power.generationAvailable).toBe(0);
   expect(power.demand).toBe(0);
-  expect(economy).toMatchObject({ maintenance: 0, overcrowding: 0, health: 0, hourlyCarbon: 0, hourlyWater: 0 });
+  expect(economy).toMatchObject({ maintenance: 0, overcrowding: 0, health: 0, dailyCarbon: 0, dailyWater: 0 });
 });
 
 test('an upgrading battery retains stored energy and capacity but halves throughput', () => {
@@ -110,16 +110,16 @@ test('active research in an upgrading data center advances at half speed', () =>
     solar2: {
       id: 'solar2',
       dataCenterIndex: 0,
-      elapsedEffectiveHours: 0,
+      elapsedEffectiveDays: 0,
       status: 'running',
       paidCost: 3,
     },
   };
 
-  const result = advanceResearchOneHour(state, { 0: { demand: 5.6, delivered: 5.6, ratio: 1 } });
+  const result = advanceResearchOneDay(state, { 0: { demand: 5.6, delivered: 5.6, ratio: 1 } });
 
-  expect(result.jobs.solar2).toMatchObject({ status: 'running', advancedHours: 0.5 });
-  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(0.5);
+  expect(result.jobs.solar2).toMatchObject({ status: 'running', advancedDays: 0.5 });
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(0.5);
 });
 
 test('an upgrading cooling facility provides only its construction-stage cooling effect', () => {

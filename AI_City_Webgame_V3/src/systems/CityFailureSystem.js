@@ -2,12 +2,12 @@ import { CITY_FAILURE_RULES } from '../core/Constants.js';
 
 const WARNING_THRESHOLDS = Object.freeze({
   credit: Object.freeze([
-    CITY_FAILURE_RULES.CREDIT_WARNING_HOURS,
-    CITY_FAILURE_RULES.CREDIT_PAUSE_HOURS,
+    CITY_FAILURE_RULES.CREDIT_WARNING_DAYS,
+    CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS,
   ]),
   essential: Object.freeze([
-    CITY_FAILURE_RULES.ESSENTIAL_WARNING_HOURS,
-    CITY_FAILURE_RULES.ESSENTIAL_PAUSE_HOURS,
+    CITY_FAILURE_RULES.ESSENTIAL_WARNING_DAYS,
+    CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS,
   ]),
 });
 
@@ -36,50 +36,53 @@ export function isOperationalRiskActive(state) {
 }
 
 export function applyOperationalRisk(state, summary) {
-  state.operationalRisk ||= { negativeCreditHours: 0, essentialBlackoutHours: 0, warningIds: [] };
+  state.operationalRisk ||= { negativeCreditDays: 0, essentialBlackoutDays: 0, warningIds: [] };
   state.operationalRisk.warningIds ||= [];
   if (state.gameOver) {
     return { ...state.operationalRisk, warnings: [], pauseTransition: null, gameOverTransition: false };
   }
   const gridIsOperational = isOperationalRiskActive(state);
   if (!gridIsOperational) {
-    state.operationalRisk.negativeCreditHours = 0;
-    state.operationalRisk.essentialBlackoutHours = 0;
+    state.operationalRisk.negativeCreditDays = 0;
+    state.operationalRisk.essentialBlackoutDays = 0;
     return { ...state.operationalRisk, warnings: [], pauseTransition: null, gameOverTransition: false };
   }
-  const creditBefore = Math.max(0, Number(state.operationalRisk.negativeCreditHours) || 0);
-  const essentialBefore = Math.max(0, Number(state.operationalRisk.essentialBlackoutHours) || 0);
-  const negativeCreditHours = advanceCounter(creditBefore, state.credits < 0);
-  const essentialBlackoutHours = advanceCounter(
+  const creditBefore = Math.max(0, Number(state.operationalRisk.negativeCreditDays) || 0);
+  const essentialBefore = Math.max(0, Number(state.operationalRisk.essentialBlackoutDays) || 0);
+  const migrationGraceActive = (Number(state.workforceRebalanceGraceDays) || 0) > 0;
+  const negativeCreditDays = migrationGraceActive && state.credits < 0
+    ? creditBefore
+    : advanceCounter(creditBefore, state.credits < 0);
+  const essentialBlackoutDays = advanceCounter(
     essentialBefore,
     (summary.essentialSupplyPercent ?? 100) <= CITY_FAILURE_RULES.ESSENTIAL_BLACKOUT_PERCENT,
   );
-  state.operationalRisk.negativeCreditHours = negativeCreditHours;
-  state.operationalRisk.essentialBlackoutHours = essentialBlackoutHours;
+  state.operationalRisk.negativeCreditDays = negativeCreditDays;
+  state.operationalRisk.essentialBlackoutDays = essentialBlackoutDays;
   const warnings = [
-    ...newlyCrossedWarnings(state, 'credit', creditBefore, negativeCreditHours),
-    ...newlyCrossedWarnings(state, 'essential', essentialBefore, essentialBlackoutHours),
+    ...newlyCrossedWarnings(state, 'credit', creditBefore, negativeCreditDays),
+    ...newlyCrossedWarnings(state, 'essential', essentialBefore, essentialBlackoutDays),
   ];
-  const creditPauseId = `credit-${CITY_FAILURE_RULES.CREDIT_PAUSE_HOURS}`;
-  const essentialPauseId = `essential-${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_HOURS}`;
+  const creditPauseId = `credit-${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}`;
+  const essentialPauseId = `essential-${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS}`;
   const pauseTransition = warnings.includes(creditPauseId)
     ? creditPauseId
     : warnings.includes(essentialPauseId)
       ? essentialPauseId
       : null;
   let gameOverTransition = false;
-  if (negativeCreditHours >= CITY_FAILURE_RULES.CREDIT_GAME_OVER_HOURS) {
+  if (negativeCreditDays >= CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS) {
     state.gameOver = true;
     state.gameOverReason = 'bankruptcy';
     gameOverTransition = true;
-  } else if (essentialBlackoutHours >= CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_HOURS) {
+  } else if (essentialBlackoutDays >= CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS) {
     state.gameOver = true;
     state.gameOverReason = 'essential_blackout';
     gameOverTransition = true;
   }
   return {
-    negativeCreditHours,
-    essentialBlackoutHours,
+    negativeCreditDays,
+    essentialBlackoutDays,
     warningIds: [...state.operationalRisk.warningIds],
     warnings,
     pauseTransition,

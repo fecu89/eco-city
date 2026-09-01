@@ -18,8 +18,8 @@ export function chartValues(state = gameState) {
   const reliability = live?.demand > 0
     ? live.deliveredPower / live.demand * 100
     : m.reliability;
-  const carbon = live?.hourlyCarbon ?? m.carbon;
-  const water = live?.hourlyWater ?? m.water;
+  const carbon = live?.dailyCarbon ?? m.carbon;
+  const water = live?.dailyWater ?? m.water;
   return [
     clamp(m.dev, 0, 100),
     clamp(reliability, 0, 100),
@@ -31,7 +31,7 @@ export function chartValues(state = gameState) {
 
 export function chartAnimationOptions({ panelVisible, reducedMotion, timeScale }) {
   const duration = panelVisible && !reducedMotion && timeScale > 0
-    ? Math.round((SIMULATION.HOUR_MS / timeScale) * CHART_MOTION.ACTIVE_INTERVAL_FRACTION)
+    ? Math.round((SIMULATION.DAY_MS / timeScale) * CHART_MOTION.ACTIVE_INTERVAL_FRACTION)
     : 0;
   return { duration, easing: CHART_MOTION.EASING };
 }

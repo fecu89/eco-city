@@ -5,9 +5,9 @@ import { migrateV1Save } from '../../../src/systems/SaveSystem.js';
 test('new state starts quest 1 at 2040 epoch with only residential unlocked', () => {
   const state = new GameState();
 
-  expect(SAVE_VERSION).toBe(7);
+  expect(SAVE_VERSION).toBe(8);
   expect(state.questIndex).toBe(1);
-  expect(state.elapsedGameHours).toBe(0);
+  expect(state.elapsedGameDays).toBe(0);
   expect(state.boardRadius).toBe(2);
   expect(state.grid).toHaveLength(19);
   expect([...state.unlockedFacilities]).toEqual(['residential']);
@@ -15,7 +15,7 @@ test('new state starts quest 1 at 2040 epoch with only residential unlocked', ()
   expect(state.serialize().evidence).toBeUndefined();
 });
 
-test('v1 redesign saves migrate to quest 10 without evidence', () => {
+test('v1 post-tutorial saves migrate to the first climate quest without evidence', () => {
   const migrated = migrateV1Save({
     v: 1,
     stage: 5,
@@ -28,7 +28,7 @@ test('v1 redesign saves migrate to quest 10 without evidence', () => {
   expect(migrated.v).toBe(SAVE_VERSION);
   expect(migrated.boardRadius).toBe(3);
   expect(migrated.grid).toHaveLength(37);
-  expect(migrated.questIndex).toBe(10);
+  expect(migrated.questIndex).toBe(7);
   expect(migrated.credits).toBe(22);
   expect(migrated.unlockedFacilities).toContain('green');
   expect(migrated.evidence).toBeUndefined();

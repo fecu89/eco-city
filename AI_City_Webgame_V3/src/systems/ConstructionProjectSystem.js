@@ -35,38 +35,38 @@ const ZERO_OPERATION_PROFILE = Object.freeze({
   batteryThroughput: 0,
 });
 
-export function constructionDurationHours(type) {
-  return CONSTRUCTION.BUILD_HOURS[type] ?? null;
+export function constructionDurationDays(type) {
+  return CONSTRUCTION.BUILD_DAYS[type] ?? null;
 }
 
-export function upgradeDurationHours(fromLevel) {
-  return CONSTRUCTION.UPGRADE_HOURS[Math.trunc(Number(fromLevel))] ?? null;
+export function upgradeDurationDays(fromLevel) {
+  return CONSTRUCTION.UPGRADE_DAYS[Math.trunc(Number(fromLevel))] ?? null;
 }
 
 export function createBuildProject({ type, paidCost }) {
-  const durationHours = constructionDurationHours(type);
-  if (!FACILITIES[type] || !durationHours) throw new Error(`Unknown build project type: ${type}`);
+  const durationDays = constructionDurationDays(type);
+  if (!FACILITIES[type] || !durationDays) throw new Error(`Unknown build project type: ${type}`);
   return {
     kind: 'build',
-    elapsedHours: 0,
-    durationHours,
+    elapsedDays: 0,
+    durationDays,
     paidCost: roundCredits(Math.max(0, Number(paidCost) || 0)),
   };
 }
 
 export function createUpgradeProject({ cell, paidCost }) {
   const fromLevel = Math.trunc(Number(cell?.level));
-  const durationHours = upgradeDurationHours(fromLevel);
+  const durationDays = upgradeDurationDays(fromLevel);
   const facility = FACILITIES[cell?.type];
-  if (!facility || !durationHours || fromLevel >= facility.maxLevel) {
+  if (!facility || !durationDays || fromLevel >= facility.maxLevel) {
     throw new Error(`Invalid upgrade project: ${cell?.type || 'unknown'} Lv.${fromLevel || 0}`);
   }
   return {
     kind: 'upgrade',
     fromLevel,
     toLevel: fromLevel + 1,
-    elapsedHours: 0,
-    durationHours,
+    elapsedDays: 0,
+    durationDays,
     paidCost: roundCredits(Math.max(0, Number(paidCost) || 0)),
     suspendedOperationMode: cell.operationMode || 'normal',
   };
@@ -131,29 +131,29 @@ export function normalizeConstructionProject(cell, rawProject) {
   if (rawProject == null) return { valid: true, complete: false, project: null };
   const kind = rawProject?.kind;
   const paidCost = Number(rawProject?.paidCost);
-  const elapsedHours = Number(rawProject?.elapsedHours);
-  const durationHours = Number(rawProject?.durationHours);
+  const elapsedDays = Number(rawProject?.elapsedDays);
+  const durationDays = Number(rawProject?.durationDays);
   const commonValid = ['build', 'upgrade'].includes(kind)
     && Number.isFinite(paidCost)
     && paidCost >= 0
-    && Number.isInteger(elapsedHours)
-    && elapsedHours >= 0
-    && Number.isInteger(durationHours)
-    && durationHours > 0;
+    && Number.isInteger(elapsedDays)
+    && elapsedDays >= 0
+    && Number.isInteger(durationDays)
+    && durationDays > 0;
   if (!commonValid) {
     return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
   }
 
   if (kind === 'build') {
-    const expectedDuration = constructionDurationHours(cell?.type);
-    if (!expectedDuration || durationHours !== expectedDuration) return { valid: false, kind };
+    const expectedDuration = constructionDurationDays(cell?.type);
+    if (!expectedDuration || durationDays !== expectedDuration) return { valid: false, kind };
     return {
       valid: true,
-      complete: elapsedHours >= durationHours,
+      complete: elapsedDays >= durationDays,
       project: {
         kind,
-        elapsedHours: Math.min(elapsedHours, durationHours),
-        durationHours,
+        elapsedDays: Math.min(elapsedDays, durationDays),
+        durationDays,
         paidCost: roundCredits(paidCost),
       },
     };
@@ -161,35 +161,35 @@ export function normalizeConstructionProject(cell, rawProject) {
 
   const fromLevel = Number(rawProject?.fromLevel);
   const toLevel = Number(rawProject?.toLevel);
-  const expectedDuration = upgradeDurationHours(fromLevel);
+  const expectedDuration = upgradeDurationDays(fromLevel);
   const validUpgrade = Number.isInteger(fromLevel)
     && Number.isInteger(toLevel)
     && fromLevel === Number(cell?.level)
     && toLevel === fromLevel + 1
     && toLevel <= (FACILITIES[cell?.type]?.maxLevel || 0)
-    && durationHours === expectedDuration;
+    && durationDays === expectedDuration;
   if (!validUpgrade) {
     return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
   }
   return {
     valid: true,
-    complete: elapsedHours >= durationHours,
+    complete: elapsedDays >= durationDays,
     project: {
       kind,
       fromLevel,
       toLevel,
-      elapsedHours: Math.min(elapsedHours, durationHours),
-      durationHours,
+      elapsedDays: Math.min(elapsedDays, durationDays),
+      durationDays,
       paidCost: roundCredits(paidCost),
       suspendedOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal',
     },
   };
 }
 
-export function projectProgress(project, fractionalHour = 0) {
-  const duration = Math.max(1, Math.trunc(Number(project?.durationHours) || 0));
-  const elapsed = Math.max(0, Number(project?.elapsedHours) || 0);
-  const fraction = clamp(Number(fractionalHour) || 0, 0, 1);
+export function projectProgress(project, fractionalDay = 0) {
+  const duration = Math.max(1, Math.trunc(Number(project?.durationDays) || 0));
+  const elapsed = Math.max(0, Number(project?.elapsedDays) || 0);
+  const fraction = clamp(Number(fractionalDay) || 0, 0, 1);
   return clamp((elapsed + fraction) / duration, 0, 1);
 }
 
@@ -202,8 +202,8 @@ export function projectStage(project) {
 }
 
 export function projectRefund(project) {
-  const elapsed = Math.max(0, Math.trunc(Number(project?.elapsedHours) || 0));
-  const duration = Math.max(1, Math.trunc(Number(project?.durationHours) || 0));
+  const elapsed = Math.max(0, Math.trunc(Number(project?.elapsedDays) || 0));
+  const duration = Math.max(1, Math.trunc(Number(project?.durationDays) || 0));
   if (elapsed >= duration) return null;
   const paidCost = roundCredits(Math.max(0, Number(project?.paidCost) || 0));
   let ratio = CONSTRUCTION.REFUND_RATIOS.LATE;
@@ -220,14 +220,14 @@ export function advanceConstructionProjects(state) {
     const project = cell?.project;
     if (!project) return;
     const previousStage = projectStage(project);
-    project.elapsedHours = Math.min(
-      Math.max(1, Math.trunc(Number(project.durationHours) || 1)),
-      Math.max(0, Math.trunc(Number(project.elapsedHours) || 0)) + 1,
+    project.elapsedDays = Math.min(
+      Math.max(1, Math.trunc(Number(project.durationDays) || 1)),
+      Math.max(0, Math.trunc(Number(project.elapsedDays) || 0)) + 1,
     );
     const nextStage = projectStage(project);
-    advanced.push({ index, kind: project.kind, elapsedHours: project.elapsedHours, durationHours: project.durationHours });
+    advanced.push({ index, kind: project.kind, elapsedDays: project.elapsedDays, durationDays: project.durationDays });
     if (previousStage !== nextStage) stageChanged.push({ index, kind: project.kind, previousStage, stage: nextStage });
-    if (project.elapsedHours < project.durationHours) return;
+    if (project.elapsedDays < project.durationDays) return;
 
     const transition = {
       index,

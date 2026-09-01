@@ -96,7 +96,7 @@ test.describe('visual', () => {
       await clickCell(page, index);
     }
     await page.evaluate(() => {
-      for (let hour = 0; hour < 5; hour += 1) window.__settleSimulationHour();
+      for (let day = 0; day < 5; day += 1) window.__settleSimulationDay();
     });
     await page.locator('[data-hud-target="quest"]').first().click();
     await page.locator('#questPanelClaimBtn').click();

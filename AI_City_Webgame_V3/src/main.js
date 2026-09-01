@@ -7,10 +7,10 @@ import { assessConstructionPlan, commitConstructionPlan } from './systems/Constr
 import { initSaveSystem, loadSavedGame, clearSavedGame } from './systems/SaveSystem.js';
 import { calculatePowerNetwork } from './systems/PowerNetworkSystem.js';
 import { settleEconomy } from './systems/EconomySystem.js';
-import { createHourSettler, createSimulationController } from './systems/SimulationSystem.js';
+import { createDaySettler, createSimulationController } from './systems/SimulationSystem.js';
 import { applySimulationQuestProgress } from './systems/QuestSystem.js';
-import { advanceResearchOneHour, researchDemandByIndex } from './systems/ResearchSystem.js';
-import { calendarAtElapsedHour, formatCalendar, intervalForTimeScale } from './systems/CalendarSystem.js';
+import { advanceResearchOneDay, researchDemandByIndex } from './systems/ResearchSystem.js';
+import { calendarAtElapsedDay, formatCalendar, intervalForTimeScale } from './systems/CalendarSystem.js';
 import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { buildCityModifierContext } from './systems/CityModifierSystem.js';
 import { forecastConstruction, forecastUpgrade } from './systems/SimulationForecastSystem.js';
@@ -52,16 +52,16 @@ import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 import { createContinuousClockView } from './ui/ContinuousClockView.js';
 import { currentObjectiveEvaluation } from './systems/ObjectiveSystem.js';
-import { CITY_EVENTS, EVENT_FORECAST_HOURS, STRESS_PHASES } from './core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from './core/EventDefinitions.js';
 import { initForecastView, renderForecast } from './ui/ForecastView.js';
 import { showEventResult } from './ui/EventResultView.js';
 
 const $ = (s) => document.querySelector(s);
-const settleHour = createHourSettler({
+const settleDay = createDaySettler({
   calculatePowerNetwork,
   settleEconomy,
   getResearchDemand: researchDemandByIndex,
-  advanceResearch: advanceResearchOneHour,
+  advanceResearch: advanceResearchOneDay,
   evaluateQuest: applySimulationQuestProgress,
 });
 let simulationController = null;
@@ -157,8 +157,8 @@ function refreshAudioControls() {
   els.soundBtn.title = gameState.sound ? '효과음 끄기' : '효과음 켜기';
 }
 
-function settleSimulationHour() {
-  const result = settleHour(gameState);
+function settleSimulationDay() {
+  const result = settleDay(gameState);
   result.construction?.stageChanged?.forEach((transition) => {
     eventBus.emit(Events.CONSTRUCTION_STAGE_CHANGED, transition);
   });
@@ -185,13 +185,13 @@ function settleSimulationHour() {
     eventBus.emit(Events.TOAST_SHOW, {
       kicker: completion.kind === 'build' ? 'CONSTRUCTION COMPLETE' : 'UPGRADE COMPLETE',
       title: `${facility?.name || completion.type} ${completion.kind === 'build' ? '완공' : `Lv.${completion.level} 강화 완료`}`,
-      text: '이번 시간 정산부터 새 성능이 적용됩니다.',
+      text: '이번 일일 정산부터 새 성능이 적용됩니다.',
     });
     eventBus.emit(Events.AUDIO_SFX, { name: completion.kind === 'build' ? 'place' : 'upgrade' });
   });
   result.research?.completed?.forEach((completion) => eventBus.emit(Events.RESEARCH_COMPLETED, completion));
   if (result.research?.status !== 'idle') eventBus.emit(Events.RESEARCH_PROGRESS, result.research);
-  result.carbonCrisis?.warnings?.forEach((hours) => eventBus.emit(Events.CARBON_WARNING, { hours, summary: result.summary }));
+  result.carbonCrisis?.warnings?.forEach((days) => eventBus.emit(Events.CARBON_WARNING, { days, summary: result.summary }));
   if (result.carbonCrisis?.gameOverTransition) eventBus.emit(Events.GAME_OVER, { summary: result.summary });
   result.operationalRisk?.warnings?.forEach((warning) => eventBus.emit(Events.OPERATIONAL_RISK_WARNING, {
     warning,
@@ -251,7 +251,7 @@ function completeConstructionPlan() {
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: 'CONSTRUCTION STARTED',
     title: `${result.projects.length}개 시설 착공`,
-    text: '게임 시간이 흐르면 각각의 공사 시간에 맞춰 완공됩니다.',
+    text: '게임 날짜가 흐르면 각각의 공사 기간에 맞춰 완공됩니다.',
   });
   refreshAll();
   return result;
@@ -259,12 +259,12 @@ function completeConstructionPlan() {
 
 function forecastOperationsForGrid(grid) {
   const coords = createHexCoordinates(gameState.boardRadius);
-  const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
+  const calendar = calendarAtElapsedDay(gameState.elapsedGameDays);
   const modifierContext = buildCityModifierContext({ ...gameState, grid }, { coords, calendar });
   const power = calculatePowerNetwork({
     grid,
     coords,
-    hour: calendar.hour,
+    dayIndex: gameState.elapsedGameDays,
     tickIndex: gameState.tickIndex,
     heatwave: gameState.climateAlert === 'extreme_heat',
     additionalDemandByIndex: researchDemandByIndex(gameState),
@@ -298,15 +298,15 @@ function constructionForecastForAssessment(assessment) {
     type,
     paidCost: assessment.paidCostByIndex[index],
   }));
-  const forecast = forecastConstruction(gameState, plannedProjects, { settleHour });
+  const forecast = forecastConstruction(gameState, plannedProjects, { settleDay });
   const finalEconomy = forecast.finalEconomy || current;
   const finalSummary = forecast.finalSummary || gameState.lastTickSummary || {};
   const projected = {
     ...finalEconomy,
     deliveredPower: finalSummary.deliveredPower || 0,
     demand: finalSummary.demand || 0,
-    hourlyCarbon: finalSummary.hourlyCarbon || 0,
-    hourlyWater: finalSummary.hourlyWater || 0,
+    dailyCarbon: finalSummary.dailyCarbon || 0,
+    dailyWater: finalSummary.dailyWater || 0,
     labor: {
       used: finalSummary.used || 0,
       capacity: finalSummary.capacity || 0,
@@ -315,35 +315,35 @@ function constructionForecastForAssessment(assessment) {
   return { current, projected, ...forecast };
 }
 
-function operationSnapshotFromForecastHour(hour) {
-  if (!hour) return null;
+function operationSnapshotFromForecastDay(day) {
+  if (!day) return null;
   return {
-    netCredits: hour.summary.netCredits,
-    deliveredPower: hour.summary.deliveredPower,
-    demand: hour.summary.demand,
-    hourlyCarbon: hour.summary.hourlyCarbon,
-    hourlyWater: hour.summary.hourlyWater,
-    used: hour.summary.used,
-    capacity: hour.summary.capacity,
+    netCredits: day.summary.netCredits,
+    deliveredPower: day.summary.deliveredPower,
+    demand: day.summary.demand,
+    dailyCarbon: day.summary.dailyCarbon,
+    dailyWater: day.summary.dailyWater,
+    used: day.summary.used,
+    capacity: day.summary.capacity,
   };
 }
 
 function upgradeForecastForIndex(index, paidCost) {
   const currentEconomy = forecastOperationsForGrid(gameState.grid);
-  const prediction = forecastUpgrade(gameState, index, { paidCost, settleHour });
+  const prediction = forecastUpgrade(gameState, index, { paidCost, settleDay });
   return {
     ...prediction,
     current: {
       netCredits: currentEconomy.netCredits,
       deliveredPower: currentEconomy.deliveredPower,
       demand: currentEconomy.demand,
-      hourlyCarbon: currentEconomy.hourlyCarbon,
-      hourlyWater: currentEconomy.hourlyWater,
+      dailyCarbon: currentEconomy.dailyCarbon,
+      dailyWater: currentEconomy.dailyWater,
       used: currentEconomy.labor.used,
       capacity: currentEconomy.labor.capacity,
     },
-    during: operationSnapshotFromForecastHour(prediction.hourly[0]),
-    completed: operationSnapshotFromForecastHour(prediction.hourly.at(-1)),
+    during: operationSnapshotFromForecastDay(prediction.daily[0]),
+    completed: operationSnapshotFromForecastDay(prediction.daily.at(-1)),
   };
 }
 
@@ -512,9 +512,9 @@ function boot() {
     setPlayerTimeScale(0);
     openEventPreparationModal(cityEvent);
     eventBus.emit(Events.TOAST_SHOW, {
-      kicker: `${EVENT_FORECAST_HOURS}시간 기후 예보`,
+      kicker: `${EVENT_FORECAST_DAYS}일 기후 예보`,
       title: `${definition.label} 대비 시작`,
-      text: `${definition.durationHours}시간 지속 · ${definition.description}`,
+      text: `${definition.durationDays}일 지속 · ${definition.description}`,
       meta: '준비를 마친 뒤 상단 재생 버튼을 누르세요.',
       priority: true,
       kind: 'event-forecast-alert',
@@ -534,7 +534,7 @@ function boot() {
     eventBus.emit(Events.TOAST_SHOW, {
       kicker: `최종 테스트 ${gameState.stressTest.phaseIndex + 1}/${STRESS_PHASES.length}`,
       title: `${phaseStarted.label} 단계 시작`,
-      text: `${phaseStarted.durationHours}시간 동안 도시 운영을 조정하세요.`,
+      text: `${phaseStarted.durationDays}일 동안 도시 운영을 조정하세요.`,
       priority: true,
     });
   });
@@ -579,11 +579,11 @@ function boot() {
   loadSavedGame();
   resumeTimeScale = gameState.timeScale || TIME.DEFAULT_SCALE;
 
-  simulationController = createSimulationController({ settle: settleSimulationHour, getIntervalMs: intervalForTimeScale });
+  simulationController = createSimulationController({ settle: settleSimulationDay, getIntervalMs: intervalForTimeScale });
   simulationController.setTimeScale(gameState.timeScale);
   continuousClockView = createContinuousClockView({
     timeElement: els.simTime,
-    getElapsedHours: () => gameState.elapsedGameHours,
+    getElapsedDays: () => gameState.elapsedGameDays,
     getProgress: () => simulationController.getProgress(),
     onProgress: (tickProgress) => {
       refreshCityConstructionProgress(tickProgress);
@@ -602,10 +602,10 @@ function boot() {
       continuousClockView?.renderNow();
     }
   });
-  eventBus.on(Events.CARBON_WARNING, ({ hours }) => {
+  eventBus.on(Events.CARBON_WARNING, ({ days }) => {
     eventBus.emit(Events.TOAST_SHOW, {
       title: '탄소 위기 경보',
-      text: `${hours}/${CARBON_CRISIS.GAME_OVER_HOURS}시간 · 시간당 탄소를 ${CARBON_CRISIS.SAFE_HOURLY} 이하로 낮추세요.`,
+      text: `${days}/${CARBON_CRISIS.GAME_OVER_DAYS}일 · 일일 탄소를 ${CARBON_CRISIS.SAFE_DAILY} 이하로 낮추세요.`,
       priority: true,
     });
   });
@@ -614,15 +614,15 @@ function boot() {
     eventBus.emit(Events.TOAST_SHOW, {
       title: credit ? '도시 재정 경고' : '필수시설 전력 경고',
       text: credit
-        ? `연속 적자 ${risk.negativeCreditHours}/24시간`
-        : `필수시설 공급 5% 이하 ${risk.essentialBlackoutHours}/12시간`,
-      meta: '안전한 정산 1회마다 위험 시간이 1시간씩 회복됩니다.',
+        ? `연속 적자 ${risk.negativeCreditDays}/24일`
+        : `필수시설 공급 5% 이하 ${risk.essentialBlackoutDays}/12일`,
+      meta: '안전한 일일 정산 1회마다 위험 기간이 1일씩 회복됩니다.',
       priority: true,
     });
   });
   eventBus.on(Events.OPERATIONAL_RISK_PAUSE, ({ reason }) => openOperationalRiskModal({ reason }));
   eventBus.on(Events.GAME_OVER, ({ summary }) => {
-    openCarbonGameOverModal({ hourlyCarbon: summary?.hourlyCarbon, onReset: resetAfterGameOver });
+    openCarbonGameOverModal({ dailyCarbon: summary?.dailyCarbon, onReset: resetAfterGameOver });
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) simulationController.pause('hidden');
@@ -631,7 +631,7 @@ function boot() {
   simulationController.start();
   continuousClockView.start();
   if (gameState.gameOver) {
-    openCarbonGameOverModal({ hourlyCarbon: gameState.lastTickSummary?.hourlyCarbon, onReset: resetAfterGameOver });
+    openCarbonGameOverModal({ dailyCarbon: gameState.lastTickSummary?.dailyCarbon, onReset: resetAfterGameOver });
   }
 
   bindEvents();
@@ -663,7 +663,7 @@ window.__getOnboardingState = () => getOnboardingState();
 window.__openStoryForTest = () => openStory({ replay: true });
 window.__renderCityForTest = () => renderGrid();
 window.__refreshGameForTest = () => refreshAll();
-window.__settleSimulationHour = () => settleSimulationHour();
+window.__settleSimulationDay = () => settleSimulationDay();
 window.__getSimulationState = () => simulationController?.getState();
 window.__setTimeScale = (scale) => {
   const applied = setPlayerTimeScale(scale);
@@ -679,8 +679,8 @@ window.__finishFacilityAmbientForTest = () => finishFacilityAmbientEffects();
 window.render_game_to_text = () => {
   const m = gameState.metrics;
   const coords = createHexCoordinates(gameState.boardRadius);
-  const calendar = calendarAtElapsedHour(gameState.elapsedGameHours);
-  const visualCalendar = calendarAtElapsedHour(gameState.elapsedGameHours + (simulationController?.getProgress() || 0));
+  const calendar = calendarAtElapsedDay(gameState.elapsedGameDays);
+  const visualCalendar = calendarAtElapsedDay(gameState.elapsedGameDays + (simulationController?.getProgress() || 0));
   const payload = {
     coords: 'axial pointy-top hex grid; index 0 is center; radius 2=19 cells, radius 3=37 cells',
     mode: gameState.gameOver ? 'game_over' : 'playing',
@@ -710,13 +710,13 @@ window.render_game_to_text = () => {
     stressTest: {
       status: gameState.stressTest.status,
       phaseIndex: gameState.stressTest.phaseIndex,
-      phaseHour: gameState.stressTest.phaseHour,
+      phaseDay: gameState.stressTest.phaseDay,
     },
     gameTime: { ...calendar, label: formatCalendar(calendar), timeScale: gameState.timeScale },
     visualGameTime: { ...visualCalendar, label: formatCalendar(visualCalendar) },
     climateAlert: gameState.climateAlert,
-    carbonCrisisHours: gameState.carbonCrisisHours,
-    carbonCrisisLimit: CARBON_CRISIS.GAME_OVER_HOURS,
+    carbonCrisisDays: gameState.carbonCrisisDays,
+    carbonCrisisLimit: CARBON_CRISIS.GAME_OVER_DAYS,
     turn: gameState.turn,
     credits: gameState.credits,
     devScore: m ? m.dev : 0,
@@ -740,11 +740,11 @@ window.render_game_to_text = () => {
       jobs: gameState.research.jobs,
       completedIds: [...gameState.research.completedIds],
       techLevels: gameState.research.techLevels,
-      quizAccelerationBankHours: gameState.research.quizAccelerationBankHours,
+      quizAccelerationBankDays: gameState.research.quizAccelerationBankDays,
     },
     island: getCityRendererStats().environment,
     simulation: gameState.lastTickSummary,
-    netCreditsPerHour: gameState.lastTickSummary?.netCredits ?? 0,
+    netCreditsPerDay: gameState.lastTickSummary?.netCredits ?? 0,
     deliveredPower: gameState.lastTickSummary?.deliveredPower ?? 0,
     demand: gameState.lastTickSummary?.demand ?? 0,
     lowCarbonPercent: gameState.lastTickSummary?.lowCarbonPercent ?? 0,

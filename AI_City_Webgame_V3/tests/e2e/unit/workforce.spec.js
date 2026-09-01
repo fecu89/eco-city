@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { WORKFORCE_LEVELS } from '../../../src/core/Constants.js';
 
 const Workforce = await import('../../../src/systems/WorkforceSystem.js').catch(() => ({}));
 const { calculateWorkforce, workforceDeltaForCell, validateWorkforceGrid } = Workforce;
@@ -10,22 +11,28 @@ function workforceFor(grid) {
 
 const cell = (type, level = 1) => ({ type, level, priority: 'normal' });
 
-test('one level-one home supplies ten residents to staffed facilities', () => {
+test('housing and facility workforce follow the climate campaign balance table', () => {
+  expect(WORKFORCE_LEVELS.residential).toEqual([0, 6, 10, 15]);
+  expect(WORKFORCE_LEVELS.factory).toEqual([0, 4, 6, 8]);
+  expect(WORKFORCE_LEVELS.thermal).toEqual([0, 3, 4, 5]);
+  expect(WORKFORCE_LEVELS.data).toEqual([0, 4, 6, 8]);
+  expect(WORKFORCE_LEVELS.nuclear).toEqual([0, 6, 8, 10]);
+  expect(WORKFORCE_LEVELS.tidal).toEqual([0, 3, 4, 5]);
+});
+
+test('five level-one homes support the reference diversified city', () => {
   expect(workforceFor([
-    cell('residential'),
-    cell('thermal'),
-    cell('data'),
-    cell('factory'),
-  ])).toEqual({
-    capacity: 10,
-    used: 9,
-    available: 1,
+    ...Array.from({ length: 5 }, () => cell('residential')),
+    cell('factory'), cell('thermal'), cell('data'), cell('nuclear'),
+    cell('solar'), cell('wind'), cell('battery'), cell('cooling'), cell('tidal'),
+  ])).toMatchObject({
+    capacity: 30,
+    used: 26,
+    available: 4,
     shortage: 0,
-    utilization: 0.9,
-    workforce: 10,
-    jobs: 9,
+    workforce: 30,
+    jobs: 26,
     industryFill: 1,
-    employmentRate: 0.9,
   });
 });
 
@@ -45,18 +52,18 @@ test('every operating facility consumes its approved level-specific population',
   ];
 
   expect(workforceFor(grid)).toMatchObject({
-    capacity: 22,
-    used: 32,
+    capacity: 15,
+    used: 38,
     available: 0,
-    shortage: 10,
+    shortage: 23,
     utilization: 1,
-    industryFill: 0.7,
+    industryFill: 0.4,
   });
 });
 
 test('workforce deltas distinguish housing supply from facility demand', () => {
   expect(typeof workforceDeltaForCell).toBe('function');
-  expect(workforceDeltaForCell('residential', 1, 2)).toEqual({ capacity: 5, used: 0 });
+  expect(workforceDeltaForCell('residential', 1, 2)).toEqual({ capacity: 4, used: 0 });
   expect(workforceDeltaForCell('data', 1, 2)).toEqual({ capacity: 0, used: 2 });
   expect(workforceDeltaForCell('green', 1, 3)).toEqual({ capacity: 0, used: 0 });
 });
@@ -65,5 +72,5 @@ test('workforce validation accepts an empty city and reports an exact shortage',
   expect(typeof validateWorkforceGrid).toBe('function');
   expect(validateWorkforceGrid([])).toMatchObject({ ok: true, shortage: 0 });
   expect(validateWorkforceGrid([cell('residential'), cell('nuclear', 3), cell('thermal')]))
-    .toMatchObject({ ok: false, shortage: 1, capacity: 10, used: 11 });
+    .toMatchObject({ ok: false, shortage: 7, capacity: 6, used: 13 });
 });

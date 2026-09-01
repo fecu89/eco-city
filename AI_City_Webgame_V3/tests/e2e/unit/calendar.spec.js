@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
-  calendarAtElapsedHour,
+  calendarAtElapsedDay,
   formatCalendar,
   formatCalendarDate,
   intervalForTimeScale,
@@ -8,12 +8,12 @@ import {
 import { createSimulationController } from '../../../src/systems/SimulationSystem.js';
 
 test('calendar starts at 2040-01-01 08:00 and uses leap-year rules', () => {
-  expect(formatCalendar(calendarAtElapsedHour(0))).toBe('2040-01-01 08:00');
-  expect(calendarAtElapsedHour(0.5)).toMatchObject({ hour: 8, minute: 30 });
-  expect(formatCalendar(calendarAtElapsedHour(0.5))).toBe('2040-01-01 08:30');
-  expect(formatCalendar(calendarAtElapsedHour(24 * 59 + 16))).toBe('2040-03-01 00:00');
-  expect(formatCalendar(calendarAtElapsedHour(24 * 365 + 16))).toBe('2041-01-01 00:00');
-  expect(formatCalendarDate(calendarAtElapsedHour(0.5))).toBe('2040-01-01');
+  expect(formatCalendar(calendarAtElapsedDay(0))).toBe('2040-01-01 08:00');
+  expect(calendarAtElapsedDay(0.5)).toMatchObject({ hour: 8, minute: 30 });
+  expect(formatCalendar(calendarAtElapsedDay(0.5))).toBe('2040-01-01 08:30');
+  expect(formatCalendar(calendarAtElapsedDay(24 * 59 + 16))).toBe('2040-03-01 00:00');
+  expect(formatCalendar(calendarAtElapsedDay(24 * 365 + 16))).toBe('2041-01-01 00:00');
+  expect(formatCalendarDate(calendarAtElapsedDay(0.5))).toBe('2040-01-01');
 });
 
 test('supported speeds resolve to exact real-time intervals', () => {

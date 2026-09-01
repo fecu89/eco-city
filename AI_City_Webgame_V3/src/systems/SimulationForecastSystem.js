@@ -11,8 +11,8 @@ export function cloneSimulationState(state) {
   return clone;
 }
 
-function remainingHours(project) {
-  return Math.max(0, project.durationHours - project.elapsedHours);
+function remainingDays(project) {
+  return Math.max(0, project.durationDays - project.elapsedDays);
 }
 
 function activeProjects(state) {
@@ -32,10 +32,10 @@ function forecastWarnings(result) {
   return warnings;
 }
 
-function severityForHour(hour) {
-  const warnings = hour.warnings.length;
-  const powerGap = Math.max(0, hour.summary.demand - hour.summary.deliveredPower);
-  const creditGap = Math.max(0, -hour.summary.netCredits);
+function severityForDay(day) {
+  const warnings = day.warnings.length;
+  const powerGap = Math.max(0, day.summary.demand - day.summary.deliveredPower);
+  const creditGap = Math.max(0, -day.summary.netCredits);
   return warnings * 1000 + powerGap * 10 + creditGap;
 }
 
@@ -61,40 +61,38 @@ function placePlannedProject(state, planned) {
   state.credits = roundCredits(state.credits - paidCost);
 }
 
-function runForecast(forecastState, settleHour, fallbackSummary) {
-  const horizonHours = activeProjects(forecastState)
-    .reduce((maximum, { project }) => Math.max(maximum, remainingHours(project)), 0);
-  const hourly = [];
+function runForecastForHorizon(forecastState, settleDay, fallbackSummary, horizonDays) {
+  const daily = [];
   const timeline = [];
   let finalResult = null;
 
   eventBus.withSuppressedEvents(() => {
-    for (let hourOffset = 1; hourOffset <= horizonHours; hourOffset += 1) {
-      finalResult = settleHour(forecastState);
-      const hour = {
-        hourOffset,
+    for (let dayOffset = 1; dayOffset <= horizonDays; dayOffset += 1) {
+      finalResult = settleDay(forecastState);
+      const day = {
+        dayOffset,
         summary: structuredClone(finalResult.summary),
         economy: structuredClone(finalResult.economy),
         power: structuredClone(finalResult.power),
         warnings: forecastWarnings(finalResult),
       };
-      hourly.push(hour);
+      daily.push(day);
       if (finalResult.construction.completed.length) {
         timeline.push({
-          ...hour,
+          ...day,
           completed: structuredClone(finalResult.construction.completed),
         });
       }
     }
   });
 
-  const worstInterval = hourly.length
-    ? hourly.reduce((worst, hour) => severityForHour(hour) > severityForHour(worst) ? hour : worst)
+  const worstInterval = daily.length
+    ? daily.reduce((worst, day) => severityForDay(day) > severityForDay(worst) ? day : worst)
     : null;
 
   return {
-    horizonHours,
-    hourly,
+    horizonDays,
+    daily,
     timeline,
     worstInterval,
     finalSummary: finalResult?.summary ? structuredClone(finalResult.summary) : fallbackSummary,
@@ -104,20 +102,33 @@ function runForecast(forecastState, settleHour, fallbackSummary) {
   };
 }
 
-export function forecastConstruction(state, plannedProjects = [], { settleHour } = {}) {
-  if (typeof settleHour !== 'function') throw new TypeError('forecastConstruction requires settleHour.');
-  const forecastState = cloneSimulationState(state);
-  plannedProjects.forEach((planned) => placePlannedProject(forecastState, planned));
-  return runForecast(forecastState, settleHour, state.lastTickSummary);
+function runProjectForecast(forecastState, settleDay, fallbackSummary) {
+  const horizonDays = activeProjects(forecastState)
+    .reduce((maximum, { project }) => Math.max(maximum, remainingDays(project)), 0);
+  return runForecastForHorizon(forecastState, settleDay, fallbackSummary, horizonDays);
 }
 
-export function forecastUpgrade(state, index, { paidCost, settleHour } = {}) {
-  if (typeof settleHour !== 'function') throw new TypeError('forecastUpgrade requires settleHour.');
+export function forecastConstruction(state, plannedProjects = [], { settleDay } = {}) {
+  if (typeof settleDay !== 'function') throw new TypeError('forecastConstruction requires settleDay.');
+  const forecastState = cloneSimulationState(state);
+  plannedProjects.forEach((planned) => placePlannedProject(forecastState, planned));
+  return runProjectForecast(forecastState, settleDay, state.lastTickSummary);
+}
+
+export function forecastUpgrade(state, index, { paidCost, settleDay } = {}) {
+  if (typeof settleDay !== 'function') throw new TypeError('forecastUpgrade requires settleDay.');
   const forecastState = cloneSimulationState(state);
   const cell = forecastState.grid[index];
   if (!cell || cell.project) throw new Error(`Invalid upgrade forecast cell: ${index}`);
   const normalizedCost = roundCredits(Math.max(0, Number(paidCost) || 0));
   cell.project = createUpgradeProject({ cell, paidCost: normalizedCost });
   forecastState.credits = roundCredits(forecastState.credits - normalizedCost);
-  return runForecast(forecastState, settleHour, state.lastTickSummary);
+  return runProjectForecast(forecastState, settleDay, state.lastTickSummary);
+}
+
+export function forecastSimulation(state, horizonDays, { settleDay } = {}) {
+  if (typeof settleDay !== 'function') throw new TypeError('forecastSimulation requires settleDay.');
+  const days = Math.max(0, Math.trunc(Number(horizonDays) || 0));
+  const forecastState = cloneSimulationState(state);
+  return runForecastForHorizon(forecastState, settleDay, state.lastTickSummary, days);
 }

@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import { createBuildProject, createUpgradeProject } from '../../../src/systems/ConstructionProjectSystem.js';
-import { createHourSettler } from '../../../src/systems/SimulationSystem.js';
+import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 
 function realSettler() {
-  return createHourSettler({ calculatePowerNetwork, settleEconomy });
+  return createDaySettler({ calculatePowerNetwork, settleEconomy });
 }
 
 test('a build completed at the tick boundary operates during that same settlement', () => {
@@ -15,7 +15,7 @@ test('a build completed at the tick boundary operates during that same settlemen
     type: 'thermal',
     level: 1,
     operationMode: 'normal',
-    project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedHours: 11 },
+    project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedDays: 11 },
   };
   state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
 
@@ -35,7 +35,7 @@ test('an upgrade completing on a tick settles at the new level instead of the co
   const thermal = { type: 'thermal', level: 1, operationMode: 'normal' };
   state.grid[0] = {
     ...thermal,
-    project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedHours: 7 },
+    project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedDays: 7 },
   };
   state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
 
@@ -45,7 +45,7 @@ test('an upgrade completing on a tick settles at the new level instead of the co
   expect(result.power.generationAvailable).toBe(19.24);
 });
 
-test('an event beginning at the new game hour changes that hour power demand', () => {
+test('an event beginning on the new game day changes that day power demand', () => {
   const state = new GameState();
   state.progression.chapter = 3;
   state.events.schedule = [{ id: 'heat-1', type: 'heatwave', announceAt: 0, startAt: 1, endAt: 5 }];
@@ -54,7 +54,7 @@ test('an event beginning at the new game hour changes that hour power demand', (
 
   const result = realSettler()(state);
 
-  expect(state.elapsedGameHours).toBe(1);
+  expect(state.elapsedGameDays).toBe(1);
   expect(result.cityEvent.started).toMatchObject({ id: 'heat-1', type: 'heatwave' });
   expect(result.power.demand).toBe(2.5);
 });
@@ -70,9 +70,9 @@ test('unavoidable pre-grid construction does not pollute the report outage total
   const settle = realSettler();
 
   settle(state);
-  expect(state.simulationTotals.essentialOutageHours).toBe(0);
+  expect(state.simulationTotals.essentialOutageDays).toBe(0);
 
   state.claimedQuestIds.add('power-on');
   settle(state);
-  expect(state.simulationTotals.essentialOutageHours).toBe(1);
+  expect(state.simulationTotals.essentialOutageDays).toBe(1);
 });

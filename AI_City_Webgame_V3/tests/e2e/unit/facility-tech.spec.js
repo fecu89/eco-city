@@ -79,7 +79,7 @@ test('placement validator and placement command share tidal outer-ring rules and
   expect(validatePlacement(gameState, 'tidal', 0)).toMatchObject({ ok: false, reason: 'outer_ring_only' });
   expect(validatePlacement(gameState, 'tidal', outer)).toMatchObject({ ok: true });
   expect(placeFacility(outer)).toMatchObject({ ok: true, index: outer, key: 'tidal' });
-  expect(gameState.grid[outer].project).toMatchObject({ kind: 'build', durationHours: 15, elapsedHours: 0 });
+  expect(gameState.grid[outer].project).toMatchObject({ kind: 'build', durationDays: 15, elapsedDays: 0 });
   expect(gameState.credits).toBe(13);
   expect(FACILITIES.tidal).toMatchObject({ cost: 7, supply: 10, carbon: 0, water: 0 });
 });
@@ -110,8 +110,8 @@ test('tidal generation is stable at every hour and costs 0.3 credits per hour', 
   }
   const economy = settleEconomy({ grid, coords, facilityPower: { 0: { ratio: 1 } }, credits: 10 });
   expect(economy.facilityEconomy[7].upkeep).toBe(0.3);
-  expect(economy.hourlyCarbon).toBe(0);
-  expect(economy.hourlyWater).toBe(1);
+  expect(economy.dailyCarbon).toBe(0);
+  expect(economy.dailyWater).toBe(1);
 });
 
 test('renewable upgrades report city permit, technology, and credit gates independently', () => {
@@ -130,6 +130,21 @@ test('renewable upgrades report city permit, technology, and credit gates indepe
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'insufficient_credits' });
 });
 
+test('green upgrades require their dedicated research after the city permit', () => {
+  gameState.questIndex = 8;
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 2;
+  gameState.grid[0] = { type: 'green', level: 1 };
+
+  const locked = validateUpgrade(gameState, 0);
+  expect(locked).toMatchObject({ ok: false, reason: 'technology_required', requiredLevel: 2 });
+  expect(upgradeRequirementMessage(gameState, locked)).toContain('도시 수관 네트워크');
+
+  gameState.research.completedIds.add('green2');
+  gameState.research.techLevels.green = 2;
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
+});
+
 test('completed solar research can upgrade solar and satisfy quest 8', () => {
   gameState.stage = 5;
   gameState.questIndex = 8;
@@ -141,7 +156,7 @@ test('completed solar research can upgrade solar and satisfy quest 8', () => {
   gameState.research.completedIds.add('solar2');
   gameState.research.techLevels.solar = 2;
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
-  expect(upgradeCell(0)).toMatchObject({ ok: true, level: 1, targetLevel: 2, durationHours: 8 });
+  expect(upgradeCell(0)).toMatchObject({ ok: true, level: 1, targetLevel: 2, durationDays: 8 });
   expect(gameState.grid[0]).toMatchObject({ level: 1, project: { kind: 'upgrade', fromLevel: 1, toLevel: 2 } });
   expect(evaluateCurrentQuest(gameState).ready).toBe(false);
   for (let hour = 0; hour < 8; hour++) advanceConstructionProjects(gameState);
@@ -170,9 +185,9 @@ test('an upgrade is blocked when its extra staff would exceed the resident popul
   expect(validation).toMatchObject({
     ok: false,
     reason: 'insufficient_workforce',
-    capacity: 10,
-    used: 11,
-    shortage: 1,
+    capacity: 6,
+    used: 12,
+    shortage: 6,
   });
   expect(upgradeRequirementMessage(gameState, validation)).toContain('주거지');
 });
@@ -186,7 +201,7 @@ test('level-three renewable upgrades require and receive their own branch resear
     gameState.research.jobs[researchId] = {
       id: researchId,
       dataCenterIndex: 5,
-      elapsedEffectiveHours: 180,
+      elapsedEffectiveDays: 180,
       paidCost: 20,
     };
     completeResearchJob(gameState, researchId);

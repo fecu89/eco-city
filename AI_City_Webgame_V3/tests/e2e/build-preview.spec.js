@@ -32,6 +32,7 @@ for (const viewport of [
   await expect(page.locator('#buildConfirmMetrics [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
     .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
   await expect(page.locator('#buildConfirmMetrics [data-metric="credit"]')).toContainText('/h');
+  await expect(page.locator('#buildConfirmMetrics [data-metric="credit"] small')).toHaveText('도시 순수익');
   await expect(page.locator('#buildConfirmMetrics [data-metric="carbon"]')).toContainText('CO₂');
   await expect(page.locator('#buildConfirmMetrics [data-metric="labor"]')).toContainText('0/10');
   await expect(page.locator('#buildForecastTimeline')).toContainText('5시간');
@@ -117,6 +118,27 @@ test('aggregate cost disables atomic confirmation without partially building', a
   await expect(page.locator('#buildPlanError')).toContainText('1.00 💰');
   await expect(page.locator('#confirmBuildBtn')).toBeDisabled();
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
+});
+
+test('clicking beyond the facility permit never adds an invalid virtual placement', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__GAME_STATE__.credits = 30;
+    window.__refreshGameForTest();
+  });
+  await openBuild(page);
+  await page.evaluate(() => {
+    window.__clickCell(0);
+    window.__clickCell(1);
+    window.__clickCell(2);
+  });
+
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
+    { index: 0, type: 'residential' },
+    { index: 1, type: 'residential' },
+  ]);
+  await expect(page.locator('#buildConfirmText')).toContainText('계획 2개');
+  await expect(page.locator('.toast', { hasText: '허가' })).toBeVisible();
+  expect(await page.evaluate(() => window.__getCityRendererStats().planGhostCount)).toBe(2);
 });
 
 test('mixed plan ghosts reuse preallocated GPU layers and disappear on cancel', async ({ gamePage: page }) => {

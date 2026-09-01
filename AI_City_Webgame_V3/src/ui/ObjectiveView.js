@@ -22,8 +22,8 @@ export function objectiveRewardText(set) {
 
 function objectiveCardMarkup(card) {
   const percent = Math.min(100, Math.round((card.value || 0) / Math.max(1, card.target || 1) * 100));
-  const progress = card.durationHours
-    ? `${Math.min(card.consecutiveHours || 0, card.durationHours)}/${card.durationHours}시간`
+  const progress = card.durationDays
+    ? `${Math.min(card.consecutiveDays || 0, card.durationDays)}/${card.durationDays}일`
     : card.completed ? '완료' : '미완료';
   return `<article class="objective-card ${card.completed ? 'complete' : ''}" data-objective-id="${card.id}">
     <div><span>${CATEGORY_LABELS[card.category] || card.category}</span><b>${progress}</b></div>

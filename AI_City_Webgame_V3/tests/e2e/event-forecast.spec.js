@@ -8,8 +8,8 @@ test('24-hour forecast pauses 4x play for preparation, then becomes active and e
     state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
     state.grid[1] = { type: 'solar', level: 1, priority: 'normal', operationMode: 'normal' };
     state.events.schedule = [{ id: 'heat-ui', type: 'heatwave', announceAt: 0, startAt: 24, endAt: 32 }];
-    state.elapsedGameHours = 0;
-    window.__settleSimulationHour();
+    state.elapsedGameDays = 0;
+    window.__settleSimulationDay();
   });
 
   await expect(page.locator('#forecastStrip')).toContainText('23시간 후 폭염');
@@ -22,8 +22,8 @@ test('24-hour forecast pauses 4x play for preparation, then becomes active and e
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
-    state.elapsedGameHours = 24;
-    window.__settleSimulationHour();
+    state.elapsedGameDays = 24;
+    window.__settleSimulationDay();
   });
   await expect(page.locator('#forecastStrip')).toContainText('폭염');
   const active = await page.evaluate(() => window.__GAME_STATE__.lastTickSummary);
@@ -32,8 +32,8 @@ test('24-hour forecast pauses 4x play for preparation, then becomes active and e
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
-    state.elapsedGameHours = 32;
-    window.__settleSimulationHour();
+    state.elapsedGameDays = 32;
+    window.__settleSimulationDay();
   });
   await expect(page.locator('.toast.event-result-alert')).toContainText('폭염 운영 결과');
   await expect(page.locator('#modal')).toBeHidden();

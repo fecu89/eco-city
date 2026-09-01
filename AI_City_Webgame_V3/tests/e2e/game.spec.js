@@ -7,11 +7,11 @@ test.describe('boot and agent contract', () => {
     expect(snapshot).toMatchObject({ mode: 'playing', stage: 1, quest: 1, credits: 10 });
     expect(snapshot.gameTime).toMatchObject({ year: 2040, month: 1, day: 1, hour: 8, timeScale: 1 });
     expect(await page.evaluate(() => typeof window.advanceTime)).toBe('function');
-    expect(await page.evaluate(() => typeof window.__settleSimulationHour)).toBe('function');
+    expect(await page.evaluate(() => typeof window.__settleSimulationDay)).toBe('function');
   });
 
   test('render_game_to_text exposes current operations without legacy progression data', async ({ gamePage: page }) => {
-    await page.evaluate(() => window.__settleSimulationHour());
+    await page.evaluate(() => window.__settleSimulationDay());
     const snapshot = await gameStateSnapshot(page);
     expect(snapshot.simulation).toMatchObject({ netCredits: expect.any(Number), deliveredPower: expect.any(Number), demand: expect.any(Number) });
     expect(snapshot.climateAlert).toBe('normal');
@@ -19,7 +19,7 @@ test.describe('boot and agent contract', () => {
     expect(snapshot.research).toHaveProperty('jobs');
     expect(snapshot.research).not.toHaveProperty('active');
     expect(snapshot.visualGameTime).toMatchObject({ year: 2040, month: 1, day: 1 });
-    expect(snapshot).toHaveProperty('carbonCrisisHours');
+    expect(snapshot).toHaveProperty('carbonCrisisDays');
     expect(snapshot.progression).toMatchObject({ chapter: 1, tutorialQuestIndex: 1, objectiveSetId: null });
     expect(snapshot.expansion).toMatchObject({ phase: 0, firstChoice: null });
     expect(snapshot.events).toMatchObject({ activeId: null });
@@ -71,11 +71,44 @@ test.describe('construction and inspection', () => {
     const residential = page.locator('#facilityDock .facility-btn', { hasText: '주거지' });
     await expect(residential).toContainText('-2.00 💰');
     const detail = page.locator('#facilityDetail');
-    await expect(detail).toContainText('+0.50/h');
-    await expect(detail).toContainText('-2E/h');
+    await expect(detail).toContainText('주거 세금');
+    await expect(detail).toContainText('+0.13~+0.50/h');
+    await expect(detail).toContainText('정상 -2E/h');
+    await expect(detail).toContainText('배치 후 하단에서 도시 전체 실제 순변화 확인');
     await expect(detail).toContainText('CO₂');
     await expect(detail.locator('[data-metric="water"]')).toHaveAttribute('aria-label', '물');
     await expect(detail).toContainText('인구 +10');
+
+    await page.evaluate(() => {
+      window.__GAME_STATE__.unlockedFacilities.add('cooling');
+      window.__refreshGameForTest();
+    });
+    await page.locator('[data-facility="cooling"]').hover();
+    await expect(detail.locator('[data-metric="water"]')).toContainText('자체 0 · 인접 절감');
+  });
+
+  test('facility inspector separates actual facility balance from the whole-city balance', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      window.__setTimeScale(0);
+      state.questIndex = 5;
+      state.grid = Array(19).fill(null);
+      state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+      state.grid[18] = { type: 'thermal', level: 1, priority: 'normal', operationMode: 'normal' };
+      window.__settleSimulationDay();
+      window.__refreshGameForTest();
+      window.__clickCell(0);
+    });
+
+    await expect(page.locator('.facility-inspector-grid')).toContainText('주거 세금');
+    await expect(page.locator('#facilityLiveBalance')).toHaveText('+0.20 💰/h');
+    await expect(page.locator('#facilityCityNet')).toHaveText('-0.30 💰/h');
+    await expect(page.locator('#facilityLivePower')).toContainText('2/2E');
+
+    await page.locator('.modal-card .close-modal').click();
+    await page.evaluate(() => window.__clickCell(18));
+    await expect(page.locator('#facilityLiveBalance')).toHaveText('-0.50 💰/h');
+    await expect(page.locator('#facilityLivePower')).toHaveText('+13E/h');
   });
 
   test('level 3 moves unlocked green space directly behind residential in the build order', async ({ gamePage: page }) => {
@@ -95,9 +128,9 @@ test.describe('construction and inspection', () => {
   test('an occupied cell opens live economics and the 50 percent demolition breakdown', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     await clickCell(page, 0);
-    await page.evaluate(() => window.__settleSimulationHour());
+    await page.evaluate(() => window.__settleSimulationDay());
     await clickCell(page, 0);
-    await expect(page.locator('.facility-inspector-grid')).toContainText('시간당 수입');
+    await expect(page.locator('.facility-inspector-grid')).toContainText('주거 세금');
     await expect(page.locator('[data-facility-tab], .facility-console-tabs')).toHaveCount(0);
     await expect(page.locator('#demolitionBreakdown')).toContainText('총 투자 2.00 💰');
     await expect(page.locator('#demolitionBreakdown')).toContainText('환급 1.00 💰');
@@ -112,7 +145,7 @@ test.describe('construction and inspection', () => {
       state.grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
       state.grid[2] = { type: 'thermal', level: 1, priority: 'normal' };
       state.grid[3] = { type: 'residential', level: 1, priority: 'essential' };
-      window.__settleSimulationHour();
+      window.__settleSimulationDay();
       window.__refreshGameForTest();
     });
 
@@ -141,7 +174,7 @@ test.describe('quest operations, celebration, reset, and save', () => {
       const state = window.__GAME_STATE__;
       state.questIndex = 6;
       state.stage = 3;
-      state.baseline = { hourlyWater: 5 };
+      state.baseline = { dailyWater: 5 };
       state.grid = Array(19).fill(null);
       state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
       state.grid[1] = { type: 'cooling', level: 1, priority: 'essential' };
@@ -149,8 +182,8 @@ test.describe('quest operations, celebration, reset, and save', () => {
       window.__refreshGameForTest();
     });
     await page.evaluate(() => {
-      window.__settleSimulationHour();
-      window.__settleSimulationHour();
+      window.__settleSimulationDay();
+      window.__settleSimulationDay();
     });
     await page.locator('[data-hud-target="quest"]').first().click();
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();

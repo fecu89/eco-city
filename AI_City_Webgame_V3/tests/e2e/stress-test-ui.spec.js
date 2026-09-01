@@ -26,7 +26,7 @@ test('final stress test starts from the quest panel, owns the forecast strip, an
   await expect(page.locator('#questPanelClaimBtn')).toBeDisabled();
 
   await page.evaluate(() => {
-    for (let hour = 0; hour < 27; hour++) window.__settleSimulationHour();
+    for (let day = 0; day < 27; day++) window.__settleSimulationDay();
   });
   await expect(page.locator('#modalCard')).toContainText('도시 보완 필요');
   await expect(page.locator('#modalCard')).toContainText('필수시설 평균 전력 공급이 부족');

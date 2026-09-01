@@ -4,7 +4,7 @@ import {
   getWindMultiplier,
   getWorldPhase,
   getDemandMultiplier,
-  getThreeHourForecast,
+  getThreeDayForecast,
   getSkyState,
 } from '../../../src/systems/ClimateSystem.js';
 
@@ -40,7 +40,7 @@ test('sky keeps 08:00–16:00 equally bright and transitions through warm dawn a
 
 test('wind and three-hour forecast are deterministic', () => {
   expect([0, 1, 2, 3, 4].map(getWindMultiplier)).toEqual([0.6, 0.9, 1.1, 0.75, 0.6]);
-  expect(getThreeHourForecast(18, 2)).toEqual([
+  expect(getThreeDayForecast(18, 2)).toEqual([
     { hour: 19, solar: 0, wind: 0.75 },
     { hour: 20, solar: 0, wind: 0.6 },
     { hour: 21, solar: 0, wind: 0.9 },

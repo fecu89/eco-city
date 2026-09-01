@@ -98,12 +98,12 @@ test('v6 normalization clamps scale, facility level, and battery storage while a
 
 test('current state serializes and hydrates every redesign state group', () => {
   const state = new GameState();
-  expect(SAVE_VERSION).toBe(7);
+  expect(SAVE_VERSION).toBe(8);
   state.progression.chapter = 3;
   state.progression.objectiveSetId = 'resilience';
   state.expansion.phase = 1;
   state.events.activeId = 'heatwave-1';
-  state.operationalRisk.negativeCreditHours = 4;
+  state.operationalRisk.negativeCreditDays = 4;
   state.emergencySupport.used = true;
   state.decisionCounts.modeChanges = 2;
 
@@ -112,14 +112,14 @@ test('current state serializes and hydrates every redesign state group', () => {
   expect(restored.progression).toMatchObject({ chapter: 3, objectiveSetId: 'resilience' });
   expect(restored.expansion.phase).toBe(1);
   expect(restored.events.activeId).toBe('heatwave-1');
-  expect(restored.operationalRisk.negativeCreditHours).toBe(4);
+  expect(restored.operationalRisk.negativeCreditDays).toBe(4);
   expect(restored.emergencySupport.used).toBe(true);
   expect(restored.decisionCounts.modeChanges).toBe(2);
 });
 
-test('the full migration chain passes through v6 and ends at v7', () => {
+test('the full migration chain passes through v6 and ends at v8', () => {
   const migrated = migrateSaveData(v5Save());
-  expect(migrated.v).toBe(7);
+  expect(migrated.v).toBe(8);
 });
 
 test('v6 state and migrated payloads omit obsolete diagnosis state', () => {

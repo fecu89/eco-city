@@ -3,49 +3,49 @@ import { GameState } from '../../../src/core/GameState.js';
 import {
   advanceConstructionProjects,
   cancelConstructionProject,
-  constructionDurationHours,
+  constructionDurationDays,
   createBuildProject,
   createUpgradeProject,
   projectProgress,
   projectRefund,
   projectStage,
-  upgradeDurationHours,
+  upgradeDurationDays,
 } from '../../../src/systems/ConstructionProjectSystem.js';
 
 test('facility projects expose the approved game-hour durations', () => {
-  expect(constructionDurationHours('green')).toBe(3);
-  expect(constructionDurationHours('residential')).toBe(5);
-  expect(constructionDurationHours('factory')).toBe(8);
-  expect(constructionDurationHours('thermal')).toBe(12);
-  expect(constructionDurationHours('nuclear')).toBe(18);
-  expect(upgradeDurationHours(1)).toBe(8);
-  expect(upgradeDurationHours(2)).toBe(15);
+  expect(constructionDurationDays('green')).toBe(3);
+  expect(constructionDurationDays('residential')).toBe(5);
+  expect(constructionDurationDays('factory')).toBe(8);
+  expect(constructionDurationDays('thermal')).toBe(12);
+  expect(constructionDurationDays('nuclear')).toBe(18);
+  expect(upgradeDurationDays(1)).toBe(8);
+  expect(upgradeDurationDays(2)).toBe(15);
 });
 
 test('project progress and stages use elapsed game hours', () => {
-  expect(projectProgress({ elapsedHours: 0, durationHours: 10 })).toBe(0);
-  expect(projectProgress({ elapsedHours: 3, durationHours: 10 })).toBe(0.3);
-  expect(projectProgress({ elapsedHours: 7, durationHours: 10 })).toBe(0.7);
-  expect(projectProgress({ elapsedHours: 12, durationHours: 10 })).toBe(1);
-  expect(projectStage({ elapsedHours: 0, durationHours: 10 })).toBe('foundation');
-  expect(projectStage({ elapsedHours: 3, durationHours: 10 })).toBe('skeleton');
-  expect(projectStage({ elapsedHours: 7, durationHours: 10 })).toBe('shell');
-  expect(projectStage({ elapsedHours: 10, durationHours: 10 })).toBe('complete');
+  expect(projectProgress({ elapsedDays: 0, durationDays: 10 })).toBe(0);
+  expect(projectProgress({ elapsedDays: 3, durationDays: 10 })).toBe(0.3);
+  expect(projectProgress({ elapsedDays: 7, durationDays: 10 })).toBe(0.7);
+  expect(projectProgress({ elapsedDays: 12, durationDays: 10 })).toBe(1);
+  expect(projectStage({ elapsedDays: 0, durationDays: 10 })).toBe('foundation');
+  expect(projectStage({ elapsedDays: 3, durationDays: 10 })).toBe('skeleton');
+  expect(projectStage({ elapsedDays: 7, durationDays: 10 })).toBe('shell');
+  expect(projectStage({ elapsedDays: 10, durationDays: 10 })).toBe('complete');
 });
 
 test('visual project progress includes the real-time fraction before the next settlement hour', () => {
-  const project = { elapsedHours: 1, durationHours: 5 };
+  const project = { elapsedDays: 1, durationDays: 5 };
   expect(projectProgress(project, 0)).toBe(0.2);
   expect(projectProgress(project, 0.5)).toBe(0.3);
   expect(projectProgress(project, 1)).toBe(0.4);
 });
 
 test('refund boundaries use actual paid cost and exact integer comparisons', () => {
-  expect(projectRefund({ elapsedHours: 1, durationHours: 5, paidCost: 10 })).toBe(8);
-  expect(projectRefund({ elapsedHours: 2, durationHours: 8, paidCost: 10 })).toBe(6.5);
-  expect(projectRefund({ elapsedHours: 5, durationHours: 8, paidCost: 10 })).toBe(6.5);
-  expect(projectRefund({ elapsedHours: 6, durationHours: 8, paidCost: 10 })).toBe(5);
-  expect(projectRefund({ elapsedHours: 8, durationHours: 8, paidCost: 10 })).toBeNull();
+  expect(projectRefund({ elapsedDays: 1, durationDays: 5, paidCost: 10 })).toBe(8);
+  expect(projectRefund({ elapsedDays: 2, durationDays: 8, paidCost: 10 })).toBe(6.5);
+  expect(projectRefund({ elapsedDays: 5, durationDays: 8, paidCost: 10 })).toBe(6.5);
+  expect(projectRefund({ elapsedDays: 6, durationDays: 8, paidCost: 10 })).toBe(5);
+  expect(projectRefund({ elapsedDays: 8, durationDays: 8, paidCost: 10 })).toBeNull();
 });
 
 test('advancing completes every due project before returning transitions', () => {
@@ -54,13 +54,13 @@ test('advancing completes every due project before returning transitions', () =>
     type: 'factory',
     level: 1,
     operationMode: 'normal',
-    project: { ...createBuildProject({ type: 'factory', paidCost: 4 }), elapsedHours: 7 },
+    project: { ...createBuildProject({ type: 'factory', paidCost: 4 }), elapsedDays: 7 },
   };
   state.grid[1] = {
     type: 'thermal',
     level: 1,
     operationMode: 'normal',
-    project: { ...createUpgradeProject({ cell: { type: 'thermal', level: 1, operationMode: 'eco' }, paidCost: 5 }), elapsedHours: 7 },
+    project: { ...createUpgradeProject({ cell: { type: 'thermal', level: 1, operationMode: 'eco' }, paidCost: 5 }), elapsedDays: 7 },
   };
 
   const result = advanceConstructionProjects(state);
@@ -80,13 +80,13 @@ test('cancelling build and upgrade projects applies distinct restoration rules',
     type: 'residential',
     level: 1,
     operationMode: 'normal',
-    project: { ...createBuildProject({ type: 'residential', paidCost: 2 }), elapsedHours: 1 },
+    project: { ...createBuildProject({ type: 'residential', paidCost: 2 }), elapsedDays: 1 },
   };
   state.grid[1] = {
     type: 'factory',
     level: 1,
     operationMode: 'normal',
-    project: { ...createUpgradeProject({ cell: { type: 'factory', level: 1, operationMode: 'boost' }, paidCost: 4 }), elapsedHours: 2 },
+    project: { ...createUpgradeProject({ cell: { type: 'factory', level: 1, operationMode: 'boost' }, paidCost: 4 }), elapsedDays: 2 },
   };
 
   expect(cancelConstructionProject(state, 0)).toMatchObject({ ok: true, kind: 'build', refund: 1.6 });
@@ -103,7 +103,7 @@ test('completed projects cannot be cancelled', () => {
   state.grid[0] = {
     type: 'green',
     level: 1,
-    project: { ...createBuildProject({ type: 'green', paidCost: 2 }), elapsedHours: 3 },
+    project: { ...createBuildProject({ type: 'green', paidCost: 2 }), elapsedDays: 3 },
   };
 
   expect(cancelConstructionProject(state, 0)).toEqual({ ok: false, reason: 'already_complete' });

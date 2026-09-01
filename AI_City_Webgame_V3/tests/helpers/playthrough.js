@@ -22,7 +22,7 @@ export async function completeProjectsViaGameClock(page, indices) {
         ? Math.max(0, cell.project.durationHours - cell.project.elapsedHours)
         : 0
     )));
-    for (let hour = 0; hour < remainingHours; hour += 1) window.__settleSimulationHour();
+    for (let day = 0; day < remainingHours; day += 1) window.__settleSimulationDay();
   }, indices);
   await page.waitForFunction((targetIndices) => (
     targetIndices.every((index) => window.__GAME_STATE__.grid[index]?.project == null)

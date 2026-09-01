@@ -8,8 +8,8 @@ export function showEventResult(result) {
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: '기후 이벤트 종료',
     title: `${definition?.label || result.type} 운영 결과`,
-    text: `정전 ${metrics.outageHours}h · 배터리 ${metrics.batteryEnergyUsed.toFixed(1)}E · 순수익 ${metrics.netIncome.toFixed(2)} 💰`,
-    meta: `우선 개선: ${result.diagnosis.label}`,
+    text: `정전 ${metrics.outageDays}일 · 배터리 ${metrics.batteryEnergyUsed.toFixed(1)}E · 순수익 ${metrics.netIncome.toFixed(2)} 💰`,
+    meta: `CO₂ 평균 ${metrics.averageDailyCarbon.toFixed(1)}/일 · 최대 ${metrics.maxDailyCarbon.toFixed(1)}/일 · 물 초과 ${metrics.waterViolationDays}일 · 우선 개선: ${result.diagnosis.label}`,
     priority: true,
     kind: 'event-result-alert',
     action: 'status',

@@ -7,7 +7,7 @@ test('continuous clock forwards every real-time tick fraction to visual progress
   const observed = [];
   const view = createContinuousClockView({
     timeElement: { textContent: '' },
-    getElapsedHours: () => 0,
+    getElapsedDays: () => 0,
     getProgress: () => progress,
     onProgress: (value) => observed.push(value),
     requestFrame: (callback) => { nextFrame = callback; return 1; },

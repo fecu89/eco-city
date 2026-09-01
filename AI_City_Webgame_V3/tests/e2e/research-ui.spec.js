@@ -46,7 +46,7 @@ test('two data centers run independent research without pausing the city', async
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
-    state.research.jobs.wind2.elapsedEffectiveHours = 10;
+    state.research.jobs.wind2.elapsedEffectiveDays = 10;
     state.research.jobs.wind2.status = 'underpowered';
     state.lastTickSummary = {
       facilityPower: { 1: { ratio: 0.5 } },
@@ -72,12 +72,12 @@ test('an underpowered research center is emphasized on both the city and researc
     state.research.jobs.solar2 = {
       id: 'solar2',
       dataCenterIndex: 0,
-      elapsedEffectiveHours: 10,
+      elapsedEffectiveDays: 10,
       status: 'running',
       paidCost: 10,
     };
     window.__refreshGameForTest();
-    window.__settleSimulationHour();
+    window.__settleSimulationDay();
   });
 
   await expect(page.locator('.toast.research-power-alert')).toContainText('데이터센터 #0');
@@ -92,7 +92,7 @@ test('an underpowered research center is emphasized on both the city and researc
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
     state.grid[1] = { type: 'thermal', level: 1, priority: 'normal' };
-    window.__settleSimulationHour();
+    window.__settleSimulationDay();
   });
   await expect(active).not.toHaveClass(/underpowered/);
   expect(await page.evaluate(() => window.__getCellVisual(0).researchWarning)).toBe(false);
@@ -132,8 +132,8 @@ test('research acceleration opens its assigned four-question quiz and affects on
     state.researchMenuUnlocked = true;
     state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
     state.grid[1] = { type: 'data', level: 1, priority: 'normal' };
-    state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 0, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
-    state.research.jobs.wind2 = { id: 'wind2', dataCenterIndex: 1, elapsedEffectiveHours: 0, status: 'running', paidCost: 10 };
+    state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 0, status: 'running', paidCost: 10 };
+    state.research.jobs.wind2 = { id: 'wind2', dataCenterIndex: 1, elapsedEffectiveDays: 0, status: 'running', paidCost: 10 };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
@@ -147,8 +147,8 @@ test('research acceleration opens its assigned four-question quiz and affects on
   const correctIndex = await page.evaluate(() => window.__GAME_STATE__.quizPool[0].options.findIndex((option) => option.correct));
   await page.locator(`#questQuizOptions [data-index="${correctIndex}"]`).click();
   expect(await page.evaluate(() => ({
-    solar: window.__GAME_STATE__.research.jobs.solar2.elapsedEffectiveHours,
-    wind: window.__GAME_STATE__.research.jobs.wind2.elapsedEffectiveHours,
+    solar: window.__GAME_STATE__.research.jobs.solar2.elapsedEffectiveDays,
+    wind: window.__GAME_STATE__.research.jobs.wind2.elapsedEffectiveDays,
   }))).toEqual({ solar: 30, wind: 0 });
 });
 

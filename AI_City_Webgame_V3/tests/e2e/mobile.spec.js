@@ -28,7 +28,7 @@ test.describe('mobile city controls', () => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       window.__GAME_STATE__.lastSettlementDelta = -0.15;
-      window.__GAME_STATE__.lastTickSummary = { hourlyCarbon: 4.2, hourlyWater: 1.8, deliveredPower: 7, demand: 6, batteryStored: 3.5, lowCarbonPercent: 70, capacity: 5, used: 4 };
+      window.__GAME_STATE__.lastTickSummary = { dailyCarbon: 4.2, dailyWater: 1.8, deliveredPower: 7, demand: 6, batteryStored: 3.5, lowCarbonPercent: 70, capacity: 5, used: 4 };
       window.__refreshGameForTest();
     });
 

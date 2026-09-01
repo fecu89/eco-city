@@ -59,7 +59,7 @@ function objectiveCondition(id, state, summary) {
   switch (id) {
     case 'transition-low-carbon': return (summary.lowCarbonPercent || 0) >= 40;
     case 'transition-economy': return (summary.netCredits || 0) >= 4;
-    case 'transition-carbon': return (summary.hourlyCarbon ?? Infinity) <= 10;
+    case 'transition-carbon': return (summary.dailyCarbon ?? Infinity) <= 10;
     case 'specialization-technology': return specializationTechnologyComplete(state);
     case 'specialization-grid': {
       const batteryReady = (summary.batteryStored || 0) >= 8 && state.grid.some((cell, index) => (
@@ -73,7 +73,7 @@ function objectiveCondition(id, state, summary) {
       && essential >= 0.9
       && (summary.batteryStored || 0) >= 5;
     case 'resilience-environment': return (summary.lowCarbonPercent || 0) >= 70
-      && (summary.hourlyWater ?? Infinity) <= (summary.waterLimit ?? 10);
+      && (summary.dailyWater ?? Infinity) <= (summary.waterLimit ?? 10);
     case 'resilience-technology': return hasAdvancedTechnology(state);
     default: return false;
   }
@@ -82,19 +82,19 @@ function objectiveCondition(id, state, summary) {
 function cardEvaluation(state, definition, summary) {
   const previous = state.progression.objectiveProgress[definition.id] || {};
   const condition = objectiveCondition(definition.id, state, summary);
-  const consecutiveHours = previous.completed
-    ? Math.max(previous.consecutiveHours || 0, definition.durationHours || 0)
-    : definition.durationHours
-      ? condition ? (previous.consecutiveHours || 0) + 1 : 0
+  const consecutiveDays = previous.completed
+    ? Math.max(previous.consecutiveDays || 0, definition.durationDays || 0)
+    : definition.durationDays
+      ? condition ? (previous.consecutiveDays || 0) + 1 : 0
       : condition ? 1 : 0;
-  const completed = Boolean(previous.completed || (definition.durationHours
-    ? consecutiveHours >= definition.durationHours
+  const completed = Boolean(previous.completed || (definition.durationDays
+    ? consecutiveDays >= definition.durationDays
     : condition));
   const progress = {
-    consecutiveHours,
+    consecutiveDays,
     completed,
-    value: definition.durationHours ? Math.min(consecutiveHours, definition.durationHours) : completed ? 1 : 0,
-    target: definition.durationHours || 1,
+    value: definition.durationDays ? Math.min(consecutiveDays, definition.durationDays) : completed ? 1 : 0,
+    target: definition.durationDays || 1,
   };
   state.progression.objectiveProgress[definition.id] = progress;
   return { ...definition, ...progress };
@@ -106,7 +106,7 @@ export function currentObjectiveEvaluation(state) {
   const cards = set.cards.map((definition) => ({
     ...definition,
     ...(state.progression.objectiveProgress?.[definition.id] || {
-      consecutiveHours: 0, completed: false, value: 0, target: definition.durationHours || 1,
+      consecutiveDays: 0, completed: false, value: 0, target: definition.durationDays || 1,
     }),
   }));
   const completedCount = cards.filter(({ completed }) => completed).length;
@@ -144,7 +144,10 @@ export function claimObjectiveSet(state) {
   if (set.reward.openSecondExpansion && state.expansion?.phase === 1) {
     expansion = activateExpansionSide(state, state.expansion.firstChoice === 'east' ? 'west' : 'east');
   }
-  if (set.reward.stressTest) state.stressTest.status = 'ready';
+  if (set.reward.stressTest) {
+    state.stressTest.status = 'ready';
+    state.progression.chapter = 4;
+  }
   state.progression.objectiveSetId = set.nextSetId;
   state.progression.objectiveProgress = {};
   if (set.nextSetId) state.progression.chapter = OBJECTIVE_SETS[set.nextSetId].chapter;
@@ -153,7 +156,7 @@ export function claimObjectiveSet(state) {
     setId: set.id,
     reward: { credits: set.reward.credits },
     nextSetId: set.nextSetId,
-    chapterChanged: Boolean(set.nextSetId && OBJECTIVE_SETS[set.nextSetId].chapter !== set.chapter),
+    chapterChanged: state.progression.chapter !== set.chapter,
     expansion,
   };
   eventBus.emit(Events.OBJECTIVE_CLAIMED, result);

@@ -69,7 +69,9 @@ export function settleEconomy({
       ? ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO + (1 - ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO) * labor.employmentRate
       : 1;
     const operationRatio = running ? powerRatio * laborMultiplier : 0;
-    const income = stats.income * (cell.type === 'residential' ? powerRatio * employmentMultiplier : operationRatio) * pollutionMultiplier;
+    const residentialTaxRatio = ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO
+      + (employmentMultiplier - ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO) * powerRatio;
+    const income = stats.income * (cell.type === 'residential' ? residentialTaxRatio : operationRatio) * pollutionMultiplier;
     const upkeep = round1(stats.upkeep);
     grossIncome += income;
     maintenance += upkeep;
@@ -94,7 +96,7 @@ export function settleEconomy({
   const health = (adjacencyHealth + zoneHealth)
     * (modifierContext?.city?.healthMultiplier || 1)
     + (modifierContext?.city?.healthCostFlat || 0);
-  const climateRecovery = Math.max(0, environment.hourlyCarbon - ECONOMY_RULES.CARBON_SAFE_RATE) * ECONOMY_RULES.CLIMATE_RECOVERY_RATE;
+  const climateRecovery = Math.max(0, environment.dailyCarbon - ECONOMY_RULES.CARBON_SAFE_RATE) * ECONOMY_RULES.CLIMATE_RECOVERY_RATE;
   const expansionUpkeep = round1(modifierContext?.city?.expansionUpkeep || 0);
   const netCredits = roundCredits(grossIncome - maintenance - overcrowding - health - climateRecovery - expansionUpkeep);
 
@@ -109,8 +111,8 @@ export function settleEconomy({
     climateRecovery: round1(climateRecovery),
     netCredits,
     nextCredits: roundCredits(credits + netCredits),
-    hourlyCarbon: round1(environment.hourlyCarbon),
-    hourlyWater: round1(environment.hourlyWater),
+    dailyCarbon: round1(environment.dailyCarbon),
+    dailyWater: round1(environment.dailyWater),
     facilityEnvironment: environment.byFacility,
   };
 }

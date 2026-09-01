@@ -1020,7 +1020,7 @@ function constructionStageForConfig(config) {
   if (!project) return null;
   const ratio = Number.isFinite(Number(project.progress))
     ? Number(project.progress)
-    : (Number(project.elapsedHours) || 0) / Math.max(1, Number(project.durationHours) || 1);
+    : (Number(project.elapsedDays) || 0) / Math.max(1, Number(project.durationDays) || 1);
   const progress = Math.max(0, Math.min(1, ratio));
   if (progress >= 0.7) return 'shell';
   if (progress >= 0.3) return 'skeleton';

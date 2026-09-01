@@ -8,7 +8,7 @@ import {
 
 test('new state starts with a radius-two 19-cell board', () => {
   const state = new GameState();
-  expect(SAVE_VERSION).toBe(7);
+  expect(SAVE_VERSION).toBe(8);
   expect(state.boardRadius).toBe(2);
   expect(state.grid).toHaveLength(19);
   expect(state.grid.every((cell) => cell === null)).toBe(true);
@@ -49,7 +49,7 @@ test('v2 migration remaps related indices and resets only transient quest progre
     selectedCell: 24,
     diagnosisFound: [0, 24],
     questIndex: 9,
-    questProgress: { consecutiveHours: 2, hubEnergy: 7 },
+    questProgress: { consecutiveDays: 2, hubEnergy: 7 },
   });
   expect(migrated.v).toBe(3);
   expect(migrated.boardRadius).toBe(3);
@@ -65,6 +65,6 @@ test('v2 migration remaps related indices and resets only transient quest progre
 
 test('empty v2 square save becomes a radius-two board', () => {
   const migrated = migrateSaveData({ v: 2, gridSize: 5, grid: Array(25).fill(null), credits: 7 });
-  expect(migrated).toMatchObject({ v: 7, boardRadius: 2, credits: 7 });
+  expect(migrated).toMatchObject({ v: 8, boardRadius: 2, credits: 7 });
   expect(migrated.grid).toHaveLength(19);
 });

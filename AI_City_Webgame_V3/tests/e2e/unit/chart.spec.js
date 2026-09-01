@@ -13,8 +13,8 @@ test('city chart uses live operating power, carbon, and water instead of stale s
     lastTickSummary: {
       deliveredPower: 9,
       demand: 10,
-      hourlyCarbon: 2,
-      hourlyWater: 4,
+      dailyCarbon: 2,
+      dailyWater: 4,
     },
   };
 

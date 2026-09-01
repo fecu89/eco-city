@@ -5,9 +5,9 @@ import { classifyCity, computeReport, exportReport } from '../../../src/systems/
 
 function completedStress(overrides = {}) {
   return {
-    blackoutHours: 1, minimumEssentialSupply: 82, averageEssentialSupply: 94,
-    averageNetIncome: 3.5, carbonRiskHours: 2, waterViolationHours: 1,
-    batteryEnergyUsed: 12, recoveryHours: 2, maxConsecutiveBankruptcyHours: 0,
+    blackoutDays: 1, minimumEssentialSupply: 82, averageEssentialSupply: 94,
+    averageNetIncome: 3.5, carbonRiskDays: 2, waterViolationDays: 1,
+    batteryEnergyUsed: 12, recoveryDays: 2, maxConsecutiveBankruptcyDays: 0,
     finalCredits: 18, passed: true, ...overrides,
   };
 }
@@ -18,10 +18,10 @@ function operatingState() {
   gameState.grid[1] = { type: 'solar', level: 2 };
   gameState.grid[2] = { type: 'wind', level: 2 };
   gameState.grid[3] = { type: 'battery', level: 2, batteryStoredLowCarbon: 10 };
-  gameState.stressTest = { status: 'passed', result: completedStress(), phaseIndex: 5, phaseHour: 0 };
+  gameState.stressTest = { status: 'passed', result: completedStress(), phaseIndex: 5, phaseDay: 0 };
   gameState.simulationTotals = {
     hours: 20, netCredits: 60, transmissionEfficiency: 18.8, lowCarbonPercent: 1700,
-    employmentRate: 16, industryFill: 15, essentialOutageHours: 1,
+    employmentRate: 16, industryFill: 15, essentialOutageDays: 1,
     overcrowding: 1, health: 2, deliveredEnergy: 300, renewableDeliveredEnergy: 240,
     nuclearDeliveredEnergy: 0, batteryEnergyUsed: 42, grossIncome: 100,
     factoryIncome: 20, peakDemand: 24, peakAvailableSupply: 28,

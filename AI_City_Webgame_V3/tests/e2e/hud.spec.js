@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
-import { clickCell } from '../helpers/playthrough.js';
+import { clickCell, completeProjectsViaGameClock } from '../helpers/playthrough.js';
 
 test.describe('fullscreen world HUD', () => {
   test('top HUD prioritizes credit flow, power margin, battery, carbon, and water while workforce stays in city status', async ({ gamePage: page }) => {
@@ -9,12 +9,12 @@ test.describe('fullscreen world HUD', () => {
       state.credits = 12.5;
       state.lastSettlementDelta = 0.25;
       state.lastTickSummary = {
-        hourlyCarbon: 3.4,
+        dailyCarbon: 3.4,
         deliveredPower: 6,
         demand: 5,
         batteryStored: 8.5,
         lowCarbonPercent: 80,
-        hourlyWater: 2.5,
+        dailyWater: 2.5,
         capacity: 8,
         used: 6,
       };
@@ -22,11 +22,11 @@ test.describe('fullscreen world HUD', () => {
     });
 
     await expect(page.locator('#credits')).toHaveText('12.50');
-    await expect(page.locator('#simNet')).toHaveText('+0.25/h');
+    await expect(page.locator('#simNet')).toHaveText('+0.25/일');
     await expect(page.locator('#simPower')).toHaveText('+1 E');
     await expect(page.locator('#simBattery')).toHaveText('8.5 E');
-    await expect(page.locator('#simCarbonRate')).toHaveText('3.4/h');
-    await expect(page.locator('#simWater')).toHaveText('2.5/h');
+    await expect(page.locator('#simCarbonRate')).toHaveText('3.4/일');
+    await expect(page.locator('#simWater')).toHaveText('2.5/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 6 / 전체 인구 8');
     await expect(page.locator('#simulationHud [data-metric="labor"]')).toHaveCount(0);
     await expect(page.locator('#simCarbonRate')).toBeVisible();
@@ -42,12 +42,12 @@ test.describe('fullscreen world HUD', () => {
       state.credits = 1_250_000;
       state.lastSettlementDelta = 12_500;
       state.lastTickSummary = {
-        hourlyCarbon: 1_250,
+        dailyCarbon: 1_250,
         deliveredPower: 12_500,
         demand: 10_000,
         batteryStored: 12_500,
         lowCarbonPercent: 80,
-        hourlyWater: 1_200_000,
+        dailyWater: 1_200_000,
         capacity: 12_500,
         used: 11_000,
       };
@@ -56,11 +56,11 @@ test.describe('fullscreen world HUD', () => {
 
     await expect(page.locator('#credits')).toHaveText('1.25M');
     await expect(page.locator('#simulationHud [data-metric="credit"]')).toHaveAttribute('title', /1,250,000\.00/);
-    await expect(page.locator('#simNet')).toHaveText('+12.5K/h');
+    await expect(page.locator('#simNet')).toHaveText('+12.5K/일');
     await expect(page.locator('#simPower')).toHaveText('+2.5K E');
     await expect(page.locator('#simBattery')).toHaveText('12.5K E');
-    await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/h');
-    await expect(page.locator('#simWater')).toHaveText('1.2M/h');
+    await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/일');
+    await expect(page.locator('#simWater')).toHaveText('1.2M/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 11K / 전체 인구 12.5K');
     await expect(page.locator('#simPower').locator('xpath=..')).toHaveAttribute('aria-label', /여유 2,500/);
   });
@@ -73,13 +73,13 @@ test.describe('fullscreen world HUD', () => {
       state.grid[1] = { type: 'data', level: 2, operationMode: 'research' };
       state.grid[2] = { type: 'wind', level: 1 };
       state.research.jobs = {
-        solar2: { id: 'solar2', dataCenterIndex: 1, status: 'running', elapsedEffectiveHours: 0 },
+        solar2: { id: 'solar2', dataCenterIndex: 1, status: 'running', elapsedEffectiveDays: 0 },
       };
       state.events.schedule = [{ id: 'wind-now', type: 'lowWind', announceAt: 0, startAt: 0, endAt: 6 }];
       state.events.activeId = 'wind-now';
       state.lastTickSummary = {
-        hourlyCarbon: 2,
-        hourlyWater: 2,
+        dailyCarbon: 2,
+        dailyWater: 2,
         deliveredPower: 4,
         demand: 7,
         batteryStored: 0,
@@ -468,6 +468,7 @@ test.describe('fullscreen world HUD', () => {
     for (let index = 0; index < 2; index++) {
       await clickCell(page, index);
     }
+    await completeProjectsViaGameClock(page, [0, 1]);
 
     await expect(page.locator('.toast', { hasText: '퀘스트 완료 조건 달성' })).toHaveCount(1);
     await expect(page.locator('#questTracker')).toHaveCount(0);
@@ -516,7 +517,7 @@ test.describe('fullscreen world HUD', () => {
     expect(await page.evaluate(() => window.__getCityRendererStats().skyHour)).toBe(17);
 
     await page.evaluate(() => {
-      for (let hour = 0; hour < 8; hour++) window.__settleSimulationHour();
+      for (let day = 0; day < 8; day++) window.__settleSimulationDay();
     });
     expect(await page.evaluate(() => window.__getCityRendererStats().skyHour)).toBe(17);
     expect(await page.evaluate(() => localStorage.getItem('ai-city-world-lighting'))).toBe('dusk');

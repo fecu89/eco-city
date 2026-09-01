@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
-import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
+import { createHexCoordinates, hexDistance } from '../../../src/systems/HexGridSystem.js';
 import {
   applyAutomaticOperationModes,
   buildCityModifierContext,
@@ -105,6 +105,45 @@ test('a connected three-green cluster reduces the heatwave residential spike to 
   const context = buildCityModifierContext(state, { coords: createHexCoordinates(2) });
   expect(context.city.greenCluster).toBe(true);
   expect(context.byFacility[0].event.demand).toBeCloseTo(1.2);
+});
+
+for (const [level, income, demand, carbon] of [
+  [1, 1.05, 1.2, -1],
+  [2, 1.07, 1.15, -1.35],
+  [3, 1.09, 1.15, -1.65],
+]) {
+  test(`green level ${level} applies its exact adjacent housing and carbon effects`, () => {
+    const state = new GameState();
+    state.grid = Array(19).fill(null);
+    state.grid[0] = { type: 'residential', level: 1 };
+    state.grid[1] = { type: 'green', level };
+    state.events.schedule = [{ id: 'heat', type: 'heatwave', startAt: 0, endAt: 8 }];
+    state.events.activeId = 'heat';
+    const context = buildCityModifierContext(state, { coords: createHexCoordinates(2) });
+    const environment = calculateEnvironmentalOperations({
+      grid: state.grid,
+      coords: createHexCoordinates(2),
+      facilityOperations: { 0: { powerRatio: 1, operationRatio: 1 } },
+      modifierContext: context,
+    });
+    expect(context.byFacility[0].research.income).toBe(income);
+    expect(context.byFacility[0].event.demand).toBeCloseTo(demand, 8);
+    expect(environment.byFacility[1].carbon).toBe(carbon);
+  });
+}
+
+test('level-three green extends a weaker housing benefit to hex distance two', () => {
+  const state = new GameState();
+  const coords = createHexCoordinates(2);
+  const distanceTwo = coords.findIndex((coord) => hexDistance(coords[0], coord) === 2);
+  state.grid = Array(19).fill(null);
+  state.grid[0] = { type: 'residential', level: 1 };
+  state.grid[distanceTwo] = { type: 'green', level: 3 };
+  state.events.schedule = [{ id: 'heat', type: 'heatwave', startAt: 0, endAt: 8 }];
+  state.events.activeId = 'heat';
+  const context = buildCityModifierContext(state, { coords });
+  expect(context.byFacility[0].research.income).toBe(1.045);
+  expect(context.byFacility[0].event.demand).toBeCloseTo(1.2, 8);
 });
 
 test('level-three data centers gain research speed only with three units of low-carbon surplus', () => {

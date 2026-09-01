@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import { RESEARCH } from '../../../src/core/ResearchDefinitions.js';
+import { RESEARCH_QUIZZES } from '../../../src/core/ResearchQuizDefinitions.js';
 import {
   activeResearchJobs,
-  advanceResearchOneHour,
+  advanceResearchOneDay,
   assignResearchDataCenter,
   cancelResearch,
   handleResearchFacilityRemoved,
@@ -32,11 +33,11 @@ test('two data centers run different research jobs and consume power independent
   expect(state.credits).toBe(20);
   expect(researchDemandByIndex(state)).toEqual({ 3: 2, 5: 2 });
 
-  const result = advanceResearchOneHour(state, { 3: { ratio: 1 }, 5: { ratio: 1 } });
-  expect(result.jobs.solar2.advancedHours).toBe(1);
-  expect(result.jobs.wind2.advancedHours).toBe(1.25);
-  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(1);
-  expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(1.25);
+  const result = advanceResearchOneDay(state, { 3: { ratio: 1 }, 5: { ratio: 1 } });
+  expect(result.jobs.solar2.advancedDays).toBe(1);
+  expect(result.jobs.wind2.advancedDays).toBe(1.25);
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(1);
+  expect(state.research.jobs.wind2.elapsedEffectiveDays).toBe(1.25);
 });
 
 test('one center and one research id cannot be occupied twice', () => {
@@ -56,11 +57,11 @@ test('underpowered research pauses without stopping another powered center', () 
   state.unlockedFacilities.add('wind');
   startResearch(state, 'solar2', 3);
   startResearch(state, 'wind2', 5);
-  const result = advanceResearchOneHour(state, { 3: { ratio: 0.89 }, 5: { ratio: 0.9 } });
-  expect(result.jobs.solar2).toMatchObject({ status: 'underpowered', advancedHours: 0 });
-  expect(result.jobs.wind2).toMatchObject({ status: 'running', advancedHours: 1.25 });
-  expect(state.research.jobs.solar2.elapsedEffectiveHours).toBe(0);
-  expect(state.research.jobs.wind2.elapsedEffectiveHours).toBe(1.25);
+  const result = advanceResearchOneDay(state, { 3: { ratio: 0.89 }, 5: { ratio: 0.9 } });
+  expect(result.jobs.solar2).toMatchObject({ status: 'underpowered', advancedDays: 0 });
+  expect(result.jobs.wind2).toMatchObject({ status: 'running', advancedDays: 1.25 });
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(0);
+  expect(state.research.jobs.wind2.elapsedEffectiveDays).toBe(1.25);
 });
 
 test('research reports only real power-loss and recovery transitions', () => {
@@ -68,7 +69,7 @@ test('research reports only real power-loss and recovery transitions', () => {
   state.unlockedFacilities.add('solar');
   startResearch(state, 'solar2', 3);
 
-  const firstLoss = advanceResearchOneHour(state, { 3: { ratio: 0.4 } });
+  const firstLoss = advanceResearchOneDay(state, { 3: { ratio: 0.4 } });
   expect(firstLoss.jobs.solar2).toMatchObject({
     status: 'underpowered',
     dataCenterIndex: 3,
@@ -76,14 +77,14 @@ test('research reports only real power-loss and recovery transitions', () => {
     recoveredPower: false,
   });
 
-  const repeatedLoss = advanceResearchOneHour(state, { 3: { ratio: 0.4 } });
+  const repeatedLoss = advanceResearchOneDay(state, { 3: { ratio: 0.4 } });
   expect(repeatedLoss.jobs.solar2).toMatchObject({
     status: 'underpowered',
     becameUnderpowered: false,
     recoveredPower: false,
   });
 
-  const recovery = advanceResearchOneHour(state, { 3: { ratio: 1 } });
+  const recovery = advanceResearchOneDay(state, { 3: { ratio: 1 } });
   expect(recovery.jobs.solar2).toMatchObject({
     status: 'running',
     dataCenterIndex: 3,
@@ -100,9 +101,9 @@ test('demolishing one data center preserves only its job for reassignment', () =
   state.unlockedFacilities.add('wind');
   startResearch(state, 'battery2', 4);
   startResearch(state, 'wind2', 5);
-  state.research.jobs.battery2.elapsedEffectiveHours = 100;
+  state.research.jobs.battery2.elapsedEffectiveDays = 100;
   handleResearchFacilityRemoved(state, 4);
-  expect(state.research.jobs.battery2).toMatchObject({ dataCenterIndex: null, elapsedEffectiveHours: 100, status: 'unassigned' });
+  expect(state.research.jobs.battery2).toMatchObject({ dataCenterIndex: null, elapsedEffectiveDays: 100, status: 'unassigned' });
   expect(state.research.jobs.wind2).toMatchObject({ dataCenterIndex: 5, status: 'running' });
   expect(assignResearchDataCenter(state, 'battery2', 6)).toMatchObject({ ok: true, dataCenterIndex: 6 });
   expect(cancelResearch(state, 'battery2')).toMatchObject({ ok: true, refund: 7 });
@@ -110,7 +111,7 @@ test('demolishing one data center preserves only its job for reassignment', () =
 });
 
 test('every research finishes within three real minutes at 1x speed', () => {
-  expect(Object.fromEntries(Object.entries(RESEARCH).map(([id, item]) => [id, [item.durationHours, item.cost]]))).toEqual({
+  expect(Object.fromEntries(Object.entries(RESEARCH).map(([id, item]) => [id, [item.durationDays, item.cost]]))).toEqual({
     solar2: [120, 10],
     wind2: [120, 10],
     battery2: [150, 15],
@@ -120,16 +121,54 @@ test('every research finishes within three real minutes at 1x speed', () => {
     solar3: [180, 20],
     wind3: [180, 20],
     battery3: [180, 22],
+    green2: [90, 10],
+    green3: [150, 16],
   });
-  expect(Math.max(...Object.values(RESEARCH).map((item) => item.durationHours))).toBe(180);
+  expect(Math.max(...Object.values(RESEARCH).map((item) => item.durationDays))).toBe(180);
 });
 
 test('tidal research accepts either generation branch and legacy capstone is not listed', () => {
   const state = stateWithDataCenter({ credits: 100 });
   state.research.completedIds.add('wind2');
+  state.claimedQuestIds.add('stagnant-air');
   const availability = listResearchAvailability(state);
   expect(availability.find(({ id }) => id === 'tidal1')).toMatchObject({ available: true, reasonCodes: [] });
   expect(availability.some(({ id }) => id === 'renewable3')).toBe(false);
+});
+
+test('green research appears only after its campaign quest and gates the next level', () => {
+  const state = stateWithDataCenter({ credits: 100 });
+  state.unlockedFacilities.add('green');
+  expect(listResearchAvailability(state).find(({ id }) => id === 'green2')).toMatchObject({
+    available: false,
+    reasonCodes: ['quest:extreme-heat'],
+  });
+  state.claimedQuestIds.add('extreme-heat');
+  expect(listResearchAvailability(state).find(({ id }) => id === 'green2')).toMatchObject({
+    available: true,
+    cost: 10,
+    durationDays: 90,
+  });
+});
+
+test('tidal research remains quest-locked even when its technology prerequisite is complete', () => {
+  const state = stateWithDataCenter({ credits: 100 });
+  state.research.completedIds.add('wind2');
+  expect(listResearchAvailability(state).find(({ id }) => id === 'tidal1')).toMatchObject({
+    available: false,
+    reasonCodes: ['quest:stagnant-air'],
+  });
+  state.claimedQuestIds.add('stagnant-air');
+  expect(listResearchAvailability(state).find(({ id }) => id === 'tidal1')).toMatchObject({
+    available: true,
+    reasonCodes: [],
+  });
+});
+
+test('every green research has four dedicated quiz questions', () => {
+  expect(RESEARCH_QUIZZES.green2).toHaveLength(4);
+  expect(RESEARCH_QUIZZES.green3).toHaveLength(4);
+  expect(new Set([...RESEARCH_QUIZZES.green2, ...RESEARCH_QUIZZES.green3].map(({ id }) => id)).size).toBe(8);
 });
 
 test('completed branch research exposes its distinct simulation effects', () => {
@@ -163,8 +202,8 @@ test('finishing one job applies its technology once and leaves other jobs runnin
   expect(listResearchAvailability(state).find(({ id }) => id === 'solar2').available).toBe(true);
   startResearch(state, 'solar2', 3);
   startResearch(state, 'wind2', 5);
-  state.research.jobs.solar2.elapsedEffectiveHours = RESEARCH.solar2.durationHours - 1;
-  const completed = advanceResearchOneHour(state, { 3: { ratio: 1 }, 5: { ratio: 1 } });
+  state.research.jobs.solar2.elapsedEffectiveDays = RESEARCH.solar2.durationDays - 1;
+  const completed = advanceResearchOneDay(state, { 3: { ratio: 1 }, 5: { ratio: 1 } });
   expect(completed.completed).toEqual([expect.objectContaining({ researchId: 'solar2' })]);
   expect(state.research.techLevels.solar).toBe(2);
   expect(state.research.completedIds.has('solar2')).toBe(true);

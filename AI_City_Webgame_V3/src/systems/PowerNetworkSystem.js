@@ -1,5 +1,5 @@
 import { POWER_RULES, STORAGE_LEVELS } from '../core/Constants.js';
-import { getDemandMultiplier, getSolarMultiplier, getWindMultiplier } from './ClimateSystem.js';
+import { getDailySolarMultiplier, getDemandMultiplier, getWindMultiplier } from './ClimateSystem.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
@@ -52,10 +52,16 @@ function levelValue(cell, field, modifier = null) {
   return effectiveFacilityStats(cell, modifier)[field] || 0;
 }
 
+export function generationAvailabilityMultiplier(type, { dayIndex = 0, tickIndex = dayIndex } = {}) {
+  if (type === 'solar') return getDailySolarMultiplier();
+  if (type === 'wind') return getWindMultiplier(tickIndex);
+  return 1;
+}
+
 export function calculatePowerNetwork({
   grid,
   coords = null,
-  hour = 12,
+  dayIndex = 0,
   tickIndex = 0,
   heatwave = false,
   additionalDemandByIndex = {},
@@ -81,9 +87,7 @@ export function calculatePowerNetwork({
   grid.forEach((cell, index) => {
     if (!cell) return;
     if (['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(cell.type)) {
-      let multiplier = 1;
-      if (cell.type === 'solar') multiplier = getSolarMultiplier(hour);
-      if (cell.type === 'wind') multiplier = getWindMultiplier(tickIndex);
+      const multiplier = generationAvailabilityMultiplier(cell.type, { dayIndex, tickIndex });
       sourceDefinitions.push({
         index,
         type: cell.type,

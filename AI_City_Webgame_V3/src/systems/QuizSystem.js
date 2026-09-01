@@ -107,7 +107,7 @@ export function answerQuestQuiz(state, optionIndex) {
     const creditedIds = new Set(state.research.quizCreditQuestionIds[state.quizResearchId] || []);
     if (creditedIds.has(question.id)) {
       acceleration = {
-        appliedJobs: [], hours: 0, completed: [], reason: 'question_already_credited',
+        appliedJobs: [], days: 0, completed: [], reason: 'question_already_credited',
       };
     } else {
       creditedIds.add(question.id);

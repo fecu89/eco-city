@@ -1,6 +1,7 @@
-import { FACILITIES, FACILITY_BUILD_ORDER, FACILITY_ECONOMY, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
+import { effectiveFacilityStats } from '../systems/CityModifierSystem.js';
 import { formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { getFacilityPermit } from '../systems/FacilityPermitSystem.js';
@@ -19,16 +20,50 @@ export function initDockView(el, sharedDetailEl = null) {
   eventBus.on(Events.BUILD_PLAN_COMMITTED, renderDock);
 }
 
-function facilityPresentation(key, facility) {
-  const economy = FACILITY_ECONOMY[key];
+const compactMetric = (value) => Number(Number(value || 0).toFixed(2)).toString();
+
+export function facilityPresentation(key) {
+  const reference = effectiveFacilityStats({
+    type: key,
+    level: 1,
+    operationMode: 'normal',
+    priority: ['residential', 'cooling'].includes(key) ? 'essential' : 'normal',
+  });
   const labor = WORKFORCE_LEVELS[key];
-  const money = economy.income ? `+${formatCredits(economy.income, { suffix: false })}/h` : economy.upkeep ? `-${formatCredits(economy.upkeep, { suffix: false })}/h` : `±${formatCredits(0, { suffix: false })}/h`;
-  const power = facility.supply ? `+${facility.supply}E/h` : facility.demand ? `-${facility.demand}E/h` : '0E/h';
+  const baseResidentialTax = reference.income * ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO;
+  const money = key === 'residential'
+    ? `+${formatCredits(baseResidentialTax, { suffix: false })}~+${formatCredits(reference.income, { suffix: false })}/일`
+    : reference.income
+    ? `최대 +${formatCredits(reference.income - reference.upkeep, { suffix: false })}/일`
+    : reference.upkeep
+      ? `고정 -${formatCredits(reference.upkeep, { suffix: false })}/일`
+      : `±${formatCredits(0, { suffix: false })}/일`;
+  const power = reference.supply
+    ? `최대 +${compactMetric(reference.supply)}E/일`
+    : reference.demand
+      ? `정상 -${compactMetric(reference.demand)}E/일`
+      : '0E/일';
+  const carbon = reference.carbon > 0
+    ? `최대 ${compactMetric(reference.carbon)}/일`
+    : reference.carbon < 0
+      ? `도시 ${compactMetric(reference.carbon)}/일`
+      : '0/일';
+  const water = key === 'cooling'
+    ? '자체 0 · 인접 절감'
+    : reference.water > 0
+      ? `최대 ${compactMetric(reference.water)}/일`
+      : '0/일';
   const requiredWorkers = labor?.[1] || 0;
   const laborText = key === 'residential'
     ? `인구 +${requiredWorkers}`
     : requiredWorkers > 0 ? `필요 인력 ${requiredWorkers}명` : '필요 인력 없음';
-  return { money, power, laborText };
+  const economyLabel = key === 'residential'
+    ? '주거 세금'
+    : reference.income ? '최대 수익' : reference.upkeep ? '고정 운영비' : '일일 수익';
+  const basisText = key === 'residential'
+    ? `전력·고용이 부족해도 기본 +${formatCredits(baseResidentialTax, { suffix: false })}/일 · 배치 후 하단에서 도시 전체 실제 순변화 확인`
+    : 'Lv.1 정상 운전 기준 · 하단은 도시 전체 실제 순변화';
+  return { money, power, carbon, water, laborText, economyLabel, basisText, reference };
 }
 
 function renderFacilityDetail(requestedKey = null) {
@@ -36,16 +71,17 @@ function renderFacilityDetail(requestedKey = null) {
   const key = requestedKey || detailFacilityKey || gameState.selectedFacility || Object.keys(FACILITIES)[0];
   detailFacilityKey = key;
   const facility = FACILITIES[key];
-  const { money, power, laborText } = facilityPresentation(key, facility);
+  const { money, power, carbon, water, laborText, economyLabel, basisText, reference } = facilityPresentation(key);
+  const powerLabel = reference.supply ? '최대 발전' : reference.demand ? '정상 수요' : '전력';
   const locked = !gameState.unlockedFacilities.has(key)
     || (key === 'tidal' && (gameState.research.techLevels.tidal || 0) < 1);
   detailEl.innerHTML = `
-    <div class="facility-detail-copy"><strong>${facility.icon} ${facility.name}</strong><p>${facility.desc}</p>${locked ? `<em>${facilityUnlockMessage(gameState, key)}</em>` : ''}</div>
+    <div class="facility-detail-copy"><strong>${facility.icon} ${facility.name}</strong><p title="${facility.desc}">${facility.desc}</p><small class="facility-detail-basis">${basisText}</small>${locked ? `<em>${facilityUnlockMessage(gameState, key)}</em>` : ''}</div>
     <div class="facility-detail-stats">
-      <span data-metric="credit" aria-label="크레딧" title="크레딧"><small aria-hidden="true">💰</small><b>${money}</b></span>
-      <span data-metric="power" aria-label="전력" title="전력"><small aria-hidden="true">⚡</small><b>${power}</b></span>
-      <span data-metric="carbon" aria-label="이산화탄소" title="이산화탄소"><small aria-hidden="true">CO₂</small><b>${facility.carbon}/h</b></span>
-      <span data-metric="water" aria-label="물" title="물"><small aria-hidden="true">💧</small><b>${facility.water}/h</b></span>
+      <span data-metric="credit" aria-label="크레딧" title="전력·인력·취업률과 공간 페널티 적용 전 Lv.1 기준"><small aria-hidden="true">💰 ${economyLabel}</small><b>${money}</b></span>
+      <span data-metric="power" aria-label="전력" title="기후·연구·운영 모드 적용 전 Lv.1 기준"><small aria-hidden="true">⚡ ${powerLabel}</small><b>${power}</b></span>
+      <span data-metric="carbon" aria-label="이산화탄소" title="정상 운전 시 상한"><small aria-hidden="true">CO₂ 상한</small><b>${carbon}</b></span>
+      <span data-metric="water" aria-label="물" title="정상 운전 시 상한. 순환냉각은 인접 대상에서 차감"><small aria-hidden="true">💧 물</small><b>${water}</b></span>
       <span data-metric="labor" aria-label="인력" title="인력"><small aria-hidden="true">👥</small><b>${laborText}</b></span>
     </div>
   `;
