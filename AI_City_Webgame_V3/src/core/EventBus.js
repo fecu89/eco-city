@@ -22,6 +22,7 @@ export const Events = {
   STRESS_TEST_FINISHED: 'stressTest:finished',
   STRESS_TEST_START_REQUESTED: 'stressTest:startRequested',
   REPORT_OPEN_REQUESTED: 'report:openRequested',
+  FINAL_QUIZ_REQUESTED: 'quiz:finalBonusRequested',
   FACILITY_PRIORITY_CHANGED: 'facility:priorityChanged',
   OPERATION_MODE_CHANGED: 'facility:operationModeChanged',
   BATTERY_POLICY_CHANGED: 'facility:batteryPolicyChanged',
@@ -51,6 +52,13 @@ export const Events = {
   BUILD_PLAN_CLEARED: 'buildPlan:cleared',
   BUILD_PLAN_COMMIT_REQUESTED: 'buildPlan:commitRequested',
   BUILD_PLAN_COMMITTED: 'buildPlan:committed',
+  CONSTRUCTION_STARTED: 'construction:started',
+  CONSTRUCTION_STAGE_CHANGED: 'construction:stageChanged',
+  CONSTRUCTION_COMPLETED: 'construction:completed',
+  CONSTRUCTION_CANCELLED: 'construction:cancelled',
+  UPGRADE_STARTED: 'upgrade:started',
+  UPGRADE_COMPLETED: 'upgrade:completed',
+  UPGRADE_CANCELLED: 'upgrade:cancelled',
 
   // 3D camera / assets / visual motion
   CAMERA_CHANGED: 'camera:changed',
@@ -68,6 +76,7 @@ export const Events = {
   TOAST_SHOW: 'toast:show',
   HUD_PANEL_CHANGED: 'hud:panelChanged',
   HUD_PANEL_OPEN_REQUESTED: 'hud:panelOpenRequested',
+  HUD_METRIC_CAUSES_REQUESTED: 'hud:metricCausesRequested',
   QUEST_PANEL_PIN_REQUESTED: 'questPanel:pinRequested',
   QUEST_PANEL_PIN_CHANGED: 'questPanel:pinChanged',
   THEME_CHANGED: 'theme:changed',
@@ -86,6 +95,7 @@ export const Events = {
 class EventBus {
   constructor() {
     this.listeners = {};
+    this.suppressionDepth = 0;
   }
 
   on(event, callback) {
@@ -103,6 +113,7 @@ class EventBus {
   }
 
   emit(event, data) {
+    if (this.suppressionDepth > 0) return this;
     if (!this.listeners[event]) return this;
     this.listeners[event].forEach((callback) => {
       try {
@@ -112,6 +123,15 @@ class EventBus {
       }
     });
     return this;
+  }
+
+  withSuppressedEvents(callback) {
+    this.suppressionDepth += 1;
+    try {
+      return callback();
+    } finally {
+      this.suppressionDepth = Math.max(0, this.suppressionDepth - 1);
+    }
   }
 
   removeAll() {

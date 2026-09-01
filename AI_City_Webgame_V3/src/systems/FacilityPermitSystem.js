@@ -1,4 +1,9 @@
-import { FACILITIES, FACILITY_LIMITS_BY_QUEST, GRID_RESERVE_RULES } from '../core/Constants.js';
+import {
+  FACILITIES,
+  FACILITY_LIMITS_BY_OBJECTIVE_STAGE,
+  FACILITY_LIMITS_BY_QUEST,
+  GRID_RESERVE_RULES,
+} from '../core/Constants.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 
 const LAST_QUEST = 15;
@@ -24,6 +29,18 @@ function findNextIncreaseQuest(questIndex, type, currentLimit) {
   return null;
 }
 
+function objectivePermitStage(state) {
+  if (state?.progression?.completedObjectiveSetIds?.includes?.('resilience')
+    || ['ready', 'running', 'failed', 'passed'].includes(state?.stressTest?.status)) return 'stress';
+  const setId = state?.progression?.objectiveSetId;
+  return FACILITY_LIMITS_BY_OBJECTIVE_STAGE[setId] ? setId : null;
+}
+
+function facilityLimitsForState(state) {
+  const stage = objectivePermitStage(state);
+  return stage ? FACILITY_LIMITS_BY_OBJECTIVE_STAGE[stage] : getFacilityLimits(state?.questIndex);
+}
+
 function facilityPermitMessage({ ok, type, current, planned, limit, nextIncreaseQuest }) {
   if (ok) return `${FACILITIES[type]?.name || type} 건설 허가 ${current + planned}/${limit}`;
   const next = nextIncreaseQuest
@@ -33,13 +50,14 @@ function facilityPermitMessage({ ok, type, current, planned, limit, nextIncrease
 }
 
 export function getFacilityPermitForCount(state, type, planned = 0) {
-  const limits = getFacilityLimits(state?.questIndex);
+  const objectiveStage = objectivePermitStage(state);
+  const limits = facilityLimitsForState(state);
   const current = countType(state?.grid, type);
   const safePlanned = Math.max(0, Math.trunc(Number(planned) || 0));
   const limit = limits[type] ?? 0;
   const projectedAfterPlacement = current + safePlanned + 1;
   const ok = projectedAfterPlacement <= limit;
-  const nextIncreaseQuest = findNextIncreaseQuest(state?.questIndex || 1, type, limit);
+  const nextIncreaseQuest = objectiveStage ? null : findNextIncreaseQuest(state?.questIndex || 1, type, limit);
   const result = {
     ok,
     current,

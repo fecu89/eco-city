@@ -62,6 +62,11 @@ export const SIMULATION = {
   START_HOUR: 8,
 };
 
+export const CHART_MOTION = Object.freeze({
+  ACTIVE_INTERVAL_FRACTION: 0.9,
+  EASING: 'linear',
+});
+
 export const CALENDAR = Object.freeze({
   START_YEAR: 2040,
   START_MONTH: 1,
@@ -77,18 +82,58 @@ export const TIME = Object.freeze({
   FAST_SCALE: 4,
 });
 
-export const AUDIO = Object.freeze({
-  AMBIENT_GAIN: 0.045,
-  AMBIENT_FADE_IN_SECONDS: 1.2,
-  AMBIENT_FADE_OUT_SECONDS: 0.6,
-  AMBIENT_STOP_DELAY_MS: 700,
-  AMBIENT_CHORD_STEP_MS: 4000,
-  AMBIENT_CHORDS: Object.freeze([
-    Object.freeze([110, 164.81, 220]),
-    Object.freeze([98, 146.83, 196]),
-    Object.freeze([123.47, 164.81, 246.94]),
-    Object.freeze([110, 146.83, 220]),
+export const CONSTRUCTION = Object.freeze({
+  BUILD_HOURS: Object.freeze({
+    green: 3,
+    residential: 5,
+    solar: 6,
+    factory: 8,
+    wind: 8,
+    cooling: 8,
+    data: 10,
+    battery: 10,
+    thermal: 12,
+    tidal: 15,
+    nuclear: 18,
+  }),
+  UPGRADE_HOURS: Object.freeze({ 1: 8, 2: 15 }),
+  UPGRADE_RATIOS: Object.freeze({ 1: 0.7, 2: 0.5 }),
+  REFUND_RATIOS: Object.freeze({ EARLY: 0.8, MID: 0.65, LATE: 0.5 }),
+});
+
+// 실제 플레이는 숙고·배치 검토·모달 확인 시간을 포함해 15~30분을 목표로 한다.
+// 자동화 테스트는 게임 시간을 가속하므로 이 계약을 별도 검증한다.
+export const CAMPAIGN_PACING = Object.freeze({
+  humanMinutes: Object.freeze({ min: 15, target: 25, max: 30 }),
+  phases: Object.freeze([
+    Object.freeze({ id: 'tutorial', startMinute: 0, endMinute: 7 }),
+    Object.freeze({ id: 'expansion', startMinute: 7, endMinute: 14 }),
+    Object.freeze({ id: 'operations', startMinute: 14, endMinute: 22 }),
+    Object.freeze({ id: 'stress-test', startMinute: 22, endMinute: 27 }),
+    Object.freeze({ id: 'report', startMinute: 27, endMinute: 30 }),
   ]),
+  representativeWindows: Object.freeze([
+    Object.freeze({
+      startMinute: 9,
+      endMinute: 11,
+      decisions: Object.freeze(['generation-or-storage', 'research-branch', 'upgrade-or-expand']),
+    }),
+    Object.freeze({
+      startMinute: 14,
+      endMinute: 16,
+      decisions: Object.freeze(['facility-mode', 'battery-reserve', 'research-continue-or-pause']),
+    }),
+    Object.freeze({
+      startMinute: 20,
+      endMinute: 22,
+      decisions: Object.freeze(['event-response', 'facility-priority', 'stress-preparation']),
+    }),
+  ]),
+});
+
+export const AUDIO = Object.freeze({
+  BGM_URL: '/assets/eco-city.mp3',
+  BGM_GAIN: 0.16,
 });
 
 export const QUEST_REQUIREMENTS = Object.freeze({
@@ -123,6 +168,26 @@ export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   15: Object.freeze({}),
 });
 
+// Q6 이후 새 목표 세트는 legacy questIndex를 올리지 않으므로 별도 누적 허가표를 사용한다.
+export const FACILITY_LIMITS_BY_OBJECTIVE_STAGE = Object.freeze({
+  'transition-choice': Object.freeze({
+    residential: 7, green: 2, factory: 3, thermal: 2, data: 2, nuclear: 1,
+    cooling: 2, solar: 2, battery: 0, wind: 0, tidal: 0,
+  }),
+  specialization: Object.freeze({
+    residential: 8, green: 3, factory: 4, thermal: 2, data: 3, nuclear: 1,
+    cooling: 3, solar: 3, battery: 2, wind: 2, tidal: 1,
+  }),
+  resilience: Object.freeze({
+    residential: 9, green: 6, factory: 5, thermal: 2, data: 4, nuclear: 2,
+    cooling: 4, solar: 5, battery: 4, wind: 4, tidal: 2,
+  }),
+  stress: Object.freeze({
+    residential: 10, green: 7, factory: 5, thermal: 2, data: 4, nuclear: 2,
+    cooling: 5, solar: 6, battery: 4, wind: 5, tidal: 3,
+  }),
+});
+
 export const RESEARCH_RULES = Object.freeze({
   DATA_CENTER_SPEED: Object.freeze([0, 1, 1.25, 1.5]),
   POWER_THRESHOLD: 0.9,
@@ -146,12 +211,25 @@ export const CARBON_CRISIS = Object.freeze({
   ACTIVE_AFTER_QUEST: 5,
 });
 
-export const POWER_RULES = {
+export const CITY_FAILURE_RULES = Object.freeze({
+  ACTIVE_AFTER_QUEST_ID: 'power-on',
+  ACTIVE_AFTER_QUEST_INDEX: 2,
+  CREDIT_WARNING_HOURS: 6,
+  CREDIT_PAUSE_HOURS: 12,
+  CREDIT_GAME_OVER_HOURS: 24,
+  ESSENTIAL_WARNING_HOURS: 3,
+  ESSENTIAL_PAUSE_HOURS: 6,
+  ESSENTIAL_GAME_OVER_HOURS: 12,
+  ESSENTIAL_BLACKOUT_PERCENT: 5,
+});
+
+export const POWER_RULES = Object.freeze({
   LOSS_PER_EXTRA_TILE: 0.06,
   MIN_EFFICIENCY: 0.55,
   HUB_EFFICIENCY: 0.95,
   BATTERY_OPERATION_MIN_RATIO: 0.9,
-};
+  CONSUMER_TYPE_ORDER: Object.freeze({ residential: 0, cooling: 1, data: 2, factory: 3 }),
+});
 
 export const GRID_RESERVE_RULES = Object.freeze({
   BATTERY_SUBSTITUTE_QUEST_ID: 'storage-hub',
@@ -569,3 +647,21 @@ export const REPORT_TIERS = [
   { min: 70, icon: '🥇', title: '저탄소 도시 설계자' },
   { min: 0, icon: '🧭', title: '기후 적응 운영자' },
 ];
+
+export const REPORT_RULES = Object.freeze({
+  AXIS_WEIGHTS: Object.freeze({
+    powerStability: 30,
+    environment: 20,
+    economy: 20,
+    resourceUse: 15,
+    operatingResponse: 15,
+  }),
+  QUIZ_POINTS_PER_CORRECT: 2.5,
+  QUIZ_MAX_BONUS: 10,
+  PROFILE: Object.freeze({
+    renewable: Object.freeze({ lowCarbon: 75, renewable: 60, batteryEnergy: 10, batteryShare: 10 }),
+    stable: Object.freeze({ outageRate: 2, reserveMargin: 15, nuclearShare: 35 }),
+    smart: Object.freeze({ transmissionEfficiency: 92, decisions: 3, peakRatio: 1.2 }),
+    industrial: Object.freeze({ netIncome: 4, factoryIncomeShare: 35 }),
+  }),
+});

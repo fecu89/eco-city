@@ -4,7 +4,7 @@ import { migrateSaveData, migrateV3ToV4 } from '../../../src/systems/SaveSystem.
 
 test('new 2040 state uses ten credits, a deterministic clock, and no obsolete AI or badge state', () => {
   const state = new GameState();
-  expect(SAVE_VERSION).toBe(6);
+  expect(SAVE_VERSION).toBe(7);
   expect(state.credits).toBe(10);
   expect(state.elapsedGameHours).toBe(0);
   expect(state.timeScale).toBe(1);
@@ -57,7 +57,7 @@ test('v2 square saves flow through v3 hex mapping before v4 defaults', () => {
   const grid = Array(25).fill(null);
   grid[24] = { type: 'battery', level: 2, priority: 'normal', batteryStoredLowCarbon: 5, batteryStoredFossil: 2 };
   const migrated = migrateSaveData({ v: 2, gridSize: 5, grid, credits: 9, questIndex: 9 });
-  expect(migrated.v).toBe(6);
+  expect(migrated.v).toBe(7);
   expect(migrated.boardRadius).toBe(3);
   expect(migrated.grid).toHaveLength(37);
   expect(migrated.grid.find(Boolean)).toMatchObject({ type: 'battery', level: 2, batteryStoredLowCarbon: 5, batteryStoredFossil: 2 });

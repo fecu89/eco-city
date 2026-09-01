@@ -1,0 +1,99 @@
+<style>
+  .visual-options{grid-template-columns:repeat(3,minmax(250px,1fr));gap:18px;align-items:stretch}
+  .visual-options .card{display:flex;flex-direction:column;overflow:hidden;padding:0;border-radius:18px}
+  .visual-options .card.selected{outline:2px solid #63e6be;box-shadow:0 0 0 5px rgba(99,230,190,.12)}
+  .choice-top{display:flex;align-items:center;justify-content:space-between;padding:15px 16px 10px}
+  .choice-letter{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#1f3347;color:#b9f4ff;font-weight:900}
+  .choice-tag{padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.06);font-size:11px;font-weight:800;color:#a9bbca}
+  .choice-tag.recommended{background:rgba(99,230,190,.14);color:#7ff3d0}
+  .city-preview{position:relative;height:265px;margin:0 12px;border:1px solid rgba(124,170,201,.2);border-radius:14px;overflow:hidden;background:linear-gradient(#6db9dc 0 30%,#accb9b 30% 34%,#255d58 34% 100%);perspective:650px}
+  .city-preview:after{content:"";position:absolute;inset:34% 0 0;background:radial-gradient(circle at 50% 40%,rgba(132,189,132,.42),transparent 58%),linear-gradient(120deg,transparent 48%,rgba(255,255,255,.07) 49% 51%,transparent 52%);pointer-events:none}
+  .island{position:absolute;left:50%;top:58%;width:255px;height:180px;transform:translate(-50%,-50%) rotateX(62deg) rotateZ(30deg);background:#80a568;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);box-shadow:0 0 0 18px #dfc37d,0 0 0 34px #2c7b8f}
+  .site{position:absolute;z-index:2;width:58px;height:58px;transform:translate(-50%,-50%)}
+  .site.one{left:32%;top:56%}.site.two{left:55%;top:46%}.site.three{left:67%;top:67%}
+  .pad{position:absolute;left:5px;right:5px;bottom:3px;height:16px;background:#a4a8a3;transform:skewY(-16deg);border:2px solid #cdd1c9;border-radius:4px}
+  .frame{position:absolute;left:14px;bottom:12px;width:34px;height:48px;border:4px solid #f0b44e;border-bottom-width:7px;background:repeating-linear-gradient(90deg,transparent 0 9px,rgba(242,184,78,.65) 10px 13px);box-shadow:inset 0 12px rgba(242,184,78,.32),inset 0 26px rgba(242,184,78,.24)}
+  .frame:after{content:"";position:absolute;left:-8px;top:13px;width:43px;height:4px;background:#f0b44e;transform:rotate(-31deg)}
+  .wrapped{position:absolute;left:12px;bottom:12px;width:39px;height:52px;border-radius:5px 5px 2px 2px;background:linear-gradient(90deg,#5e8792,#9bb8b7 50%,#51727d);box-shadow:inset 0 0 0 3px rgba(255,255,255,.24)}
+  .wrapped:before{content:"";position:absolute;inset:-4px;border:2px dashed #f3b64b;border-radius:7px}
+  .building{position:absolute;left:12px;bottom:10px;width:40px;height:55px;border-radius:5px 5px 2px 2px;background:linear-gradient(90deg,#53758c,#91b8c8 52%,#48667a);box-shadow:inset 0 0 0 3px rgba(255,255,255,.16)}
+  .building:after{content:"";position:absolute;left:7px;right:7px;top:9px;height:28px;background:repeating-linear-gradient(#ffe69d 0 4px,transparent 5px 10px)}
+  .upgrade-rig{position:absolute;inset:-7px;border:3px solid #ed9c42;background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(237,156,66,.34) 9px 12px);border-radius:7px}
+  .phase-label{position:absolute;z-index:4;left:50%;bottom:-19px;transform:translateX(-50%);padding:3px 5px;border-radius:5px;background:rgba(5,18,30,.86);color:#eefaff;font-size:9px;font-weight:800;white-space:nowrap}
+  .world-progress{position:absolute;z-index:5;left:50%;top:-31px;width:86px;transform:translateX(-50%);padding:5px 6px;border:1px solid rgba(134,222,255,.45);border-radius:7px;background:rgba(4,18,29,.91);box-shadow:0 6px 16px rgba(0,0,0,.25)}
+  .world-progress .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;color:#dfeefa;font-size:9px;font-weight:800}
+  .bar{height:5px;border-radius:9px;overflow:hidden;background:#243849}.bar>i{display:block;height:100%;background:linear-gradient(90deg,#4bd2ff,#73f0b8);border-radius:inherit}.bar.orange>i{background:linear-gradient(90deg,#ffb14b,#ffe082)}
+  .mini-state{position:absolute;z-index:5;right:-5px;top:-5px;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;border:2px solid rgba(255,255,255,.75);background:#0d2637;color:#ffca67;font-size:10px;font-weight:900;box-shadow:0 3px 8px rgba(0,0,0,.25)}
+  .screen-hint{position:absolute;z-index:5;left:10px;top:10px;padding:5px 7px;border-radius:7px;background:rgba(3,17,29,.72);font-size:9px;font-weight:800;color:#d8eff9}
+  .mobile-inset{position:absolute;z-index:6;right:9px;bottom:9px;width:78px;height:114px;border:2px solid #203849;border-radius:13px;background:linear-gradient(#68b4d6 0 30%,#2b6860 30%);box-shadow:0 8px 18px rgba(0,0,0,.32)}
+  .mobile-inset .tiny-site{position:absolute;left:24px;top:48px;width:31px;height:39px;border:3px solid #efad47;background:rgba(255,255,255,.13)}
+  .mobile-inset .tiny-bar{position:absolute;left:7px;right:7px;top:22px;height:5px;border-radius:8px;background:#193244;overflow:hidden}.mobile-inset .tiny-bar i{display:block;width:62%;height:100%;background:#73f0b8}
+  .mobile-inset .tiny-detail{position:absolute;left:5px;right:5px;bottom:5px;padding:4px;border-radius:5px;background:rgba(4,18,29,.88);font-size:7px;color:#eaf7ff;text-align:center}
+  .card-body{display:flex;flex:1;flex-direction:column;padding:14px 16px 16px}.card-body h3{margin:0 0 5px}.card-body>p{min-height:44px;margin:0 0 10px;color:#9fb2c2;font-size:13px;line-height:1.45}
+  .score-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin:3px 0 12px}.score-row span{padding:6px 3px;border-radius:7px;background:rgba(255,255,255,.045);text-align:center;font-size:9px;color:#a9bbc8}.score-row b{display:block;margin-top:3px;color:#eff8ff;font-size:11px}
+  .brief{margin-top:auto;padding-top:11px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;line-height:1.55;color:#9db0bd}.brief strong{color:#e8f4fa}.brief .yes{color:#72ecc5}.brief .no{color:#ffbb70}
+  .decision-note{margin-top:20px;padding:14px 16px;border:1px solid rgba(99,230,190,.28);border-radius:14px;background:rgba(99,230,190,.055)}
+  .decision-note strong{color:#78efce}
+  @media(max-width:980px){.visual-options{grid-template-columns:1fr}.city-preview{height:250px}.card-body>p{min-height:0}}
+</style>
+
+<h2>공사 진행 표현 — 어떤 방식이 도시와 가장 잘 어울리나요?</h2>
+<p class="subtitle">각 카드의 도시에는 세 시설이 동시에 공사 중입니다. 카드를 클릭하면 선택됩니다. 정보성, 몰입감, 모바일 가독성을 함께 비교해 주세요.</p>
+
+<div class="cards visual-options">
+  <div class="card" data-choice="a-3d-stages" onclick="toggleSelect(this)">
+    <div class="choice-top"><span class="choice-letter">A</span><span class="choice-tag">몰입 우선</span></div>
+    <div class="city-preview">
+      <span class="screen-hint">진행 바 없음 · 외형으로 판독</span>
+      <div class="island"></div>
+      <div class="site one"><div class="pad"></div><span class="phase-label">기초 18%</span></div>
+      <div class="site two"><div class="frame"></div><span class="phase-label">골조 52%</span></div>
+      <div class="site three"><div class="wrapped"></div><span class="phase-label">마감 84%</span></div>
+      <div class="mobile-inset"><div class="tiny-site"></div><div class="tiny-detail">외형만으로 단계 확인</div></div>
+    </div>
+    <div class="card-body">
+      <h3>3D 단계만</h3>
+      <p>기초 → 골조 → 외형 마감으로 도시가 실제 올라오는 모습을 강조합니다.</p>
+      <div class="score-row"><span>몰입감<b>매우 높음</b></span><span>즉시성<b>낮음</b></span><span>난이도<b>중간</b></span></div>
+      <div class="brief"><strong class="yes">장점</strong> 자연스럽고 도시 성장 체감이 가장 좋음<br><strong class="no">단점</strong> 남은 시간·build/upgrade 구분이 약하고 작은 화면에서 단계 판독이 어려움<br><strong>추천</strong> 단독 채택은 비추천</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b-always-bars" onclick="toggleSelect(this)">
+    <div class="choice-top"><span class="choice-letter">B</span><span class="choice-tag">정보 우선</span></div>
+    <div class="city-preview">
+      <span class="screen-hint">모든 공사에 항상 표시</span>
+      <div class="island"></div>
+      <div class="site one"><div class="building"></div><div class="world-progress"><div class="row"><span>건설</span><b>4h</b></div><div class="bar"><i style="width:32%"></i></div></div></div>
+      <div class="site two"><div class="building"><div class="upgrade-rig"></div></div><div class="world-progress"><div class="row"><span>강화</span><b>6h</b></div><div class="bar orange"><i style="width:55%"></i></div></div></div>
+      <div class="site three"><div class="building"></div><div class="world-progress"><div class="row"><span>건설</span><b>2h</b></div><div class="bar"><i style="width:82%"></i></div></div></div>
+      <div class="mobile-inset"><div class="tiny-site"></div><div class="tiny-bar"><i></i></div><div class="tiny-detail">3개 이상이면 겹침</div></div>
+    </div>
+    <div class="card-body">
+      <h3>상단 진행 바만</h3>
+      <p>모든 공사 위에 종류, 남은 게임시간과 진행률을 계속 보여줍니다.</p>
+      <div class="score-row"><span>몰입감<b>보통</b></span><span>즉시성<b>매우 높음</b></span><span>난이도<b>낮음</b></span></div>
+      <div class="brief"><strong class="yes">장점</strong> 여러 공사의 완료 순서를 즉시 비교하고 테스트하기 쉬움<br><strong class="no">단점</strong> 밀집 도시와 모바일에서 바가 겹쳐 화면이 UI로 덮임<br><strong>추천</strong> 접근성 대안으로 적합</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c-hybrid" onclick="toggleSelect(this)">
+    <div class="choice-top"><span class="choice-letter">C</span><span class="choice-tag recommended">추천 · 균형형</span></div>
+    <div class="city-preview">
+      <span class="screen-hint">외형 + 선택한 시설만 상세</span>
+      <div class="island"></div>
+      <div class="site one"><div class="pad"></div><span class="mini-state">⚒</span></div>
+      <div class="site two"><div class="building"><div class="upgrade-rig"></div></div><span class="mini-state">↑</span></div>
+      <div class="site three"><div class="wrapped"></div><span class="mini-state">⚒</span><div class="world-progress"><div class="row"><span>마감 · 건설</span><b>2h</b></div><div class="bar"><i style="width:82%"></i></div></div></div>
+      <div class="mobile-inset"><div class="tiny-site"></div><div class="tiny-bar"><i></i></div><div class="tiny-detail">선택 시설 · 5h 남음</div></div>
+    </div>
+    <div class="card-body">
+      <h3>혼합형</h3>
+      <p>평상시에는 3D 단계와 작은 공사 표식만, 선택·hover·위험 시 상세 바를 보여줍니다.</p>
+      <div class="score-row"><span>몰입감<b>높음</b></span><span>즉시성<b>높음</b></span><span>난이도<b>중상</b></span></div>
+      <div class="brief"><strong class="yes">장점</strong> 공사 여부는 전체 도시에서 보이고 상세 시간은 필요할 때만 읽힘<br><strong class="no">단점</strong> 3D 단계·표식·상세 바 상태를 함께 관리해야 함<br><strong>추천</strong> 기본 채택. 모바일은 터치 선택 시 하단 상세도 함께 표시</div>
+    </div>
+  </div>
+</div>
+
+<div class="decision-note"><strong>제안:</strong> C 혼합형을 기본으로 하고, 공사 현장이 4개 이상이면 가장 먼저 끝나는 공사 하나와 현재 선택한 시설에만 상세 바를 표시합니다. 나머지는 작은 ⚒/↑ 표식과 3D 단계로 구분해 화면 겹침을 막습니다.</div>

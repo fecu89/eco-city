@@ -4,9 +4,24 @@ import { applyOperationalRisk } from '../../../src/systems/CityFailureSystem.js'
 import { requestEmergencySupport } from '../../../src/systems/QuestSystem.js';
 
 const summary = (overrides = {}) => ({ essentialSupplyPercent: 100, ...overrides });
+const operatingState = () => {
+  const state = new GameState();
+  state.claimedQuestIds.add('power-on');
+  return state;
+};
+
+test('tutorial construction time does not count as an essential blackout before the first power grid', () => {
+  const state = new GameState();
+  let result;
+  for (let hour = 0; hour < 24; hour += 1) {
+    result = applyOperationalRisk(state, summary({ essentialSupplyPercent: 0 }));
+  }
+  expect(result).toMatchObject({ essentialBlackoutHours: 0, warnings: [], pauseTransition: null });
+  expect(state.gameOver).toBe(false);
+});
 
 test('negative credit pressure warns at six, pauses at twelve, fails at twenty-four, and recovers by one', () => {
-  const state = new GameState();
+  const state = operatingState();
   state.credits = -1;
   let result;
   for (let hour = 1; hour <= 24; hour += 1) {
@@ -17,14 +32,14 @@ test('negative credit pressure warns at six, pauses at twelve, fails at twenty-f
   expect(result.gameOverTransition).toBe(true);
   expect(state.gameOverReason).toBe('bankruptcy');
 
-  const recovering = new GameState();
+  const recovering = operatingState();
   recovering.operationalRisk.negativeCreditHours = 8;
   recovering.credits = 1;
   expect(applyOperationalRisk(recovering, summary()).negativeCreditHours).toBe(7);
 });
 
 test('near-total essential blackout warns at three, pauses at six, and fails at twelve hours', () => {
-  const state = new GameState();
+  const state = operatingState();
   let result;
   for (let hour = 1; hour <= 12; hour += 1) {
     result = applyOperationalRisk(state, summary({ essentialSupplyPercent: 5 }));
@@ -36,7 +51,7 @@ test('near-total essential blackout warns at three, pauses at six, and fails at 
 });
 
 test('operational warnings are emitted only once even after recovery', () => {
-  const state = new GameState();
+  const state = operatingState();
   state.credits = -1;
   for (let hour = 0; hour < 6; hour += 1) applyOperationalRisk(state, summary());
   state.credits = 1;

@@ -2,6 +2,7 @@ import { FACILITIES, RESEARCH_RULES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { roundCredits } from '../core/Money.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
+import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
 export { researchEffects } from './ResearchEffectSystem.js';
 
 function prerequisiteMet(state, prerequisite) {
@@ -65,7 +66,9 @@ function groupLabel(definition, labels) {
 }
 
 function validDataCenter(state, index) {
-  return Number.isInteger(index) && state.grid[index]?.type === 'data';
+  return Number.isInteger(index)
+    && isOperationalCell(state.grid[index])
+    && state.grid[index].type === 'data';
 }
 
 function dataCenterJob(state, index, excludedResearchId = null) {
@@ -122,9 +125,10 @@ export function assignResearchDataCenter(state, researchId, index) {
 
 export function researchDemandByIndex(state) {
   return activeResearchJobs(state).reduce((demand, job) => {
+    const cell = state.grid[job.dataCenterIndex];
     if (validDataCenter(state, job.dataCenterIndex)
-      && state.grid[job.dataCenterIndex]?.operationMode !== 'eco') {
-      demand[job.dataCenterIndex] = RESEARCH_RULES.EXTRA_DEMAND;
+      && (cell.project?.kind === 'upgrade' || cell.operationMode !== 'eco')) {
+      demand[job.dataCenterIndex] = RESEARCH_RULES.EXTRA_DEMAND * operationProfileForCell(cell).demand;
     }
     return demand;
   }, {});

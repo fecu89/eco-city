@@ -1,5 +1,5 @@
 import './style.css';
-import { CARBON_CRISIS, FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { CARBON_CRISIS, FACILITIES, FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -13,11 +13,12 @@ import { advanceResearchOneHour, researchDemandByIndex } from './systems/Researc
 import { calendarAtElapsedHour, formatCalendar, intervalForTimeScale } from './systems/CalendarSystem.js';
 import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { buildCityModifierContext } from './systems/CityModifierSystem.js';
+import { forecastConstruction, forecastUpgrade } from './systems/SimulationForecastSystem.js';
 
 import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
+import { finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
@@ -41,14 +42,17 @@ import {
   openCarbonGameOverModal,
   openConstructionRiskModal,
   openOperationalRiskModal,
+  openHudMetricCausesModal,
   openStressTestModal,
   openStressResultModal,
+  openEventPreparationModal,
+  refreshStageConstructionProgress,
 } from './ui/StageModals.js';
 import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 import { createContinuousClockView } from './ui/ContinuousClockView.js';
 import { currentObjectiveEvaluation } from './systems/ObjectiveSystem.js';
-import { CITY_EVENTS, STRESS_PHASES } from './core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_HOURS, STRESS_PHASES } from './core/EventDefinitions.js';
 import { initForecastView, renderForecast } from './ui/ForecastView.js';
 import { showEventResult } from './ui/EventResultView.js';
 
@@ -90,6 +94,7 @@ const els = {
   buildConfirm: $('#buildConfirm'),
   buildConfirmText: $('#buildConfirmText'),
   buildConfirmMetrics: $('#buildConfirmMetrics'),
+  buildForecastTimeline: $('#buildForecastTimeline'),
   buildPlanCost: $('#buildPlanCost'),
   buildPlanBalance: $('#buildPlanBalance'),
   buildPlanError: $('#buildPlanError'),
@@ -115,8 +120,9 @@ const els = {
   simNet: $('#simNet'),
   simCarbonRate: $('#simCarbonRate'),
   simPower: $('#simPower'),
+  simBattery: $('#simBattery'),
   simWater: $('#simWater'),
-  simLabor: $('#simLabor'),
+  statusWorkforce: $('#statusWorkforce'),
   simCarbon: $('#simCarbon'),
   simAlert: $('#simAlert'),
   timeControls: $('#timeControls'),
@@ -153,6 +159,36 @@ function refreshAudioControls() {
 
 function settleSimulationHour() {
   const result = settleHour(gameState);
+  result.construction?.stageChanged?.forEach((transition) => {
+    eventBus.emit(Events.CONSTRUCTION_STAGE_CHANGED, transition);
+  });
+  result.construction?.completed?.forEach((completion) => {
+    const facility = FACILITIES[completion.type];
+    if (completion.kind === 'build') {
+      eventBus.emit(Events.CONSTRUCTION_COMPLETED, completion);
+      eventBus.emit(Events.BOARD_PLACED, {
+        ...completion,
+        key: completion.type,
+        type: facility?.name || completion.type,
+        metrics: gameState.metrics,
+        placedCount: gameState.grid.filter(Boolean).length,
+      });
+    } else {
+      eventBus.emit(Events.UPGRADE_COMPLETED, completion);
+      eventBus.emit(Events.BOARD_UPGRADED, {
+        ...completion,
+        key: completion.type,
+        type: facility?.name || completion.type,
+        metrics: gameState.metrics,
+      });
+    }
+    eventBus.emit(Events.TOAST_SHOW, {
+      kicker: completion.kind === 'build' ? 'CONSTRUCTION COMPLETE' : 'UPGRADE COMPLETE',
+      title: `${facility?.name || completion.type} ${completion.kind === 'build' ? '완공' : `Lv.${completion.level} 강화 완료`}`,
+      text: '이번 시간 정산부터 새 성능이 적용됩니다.',
+    });
+    eventBus.emit(Events.AUDIO_SFX, { name: completion.kind === 'build' ? 'place' : 'upgrade' });
+  });
   result.research?.completed?.forEach((completion) => eventBus.emit(Events.RESEARCH_COMPLETED, completion));
   if (result.research?.status !== 'idle') eventBus.emit(Events.RESEARCH_PROGRESS, result.research);
   result.carbonCrisis?.warnings?.forEach((hours) => eventBus.emit(Events.CARBON_WARNING, { hours, summary: result.summary }));
@@ -209,13 +245,14 @@ function completeConstructionPlan() {
     refreshAll();
     return result;
   }
-  result.placements.forEach((placement) => eventBus.emit(Events.BOARD_PLACED, {
-    ...placement,
-    metrics: result.metrics,
-    placedCount: result.placedCount,
-  }));
+  result.projects.forEach((project) => eventBus.emit(Events.CONSTRUCTION_STARTED, project));
   eventBus.emit(Events.BUILD_PLAN_COMMITTED, result);
-  eventBus.emit(Events.AUDIO_SFX, { name: 'place' });
+  eventBus.emit(Events.SAVE_REQUESTED, {});
+  eventBus.emit(Events.TOAST_SHOW, {
+    kicker: 'CONSTRUCTION STARTED',
+    title: `${result.projects.length}개 시설 착공`,
+    text: '게임 시간이 흐르면 각각의 공사 시간에 맞춰 완공됩니다.',
+  });
   refreshAll();
   return result;
 }
@@ -254,8 +291,64 @@ function constructionForecastForGrid(projectedGrid) {
   return { current, projected };
 }
 
+function constructionForecastForAssessment(assessment) {
+  const current = forecastOperationsForGrid(gameState.grid);
+  const plannedProjects = assessment.items.map(({ index, type }) => ({
+    index,
+    type,
+    paidCost: assessment.paidCostByIndex[index],
+  }));
+  const forecast = forecastConstruction(gameState, plannedProjects, { settleHour });
+  const finalEconomy = forecast.finalEconomy || current;
+  const finalSummary = forecast.finalSummary || gameState.lastTickSummary || {};
+  const projected = {
+    ...finalEconomy,
+    deliveredPower: finalSummary.deliveredPower || 0,
+    demand: finalSummary.demand || 0,
+    hourlyCarbon: finalSummary.hourlyCarbon || 0,
+    hourlyWater: finalSummary.hourlyWater || 0,
+    labor: {
+      used: finalSummary.used || 0,
+      capacity: finalSummary.capacity || 0,
+    },
+  };
+  return { current, projected, ...forecast };
+}
+
+function operationSnapshotFromForecastHour(hour) {
+  if (!hour) return null;
+  return {
+    netCredits: hour.summary.netCredits,
+    deliveredPower: hour.summary.deliveredPower,
+    demand: hour.summary.demand,
+    hourlyCarbon: hour.summary.hourlyCarbon,
+    hourlyWater: hour.summary.hourlyWater,
+    used: hour.summary.used,
+    capacity: hour.summary.capacity,
+  };
+}
+
+function upgradeForecastForIndex(index, paidCost) {
+  const currentEconomy = forecastOperationsForGrid(gameState.grid);
+  const prediction = forecastUpgrade(gameState, index, { paidCost, settleHour });
+  return {
+    ...prediction,
+    current: {
+      netCredits: currentEconomy.netCredits,
+      deliveredPower: currentEconomy.deliveredPower,
+      demand: currentEconomy.demand,
+      hourlyCarbon: currentEconomy.hourlyCarbon,
+      hourlyWater: currentEconomy.hourlyWater,
+      used: currentEconomy.labor.used,
+      capacity: currentEconomy.labor.capacity,
+    },
+    during: operationSnapshotFromForecastHour(prediction.hourly[0]),
+    completed: operationSnapshotFromForecastHour(prediction.hourly.at(-1)),
+  };
+}
+
 function constructionRiskForPlan(assessment) {
-  const { current, projected } = constructionForecastForGrid(assessment.projectedGrid);
+  const { current, projected } = constructionForecastForAssessment(assessment);
   return {
     currentEconomy: current,
     projectedEconomy: projected,
@@ -382,12 +475,13 @@ function boot() {
     root: els.buildConfirm,
     text: els.buildConfirmText,
     metrics: els.buildConfirmMetrics,
+    timeline: els.buildForecastTimeline,
     cost: els.buildPlanCost,
     balance: els.buildPlanBalance,
     error: els.buildPlanError,
     cancel: els.cancelBuildBtn,
     confirm: els.confirmBuildBtn,
-    getForecast: constructionForecastForGrid,
+    getForecast: constructionForecastForAssessment,
   });
   initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
   initDockView(els.facilityDock, els.facilityDetail);
@@ -408,18 +502,20 @@ function boot() {
     refreshAll();
     if (change?.phase === 'claimed' && change.result?.campaignComplete) openReportModal();
   });
-  initSimulationHudView({ time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, water: els.simWater, labor: els.simLabor, carbon: els.simCarbon, alert: els.simAlert });
+  initSimulationHudView({ root: $('#simulationHud'), time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, battery: els.simBattery, water: els.simWater, labor: els.statusWorkforce, carbon: els.simCarbon, alert: els.simAlert });
   initForecastView(els.forecastStrip);
   initChartView(els.cityChart);
-  initStageModals(refreshAll);
+  initStageModals(refreshAll, { getUpgradeForecast: upgradeForecastForIndex });
   initFeedbackBridge();
   eventBus.on(Events.CITY_EVENT_FORECASTED, (cityEvent) => {
     const definition = CITY_EVENTS[cityEvent.type];
+    setPlayerTimeScale(0);
+    openEventPreparationModal(cityEvent);
     eventBus.emit(Events.TOAST_SHOW, {
-      kicker: '6시간 기후 예보',
-      title: `${definition.label} 예보`,
+      kicker: `${EVENT_FORECAST_HOURS}시간 기후 예보`,
+      title: `${definition.label} 대비 시작`,
       text: `${definition.durationHours}시간 지속 · ${definition.description}`,
-      meta: '시설 모드와 전력 우선순위를 미리 조정하세요.',
+      meta: '준비를 마친 뒤 상단 재생 버튼을 누르세요.',
       priority: true,
       kind: 'event-forecast-alert',
       duration: 7000,
@@ -432,6 +528,7 @@ function boot() {
   eventBus.on(Events.CITY_EVENT_ENDED, showEventResult);
   eventBus.on(Events.STRESS_TEST_START_REQUESTED, () => openStressTestModal(refreshAll));
   eventBus.on(Events.REPORT_OPEN_REQUESTED, openReportModal);
+  eventBus.on(Events.HUD_METRIC_CAUSES_REQUESTED, ({ metric }) => openHudMetricCausesModal(metric));
   eventBus.on(Events.STRESS_PHASE_CHANGED, ({ phaseStarted }) => {
     if (!phaseStarted) return;
     eventBus.emit(Events.TOAST_SHOW, {
@@ -488,6 +585,10 @@ function boot() {
     timeElement: els.simTime,
     getElapsedHours: () => gameState.elapsedGameHours,
     getProgress: () => simulationController.getProgress(),
+    onProgress: (tickProgress) => {
+      refreshCityConstructionProgress(tickProgress);
+      refreshStageConstructionProgress(tickProgress);
+    },
   });
   eventBus.on(Events.MODAL_OPEN, ({ pausesSimulation, pauseReason }) => {
     if (pausesSimulation) {
@@ -629,6 +730,7 @@ window.render_game_to_text = () => {
         level: cell.level,
         priority: cell.priority || 'normal',
         operationMode: cell.operationMode || 'normal',
+        project: cell.project ? { ...cell.project } : null,
       } : null))
       .filter(Boolean),
     constructionPlan: gameState.constructionPlan.map(({ index, type }) => ({ index, type })),

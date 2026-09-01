@@ -20,7 +20,7 @@ test('first visit tells the three-page 2040 story, pauses time, then starts the 
   await expect(page.locator('#modalCard')).toContainText('37칸');
   await page.locator('#storyNext').click();
   await expect(page.locator('#modal')).toBeHidden();
-  expect(await page.evaluate(() => window.__GAME_STATE__.onboardingVersionSeen)).toBe(2);
+  expect(await page.evaluate(() => window.__GAME_STATE__.onboardingVersionSeen)).toBe(3);
   expect(await page.evaluate(() => window.__getSimulationState().pauseReasons)).not.toContain('story');
   await expect(page.locator('[data-hud-target="build"]').first()).toHaveClass(/tutorial-focus/);
 });

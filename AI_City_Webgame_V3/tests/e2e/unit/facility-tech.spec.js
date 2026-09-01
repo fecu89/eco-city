@@ -15,6 +15,7 @@ import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridS
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { completeResearchJob } from '../../../src/systems/ResearchSystem.js';
+import { advanceConstructionProjects } from '../../../src/systems/ConstructionProjectSystem.js';
 
 test.beforeEach(() => gameState.reset());
 
@@ -78,6 +79,7 @@ test('placement validator and placement command share tidal outer-ring rules and
   expect(validatePlacement(gameState, 'tidal', 0)).toMatchObject({ ok: false, reason: 'outer_ring_only' });
   expect(validatePlacement(gameState, 'tidal', outer)).toMatchObject({ ok: true });
   expect(placeFacility(outer)).toMatchObject({ ok: true, index: outer, key: 'tidal' });
+  expect(gameState.grid[outer].project).toMatchObject({ kind: 'build', durationHours: 15, elapsedHours: 0 });
   expect(gameState.credits).toBe(13);
   expect(FACILITIES.tidal).toMatchObject({ cost: 7, supply: 10, carbon: 0, water: 0 });
 });
@@ -139,8 +141,21 @@ test('completed solar research can upgrade solar and satisfy quest 8', () => {
   gameState.research.completedIds.add('solar2');
   gameState.research.techLevels.solar = 2;
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
-  expect(upgradeCell(0)).toMatchObject({ ok: true, level: 2 });
+  expect(upgradeCell(0)).toMatchObject({ ok: true, level: 1, targetLevel: 2, durationHours: 8 });
+  expect(gameState.grid[0]).toMatchObject({ level: 1, project: { kind: 'upgrade', fromLevel: 1, toLevel: 2 } });
+  expect(evaluateCurrentQuest(gameState).ready).toBe(false);
+  for (let hour = 0; hour < 8; hour++) advanceConstructionProjects(gameState);
+  expect(gameState.grid[0]).toMatchObject({ level: 2, project: null });
   expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+});
+
+test('a facility with an active project cannot be upgraded or demolished again', () => {
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 2;
+  gameState.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+  expect(upgradeCell(0)).toMatchObject({ ok: true, targetLevel: 2 });
+  expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
+  expect(demolishCell(0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
 });
 
 test('an upgrade is blocked when its extra staff would exceed the resident population', () => {

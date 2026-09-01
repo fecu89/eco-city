@@ -37,11 +37,11 @@
 
         <div class="simulation-hud" id="simulationHud" aria-live="polite">
           <span class="sim-date"><b id="simTime">2040-01-01</b><small>일자</small></span>
-          <span class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/h</em></span></span>
-          <span class="sim-metric" data-metric="power" aria-label="전력" title="전력 공급 / 수요"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">0/0E</b></span>
-          <span class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="시간당 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/h</b></span>
-          <span class="sim-metric" data-metric="water" aria-label="물" title="시간당 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/h</b></span>
-          <span class="sim-metric" data-metric="labor" aria-label="사용 인력 / 전체 인구" title="사용 인력 / 전체 인구"><i class="sim-metric-icon" data-lucide="users" aria-hidden="true"></i><b id="simLabor">0/0</b></span>
+          <button type="button" class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/h</em></span></button>
+          <button type="button" class="sim-metric" data-metric="power" aria-label="전력 여유" title="전력 여유"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">±0 E</b></button>
+          <button type="button" class="sim-metric" data-metric="battery" aria-label="배터리 저장량" title="배터리 저장량"><i class="sim-metric-icon" data-lucide="battery-charging" aria-hidden="true"></i><b id="simBattery">0 E</b></button>
+          <button type="button" class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="시간당 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/h</b></button>
+          <button type="button" class="sim-metric" data-metric="water" aria-label="물" title="시간당 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/h</b></button>
         </div>
 
         <div class="time-controls" id="timeControls" aria-label="시간 속도">
@@ -100,6 +100,7 @@
 
           <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
             <div class="panel-title compact floating-panel-header" tabindex="0" aria-label="도시 상태 창. 방향키로 이동 가능"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">시간당 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
+            <div class="status-workforce" id="statusWorkforce" aria-live="polite"><i data-lucide="users" aria-hidden="true"></i><span>사용 인력 0 / 전체 인구 0</span></div>
             <canvas id="cityChart" height="190"></canvas>
           </section>
 
@@ -140,6 +141,10 @@
               <span data-metric="water" aria-label="예상 시간당 물"><small>물/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
               <span data-metric="labor" aria-label="예상 필요 인력과 전체 인구"><small>인력/인구</small><b data-value>0/0명</b><em data-delta>±0</em></span>
             </div>
+            <details class="build-forecast-timeline" id="buildForecastTimeline">
+              <summary><span>완공 예측</span><b data-forecast-summary>0시간</b></summary>
+              <ol data-forecast-events></ol>
+            </details>
           </div>
           <button class="btn secondary" id="cancelBuildBtn" type="button">계획 전체 취소</button>
           <button class="btn primary" id="confirmBuildBtn" type="button">건설 확정</button>

@@ -11,6 +11,11 @@ async function renderRepresentativeCity(page) {
     ];
     const state = window.__GAME_STATE__;
     state.boardRadius = 3;
+    state.expansion = {
+      phase: 2,
+      firstChoice: 'east',
+      activeCellIndices: Array.from({ length: 37 }, (_, index) => index),
+    };
     state.grid = Array.from({ length: 37 }, (_, index) => ({
       type: types[index % types.length],
       level: (index % 3) + 1,
@@ -96,6 +101,34 @@ test.describe('performance', () => {
     expect(stats.occupiedCells).toBe(37);
     expect(stats.facilityInstances).toBe(37);
     expect(stats.drawCalls).toBeLessThanOrEqual(24);
+  });
+
+  test('active zones, operating modes, and a climate event stay inside the same render budget', async ({ gamePage: page }) => {
+    await renderRepresentativeCity(page);
+    const before = await page.evaluate(() => window.__getCityRendererStats());
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.progression.chapter = 3;
+      state.progression.objectiveSetId = 'resilience';
+      state.elapsedGameHours = 40;
+      state.grid[1].operationMode = 'saving';
+      state.grid[2].operationMode = 'boost';
+      state.grid[7].batteryPolicy = 'reserve30';
+      state.events.schedule = [{
+        id: 'perf-heatwave', type: 'heatwave', announceAt: 34, startAt: 40, endAt: 48,
+      }];
+      state.events.activeId = 'perf-heatwave';
+      window.__refreshGameForTest();
+    });
+    await page.waitForFunction((renderCount) => window.__getCityRendererStats().renderCount > renderCount, before.renderCount);
+    const stats = await page.evaluate(() => window.__getCityRendererStats());
+
+    expect(stats.occupiedCells).toBe(37);
+    expect(Object.values(stats.zoneTileCounts).reduce((sum, count) => sum + count, 0)).toBe(18);
+    expect(stats.drawCalls).toBeLessThanOrEqual(24);
+    expect(stats.resourceRevision).toBe(before.resourceRevision);
+    await expect(page.locator('#forecastStrip')).toContainText('현재 이벤트');
+    await expect(page.locator('#forecastStrip')).toContainText('폭염');
   });
 
   test('a settled representative city does not continuously submit ambient frames', async ({ gamePage: page }) => {
@@ -208,6 +241,20 @@ test.describe('performance', () => {
       await next.click();
     }
     await renderRepresentativeCity(page);
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.progression.chapter = 3;
+      state.elapsedGameHours = 40;
+      state.grid[1].operationMode = 'saving';
+      state.grid[2].operationMode = 'boost';
+      state.grid[7].batteryPolicy = 'reserve30';
+      state.events.schedule = [{
+        id: 'perf-low-wind', type: 'lowWind', announceAt: 40, startAt: 46, endAt: 52,
+      }];
+      state.events.activeId = null;
+      window.__refreshGameForTest();
+    });
+    await expect(page.locator('#forecastStrip')).toContainText('무풍');
     await page.evaluate(() => {
       window.__GPU_BUFFER_COUNTS__.created = 0;
       window.__GPU_BUFFER_COUNTS__.deleted = 0;

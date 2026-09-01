@@ -8,20 +8,31 @@ import {
   applySimulationQuestProgress,
   claimCurrentQuest,
   evaluateCurrentQuest,
-  markQuestQuizResult,
 } from '../../../src/systems/QuestSystem.js';
 import { demolishCell, expandBoard, upgradeCell } from '../../../src/systems/BoardSystem.js';
-import { accelerateResearchFromQuiz, startResearch } from '../../../src/systems/ResearchSystem.js';
 import {
-  advanceQuestQuiz,
-  answerQuestQuiz,
-  currentQuestQuizQuestion,
-  startQuestQuiz,
-} from '../../../src/systems/QuizSystem.js';
+  accelerateResearchFromQuiz,
+  advanceResearchOneHour,
+  researchDemandByIndex,
+  startResearch,
+} from '../../../src/systems/ResearchSystem.js';
+import {
+  claimObjectiveSet,
+  currentObjectiveEvaluation,
+  startObjectiveCampaign,
+} from '../../../src/systems/ObjectiveSystem.js';
+import { startStressTest } from '../../../src/systems/StressTestSystem.js';
+import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
+import { cellZoneTrait } from '../../../src/systems/ZoneSystem.js';
+import { CAMPAIGN_PACING } from '../../../src/core/Constants.js';
+import { computeReport } from '../../../src/systems/ReportSystem.js';
+import { setFacilityPriority } from '../../../src/systems/CityModifierSystem.js';
 
 const settle = createHourSettler({
   calculatePowerNetwork,
   settleEconomy,
+  getResearchDemand: researchDemandByIndex,
+  advanceResearch: advanceResearchOneHour,
   evaluateQuest: applySimulationQuestProgress,
 });
 
@@ -29,26 +40,50 @@ function build(...items) {
   gameState.constructionPlan = items.map(([index, type]) => ({ index, type }));
   const result = commitConstructionPlan(gameState);
   expect(result.ok, result.errors?.map(({ message }) => message).join(' | ')).toBe(true);
-  expect(gameState.credits).toBeGreaterThanOrEqual(0);
+  expect(gameState.credits, 'construction must use earned credits').toBeGreaterThanOrEqual(0);
+  const constructionHours = Math.max(...result.projects.map(({ durationHours }) => durationHours));
+  settleHours(constructionHours);
+  result.projects.forEach(({ index }) => expect(gameState.grid[index]?.project, `build ${index} must complete`).toBeNull());
   return result;
 }
 
-function settleUntilReady(maxHours = 48) {
-  for (let hour = 0; hour < maxHours && gameState.questStatus !== 'ready_to_claim'; hour += 1) {
+function settleHours(hours) {
+  for (let hour = 0; hour < hours; hour += 1) {
     settle(gameState);
+    expect(gameState.gameOver, `game over at hour ${gameState.elapsedGameHours}: ${gameState.gameOverReason}`).toBe(false);
   }
+}
+
+function settleUntilCredits(target, maxHours = 96) {
+  for (let hour = 0; hour < maxHours && gameState.credits < target; hour += 1) settleHours(1);
+  expect(gameState.credits, `credits after ${maxHours}h`).toBeGreaterThanOrEqual(target);
+}
+
+function upgrade(...indices) {
+  const results = indices.map((index) => {
+    const result = upgradeCell(index);
+    expect(result).toMatchObject({ ok: true, level: 1, targetLevel: 2 });
+    return result;
+  });
+  settleHours(Math.max(...results.map(({ durationHours }) => durationHours)));
+  indices.forEach((index) => expect(gameState.grid[index]).toMatchObject({ level: 2, project: null }));
+  return results;
+}
+
+function settleUntilTutorialReady(maxHours = 48) {
+  for (let hour = 0; hour < maxHours && gameState.questStatus !== 'ready_to_claim'; hour += 1) settleHours(1);
   expect(
     gameState.questStatus,
     `quest ${gameState.questIndex} progress=${JSON.stringify(gameState.questProgress)} routes=${JSON.stringify(gameState.lastTickSummary?.routes)}`,
   ).toBe('ready_to_claim');
 }
 
-function claim() {
+function claimTutorial() {
   const completedIndex = gameState.questIndex;
   const result = claimCurrentQuest(gameState);
   expect(result.ok, `claim quest ${completedIndex}`).toBe(true);
-  if (result.expandGrid) expect(expandBoard(gameState, 'east').ok).toBe(true);
   expect(gameState.credits).toBeGreaterThanOrEqual(0);
+  return result;
 }
 
 function finishResearchWithQuiz(researchId, dataCenterIndex) {
@@ -57,84 +92,175 @@ function finishResearchWithQuiz(researchId, dataCenterIndex) {
   expect(gameState.research.completedIds.has(researchId)).toBe(true);
 }
 
-test.beforeEach(() => gameState.reset());
+function coordIndex(q, r) {
+  return createHexCoordinates(gameState.boardRadius).findIndex((coord) => coord.q === q && coord.r === r);
+}
 
-test('a real campaign can progress from the initial ten credits through all fifteen quests', () => {
+function emptyZoneIndex(trait) {
+  return gameState.expansion.activeCellIndices.find((index) => (
+    !gameState.grid[index] && cellZoneTrait(gameState, index) === trait
+  ));
+}
+
+function completeTutorial(side) {
   expect(gameState.credits).toBe(10);
 
   build([1, 'residential'], [2, 'residential']);
   expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claim();
+  claimTutorial();
 
   build([13, 'thermal'], [4, 'factory']);
-  settleUntilReady();
-  claim();
+  settleUntilTutorialReady();
+  claimTutorial();
 
   build([8, 'green']);
   expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claim();
+  claimTutorial();
 
-  settle(gameState);
+  // 연구시설을 안정적으로 켜기 위한 임시 화력 1기를 증설하고, 다음 단계에서 50%만 회수한다.
+  settleHours(1);
   build([6, 'data'], [0, 'thermal']);
-  settleUntilReady();
-  claim();
+  settleUntilTutorialReady();
+  claimTutorial();
 
-  expect(demolishCell(0).ok).toBe(true);
+  expect(demolishCell(0)).toMatchObject({ ok: true, refund: 2 });
   build([0, 'nuclear']);
-  settleUntilReady();
-  claim();
+  settleUntilTutorialReady();
+  claimTutorial();
 
   build([5, 'cooling']);
-  settleUntilReady();
-  claim();
+  settleUntilTutorialReady();
+  const finalTutorialClaim = claimTutorial();
+  expect(finalTutorialClaim.expandGrid).toBe(true);
+  expect(expandBoard(gameState, side).ok).toBe(true);
+  expect(startObjectiveCampaign(gameState)).toMatchObject({ ok: true, setId: 'transition-choice' });
+  expect(gameState.expansion).toMatchObject({ phase: 1, firstChoice: side });
+}
 
-  build([3, 'solar'], [10, 'factory']);
-  settleUntilReady();
-  claim();
+function settleUntilObjectiveReady(maxHours = 72) {
+  for (let hour = 0; hour < maxHours && !currentObjectiveEvaluation(gameState)?.ready; hour += 1) settleHours(1);
+  const evaluation = currentObjectiveEvaluation(gameState);
+  expect(
+    evaluation?.ready,
+    `${evaluation?.setId} ${JSON.stringify(evaluation?.cards)} last=${JSON.stringify({
+      net: gameState.lastTickSummary?.netCredits,
+      carbon: gameState.lastTickSummary?.hourlyCarbon,
+      lowCarbon: gameState.lastTickSummary?.lowCarbonPercent,
+      water: gameState.lastTickSummary?.hourlyWater,
+      battery: gameState.lastTickSummary?.batteryStored,
+      essential: gameState.lastTickSummary?.essentialSupplyPercent,
+    })}`,
+  ).toBe(true);
+}
 
-  finishResearchWithQuiz('solar2', 6);
-  expect(upgradeCell(1).ok).toBe(true);
-  expect(upgradeCell(3).ok).toBe(true);
-  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claim();
+function claimObjectives(expectedSetId) {
+  expect(currentObjectiveEvaluation(gameState)?.setId).toBe(expectedSetId);
+  const result = claimObjectiveSet(gameState);
+  expect(result).toMatchObject({ ok: true, setId: expectedSetId });
+  expect(gameState.credits).toBeGreaterThanOrEqual(0);
+  return result;
+}
 
-  build([17, 'battery'], [16, 'residential'], [18, 'residential']);
-  settleUntilReady();
-  claim();
-
-  build([11, 'wind']);
-  finishResearchWithQuiz('wind2', 6);
-  expect(upgradeCell(11).ok).toBe(true);
-  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claim();
-
-  settleUntilReady();
-  claim();
-
-  settleUntilReady();
-  claim();
-
-  build([15, 'battery']);
-  settleUntilReady(72);
-  claim();
-
-  expect(demolishCell(10).ok).toBe(true);
-  expect(upgradeCell(1).ok).toBe(true);
-  settleUntilReady();
-  claim();
-
-  startQuestQuiz(gameState, 'climate-council', () => 0.5);
-  let quizResult = null;
-  while (!quizResult?.done) {
-    const question = currentQuestQuizQuestion(gameState);
-    answerQuestQuiz(gameState, question.options.findIndex((option) => option.correct));
-    quizResult = advanceQuestQuiz(gameState);
+function waitForTwoEventsAndResilience(maxHours = 72) {
+  for (let hour = 0; hour < maxHours; hour += 1) {
+    if (gameState.events.completed.length >= 2 && currentObjectiveEvaluation(gameState)?.ready) return;
+    settleHours(1);
   }
-  expect(quizResult).toMatchObject({ passed: true, correct: 4, total: 4 });
-  markQuestQuizResult(gameState, quizResult.passed);
-  claim();
+  expect(gameState.events.completed.length, 'two climate events must be experienced before the final test').toBeGreaterThanOrEqual(2);
+  expect(currentObjectiveEvaluation(gameState)?.ready).toBe(true);
+}
 
+function finishStressTest() {
+  expect(startStressTest(gameState)).toMatchObject({ ok: true, attempts: 1 });
+  for (let hour = 0; hour < 30 && gameState.stressTest.status === 'running'; hour += 1) settleHours(1);
+  expect(gameState.stressTest.status, JSON.stringify(gameState.stressTest.result)).toBe('passed');
+  expect(gameState.stressTest.result).toMatchObject({ passed: true });
   expect(gameState.campaignComplete).toBe(true);
-  expect(gameState.claimedQuestIds.size).toBe(15);
-  expect(gameState.gameOver).toBe(false);
+  expect(gameState.credits).toBeGreaterThanOrEqual(0);
+  return computeReport();
+}
+
+test.beforeEach(() => gameState.reset());
+
+test('stable reference campaign earns its way through east expansion, two events, and the stress test', () => {
+  completeTutorial('east');
+
+  settleUntilObjectiveReady();
+  expect(currentObjectiveEvaluation(gameState).cards.filter(({ completed }) => completed).map(({ id }) => id))
+    .toEqual(expect.arrayContaining(['transition-low-carbon', 'transition-carbon']));
+  claimObjectives('transition-choice');
+
+  const batteryIndex = coordIndex(1, 0);
+  const solarIndex = emptyZoneIndex('solar');
+  const dataCenterIndex = coordIndex(-1, 0);
+  build([batteryIndex, 'battery'], [solarIndex, 'solar']);
+  finishResearchWithQuiz('battery2', coordIndex(-1, 0));
+  expect(gameState.research.completedIds.has('smartGrid')).toBe(false);
+  upgrade(coordIndex(-1, 1), dataCenterIndex, batteryIndex);
+
+  settleUntilObjectiveReady();
+  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'specialization-technology').completed).toBe(true);
+  claimObjectives('specialization');
+
+  waitForTwoEventsAndResilience();
+  expect(gameState.events.completed.length).toBeGreaterThanOrEqual(2);
+  expect(gameState.lastTickSummary.hourlyWater).toBeLessThanOrEqual(10);
+  expect(currentObjectiveEvaluation(gameState).cards.filter(({ completed }) => completed).map(({ id }) => id))
+    .toEqual(expect.arrayContaining([
+      'resilience-profit',
+      'resilience-environment',
+      'resilience-event-reserve',
+  ]));
+  claimObjectives('resilience');
+  const report = finishStressTest();
+  expect(report.profile.developing, JSON.stringify(report.profileMetrics)).toBe(false);
+  expect(report.profile.id).toBe('stable-energy');
+});
+
+test('distributed reference campaign earns its way through west expansion with wind, solar, storage, smart grid, and demand response', () => {
+  completeTutorial('west');
+
+  settleUntilObjectiveReady();
+  claimObjectives('transition-choice');
+
+  expect(demolishCell(coordIndex(0, 0))).toMatchObject({ ok: true });
+  const batteryIndex = coordIndex(1, 0);
+  const solarIndex = emptyZoneIndex('solar');
+  const windIndex = emptyZoneIndex('wind');
+  build([batteryIndex, 'battery'], [solarIndex, 'solar'], [windIndex, 'wind']);
+  finishResearchWithQuiz('wind2', coordIndex(-1, 0));
+  upgrade(windIndex);
+
+  settleUntilObjectiveReady();
+  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'specialization-grid').completed).toBe(true);
+  claimObjectives('specialization');
+
+  settleUntilCredits(15);
+  finishResearchWithQuiz('smartGrid', coordIndex(-1, 0));
+  settleUntilCredits(15);
+  finishResearchWithQuiz('demandResponse', coordIndex(-1, 0));
+  expect(gameState.research.completedIds.has('battery2')).toBe(false);
+  expect(setFacilityPriority(gameState, coordIndex(-1, 0), 'essential')).toMatchObject({ ok: true });
+  expect(setFacilityPriority(gameState, coordIndex(1, -1), 'saving')).toMatchObject({ ok: true });
+  expect(setFacilityPriority(gameState, coordIndex(1, -1), 'normal')).toMatchObject({ ok: true });
+  waitForTwoEventsAndResilience();
+  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'resilience-technology').completed).toBe(true);
+  claimObjectives('resilience');
+  const report = finishStressTest();
+  expect(report.profile.developing).toBe(false);
+  expect(report.profile.id, JSON.stringify(report.profileMetrics)).toBe('smart-grid');
+});
+
+test('human pacing contract spans 15–30 minutes with 2–4 meaningful decisions per representative Chapter 2+ window', () => {
+  expect(CAMPAIGN_PACING.humanMinutes).toEqual({ min: 15, target: 25, max: 30 });
+  expect(CAMPAIGN_PACING.phases[0]).toMatchObject({ startMinute: 0 });
+  expect(CAMPAIGN_PACING.phases.at(-1)).toMatchObject({ endMinute: 30 });
+  expect(CAMPAIGN_PACING.representativeWindows.length).toBeGreaterThanOrEqual(3);
+  CAMPAIGN_PACING.representativeWindows.forEach((window) => {
+    expect(window.startMinute).toBeGreaterThanOrEqual(7);
+    expect(window.endMinute - window.startMinute).toBe(2);
+    expect(window.decisions.length).toBeGreaterThanOrEqual(2);
+    expect(window.decisions.length).toBeLessThanOrEqual(4);
+    expect(new Set(window.decisions).size).toBe(window.decisions.length);
+  });
 });

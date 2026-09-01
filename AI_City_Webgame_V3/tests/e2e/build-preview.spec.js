@@ -34,6 +34,8 @@ for (const viewport of [
   await expect(page.locator('#buildConfirmMetrics [data-metric="credit"]')).toContainText('/h');
   await expect(page.locator('#buildConfirmMetrics [data-metric="carbon"]')).toContainText('CO₂');
   await expect(page.locator('#buildConfirmMetrics [data-metric="labor"]')).toContainText('0/10');
+  await expect(page.locator('#buildForecastTimeline')).toContainText('5시간');
+  await expect(page.locator('#buildForecastTimeline')).toContainText('주거지');
   await page.locator('#confirmBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
   await expect(page.locator('#buildConfirm')).toBeHidden();

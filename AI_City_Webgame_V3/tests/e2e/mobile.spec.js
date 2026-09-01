@@ -24,19 +24,23 @@ async function orbitWithOneFinger(page) {
 }
 
 test.describe('mobile city controls', () => {
-  test('mobile top bar keeps all five icon metrics in a compact matching order', async ({ gamePage: page }) => {
+  test('mobile top bar keeps credit, power margin, battery, carbon, and water in a compact order', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       window.__GAME_STATE__.lastSettlementDelta = -0.15;
-      window.__GAME_STATE__.lastTickSummary = { hourlyCarbon: 4.2, hourlyWater: 1.8, deliveredPower: 7, demand: 6, lowCarbonPercent: 70, capacity: 5, used: 4 };
+      window.__GAME_STATE__.lastTickSummary = { hourlyCarbon: 4.2, hourlyWater: 1.8, deliveredPower: 7, demand: 6, batteryStored: 3.5, lowCarbonPercent: 70, capacity: 5, used: 4 };
       window.__refreshGameForTest();
     });
 
     await expect(page.locator('#simNet')).toHaveText('-0.15/h');
+    await expect(page.locator('#simPower')).toHaveText('+1 E');
+    await expect(page.locator('#simBattery')).toHaveText('3.5 E');
     await expect(page.locator('#simCarbonRate')).toHaveText('4.2/h');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simWater')).toHaveText('1.8/h');
-    await expect(page.locator('#simLabor')).toHaveText('4/5');
+    await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 4 / 전체 인구 5');
+    await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
+      .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);
     const box = await page.locator('#simulationHud').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);

@@ -8,6 +8,7 @@ import { calculateWorkforce } from './WorkforceSystem.js';
 import { roundCredits } from '../core/Money.js';
 import { calculateEnvironmentalOperations } from './FacilityOperationSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
+import { operationalGrid } from './ConstructionProjectSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
@@ -28,6 +29,7 @@ export function settleEconomy({
   credits = 0,
   modifierContext = null,
 }) {
+  grid = operationalGrid(grid);
   const boardCoords = topologyFor(grid, coords);
   const labor = calculateWorkforce(grid, modifierContext);
   const counts = {};

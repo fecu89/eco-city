@@ -1,7 +1,8 @@
 import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constants.js';
 import { roundCredits } from './Money.js';
+import { normalizeConstructionProject } from '../systems/ConstructionProjectSystem.js';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 const initialCellIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
 
@@ -120,6 +121,14 @@ export class GameState {
       essentialOutageHours: 0,
       overcrowding: 0,
       health: 0,
+      deliveredEnergy: 0,
+      renewableDeliveredEnergy: 0,
+      nuclearDeliveredEnergy: 0,
+      batteryEnergyUsed: 0,
+      grossIncome: 0,
+      factoryIncome: 0,
+      peakDemand: 0,
+      peakAvailableSupply: 0,
     };
   }
 
@@ -306,8 +315,19 @@ export class GameState {
 
 export function normalizeCell(cell) {
   if (!cell) return null;
+  if (!FACILITIES[cell.type]) return null;
   const maxLevel = FACILITIES[cell.type]?.maxLevel || 3;
-  const level = Math.max(1, Math.min(maxLevel, Math.trunc(Number(cell.level) || 1)));
+  let level = Math.max(1, Math.min(maxLevel, Math.trunc(Number(cell.level) || 1)));
+  const normalizedProject = normalizeConstructionProject({ ...cell, level }, cell.project);
+  if (!normalizedProject.valid && normalizedProject.kind === 'build') return null;
+  if (normalizedProject.valid && normalizedProject.complete && normalizedProject.project?.kind === 'upgrade') {
+    level = normalizedProject.project.toLevel;
+  }
+  const operationMode = normalizedProject.valid
+    ? normalizedProject.complete && normalizedProject.project?.kind === 'upgrade'
+      ? normalizedProject.project.suspendedOperationMode
+      : cell.operationMode || 'normal'
+    : normalizedProject.restoreOperationMode || cell.operationMode || 'normal';
   let batteryStoredLowCarbon = Math.max(0, Number(cell.batteryStoredLowCarbon) || 0);
   let batteryStoredFossil = Math.max(0, Number(cell.batteryStoredFossil) || 0);
   if (cell.type === 'battery') {
@@ -323,7 +343,8 @@ export function normalizeCell(cell) {
     ...cell,
     level,
     priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
-    operationMode: cell.operationMode || 'normal',
+    operationMode,
+    project: normalizedProject.valid && !normalizedProject.complete ? normalizedProject.project : null,
     ...(cell.type === 'battery' ? { batteryPolicy: cell.batteryPolicy || 'auto' } : {}),
     batteryStoredLowCarbon,
     batteryStoredFossil,

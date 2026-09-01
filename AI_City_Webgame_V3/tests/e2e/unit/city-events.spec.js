@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
-import { CITY_EVENTS } from '../../../src/core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_HOURS, EVENT_GAP_HOURS } from '../../../src/core/EventDefinitions.js';
 import {
   activeEventContext,
   advanceCityEvents,
@@ -14,12 +14,13 @@ function eventState() {
   return state;
 }
 
-test('opening schedule contains each readable event once, with six-hour forecasts and no overlap', () => {
+test('opening schedule contains each readable event once, with 24-hour preparation forecasts and no overlap', () => {
   const schedule = createEventSchedule(20400101, 10);
   expect(schedule.map(({ type }) => type).sort()).toEqual(['heatwave', 'lowWind', 'nightPeak'].sort());
-  schedule.forEach((item) => expect(item.startAt - item.announceAt).toBe(6));
+  schedule.forEach((item) => expect(item.startAt - item.announceAt).toBe(EVENT_FORECAST_HOURS));
   for (let index = 1; index < schedule.length; index += 1) {
     expect(schedule[index].startAt).toBeGreaterThan(schedule[index - 1].endAt);
+    expect(schedule[index].announceAt - schedule[index - 1].endAt).toBe(EVENT_GAP_HOURS);
   }
 });
 

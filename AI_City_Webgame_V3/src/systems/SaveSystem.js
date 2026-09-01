@@ -40,6 +40,12 @@ function scheduleSimulationSave() {
 
 // 수업 중 실수로 새로고침해도 진행 상황이 남도록, 상태가 바뀔 만한 이벤트마다 디바운스 저장한다.
 const AUTOSAVE_EVENTS = [
+  Events.CONSTRUCTION_STARTED,
+  Events.CONSTRUCTION_COMPLETED,
+  Events.CONSTRUCTION_CANCELLED,
+  Events.UPGRADE_STARTED,
+  Events.UPGRADE_COMPLETED,
+  Events.UPGRADE_CANCELLED,
   Events.BOARD_PLACED,
   Events.BOARD_UPGRADED,
   Events.BOARD_DEMOLISHED,
@@ -374,6 +380,14 @@ export function migrateV5ToV6(data) {
   };
 }
 
+export function migrateV6ToV7(data) {
+  return {
+    ...data,
+    v: 7,
+    grid: (data.grid || []).map((cell) => cell ? { ...normalizeCell({ ...cell, project: null }), project: null } : null),
+  };
+}
+
 export function migrateSaveData(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid save payload');
   let migrated = structuredClone(data);
@@ -382,6 +396,7 @@ export function migrateSaveData(data) {
   if (migrated.v === 3) migrated = migrateV3ToV4(migrated);
   if (migrated.v === 4) migrated = migrateV4ToV5(migrated);
   if (migrated.v === 5) migrated = migrateV5ToV6(migrated);
+  if (migrated.v === 6) migrated = migrateV6ToV7(migrated);
   if (migrated.v !== SAVE_VERSION) throw new Error(`Unsupported save version: ${migrated.v}`);
   return stripObsoleteState(migrated);
 }

@@ -2,6 +2,7 @@ import { OBJECTIVE_SETS, objectiveSetById } from '../core/ObjectiveDefinitions.j
 import { roundCredits } from '../core/Money.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { activateExpansionSide } from './ZoneSystem.js';
+import { isOperationalCell } from './ConstructionProjectSystem.js';
 
 const SPECIALIZATION_RESEARCH = Object.freeze({
   solar2: 'solar',
@@ -35,7 +36,7 @@ export function startObjectiveCampaign(state) {
 function essentialSupplyRatio(state, summary) {
   if (Number.isFinite(summary.essentialSupplyPercent)) return summary.essentialSupplyPercent / 100;
   const essential = state.grid
-    .map((cell, index) => (cell && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type)) ? index : null))
+    .map((cell, index) => (isOperationalCell(cell) && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type)) ? index : null))
     .filter((index) => index != null);
   if (!essential.length) return 0;
   return essential.reduce((sum, index) => sum + (summary.facilityPower?.[index]?.ratio ?? 0), 0) / essential.length;
@@ -44,13 +45,13 @@ function essentialSupplyRatio(state, summary) {
 function specializationTechnologyComplete(state) {
   return Object.entries(SPECIALIZATION_RESEARCH).some(([researchId, type]) => (
     state.research.completedIds.has(researchId)
-    && state.grid.some((cell) => cell?.type === type && cell.level >= 2)
+    && state.grid.some((cell) => isOperationalCell(cell) && cell.type === type && cell.level >= 2)
   ));
 }
 
 function hasAdvancedTechnology(state) {
   return [...state.research.completedIds].some((id) => ADVANCED_RESEARCH.has(id))
-    || state.grid.some((cell) => cell?.level >= 3 && FUNCTIONAL_LEVEL_THREE.has(cell.type));
+    || state.grid.some((cell) => isOperationalCell(cell) && cell.level >= 3 && FUNCTIONAL_LEVEL_THREE.has(cell.type));
 }
 
 function objectiveCondition(id, state, summary) {
@@ -62,7 +63,7 @@ function objectiveCondition(id, state, summary) {
     case 'specialization-technology': return specializationTechnologyComplete(state);
     case 'specialization-grid': {
       const batteryReady = (summary.batteryStored || 0) >= 8 && state.grid.some((cell, index) => (
-        cell?.type === 'battery' && (summary.facilityPower?.[index]?.ratio ?? 0) >= 0.9
+        isOperationalCell(cell) && cell.type === 'battery' && (summary.facilityPower?.[index]?.ratio ?? 0) >= 0.9
       ));
       return batteryReady || (summary.transmissionEfficiency ?? 0) >= 90;
     }

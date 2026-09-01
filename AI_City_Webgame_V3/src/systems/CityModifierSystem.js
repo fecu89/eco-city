@@ -16,11 +16,13 @@ import { activeEventContext } from './CityEventSystem.js';
 import { carbonPressureForHours } from './CarbonCrisisSystem.js';
 import { researchEffects } from './ResearchEffectSystem.js';
 import { stressModifierForFacility } from './StressTestSystem.js';
+import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
 
 const MULTIPLICATIVE_FIELDS = Object.freeze([
   'supply', 'demand', 'income', 'upkeep', 'carbon', 'water', 'researchSpeed', 'workforce',
 ]);
 const ADDITIVE_FIELDS = Object.freeze(['workforceFlat', 'healthCostFlat', 'buildCostFlat']);
+const FACILITY_PRIORITIES = new Set(['essential', 'normal', 'saving']);
 
 export function identityModifier() {
   return {
@@ -101,17 +103,19 @@ function normalizeModifier(modifier = {}) {
 export function effectiveFacilityStats(cell, modifier = {}) {
   const base = baseFacilityStats(cell);
   const combined = normalizeModifier(modifier);
+  const project = operationProfileForCell(cell);
   return {
     ...base,
-    supply: base.supply * combined.supply,
-    demand: base.demand * combined.demand,
-    income: base.income * combined.income,
-    upkeep: base.upkeep * combined.upkeep,
-    carbon: base.carbon * combined.carbon,
-    water: base.water * combined.water,
-    researchSpeed: base.researchSpeed * combined.researchSpeed,
-    workforce: Math.max(0, base.workforce * combined.workforce + combined.workforceFlat),
-    healthCostFlat: base.healthCostFlat + combined.healthCostFlat,
+    dev: base.dev * project.dev,
+    supply: base.supply * combined.supply * project.supply,
+    demand: base.demand * combined.demand * project.demand,
+    income: base.income * combined.income * project.income,
+    upkeep: base.upkeep * combined.upkeep * project.upkeep,
+    carbon: base.carbon * combined.carbon * project.carbon,
+    water: base.water * combined.water * project.water,
+    researchSpeed: base.researchSpeed * combined.researchSpeed * project.researchSpeed,
+    workforce: Math.max(0, (base.workforce * combined.workforce + combined.workforceFlat) * project.workforce),
+    healthCostFlat: (base.healthCostFlat + combined.healthCostFlat) * (project.operational ? project.carbon : 0),
     buildCostFlat: base.buildCostFlat + combined.buildCostFlat,
   };
 }
@@ -128,12 +132,14 @@ function coordinatesFor(state, coords) {
 }
 
 function hasAdjacentType(state, index, coords, type) {
-  return neighborIndices(index, coords).some((neighbor) => state.grid[neighbor]?.type === type);
+  return neighborIndices(index, coords).some((neighbor) => (
+    isOperationalCell(state.grid[neighbor]) && state.grid[neighbor].type === type
+  ));
 }
 
 function hasGreenCluster(state, coords) {
   const greenIndices = state.grid
-    .map((cell, index) => cell?.type === 'green' ? index : null)
+    .map((cell, index) => isOperationalCell(cell) && cell.type === 'green' ? index : null)
     .filter((index) => index != null);
   return greenIndices.some((start) => {
     const visited = new Set([start]);
@@ -141,7 +147,7 @@ function hasGreenCluster(state, coords) {
     while (queue.length) {
       const current = queue.shift();
       neighborIndices(current, coords).forEach((neighbor) => {
-        if (state.grid[neighbor]?.type !== 'green' || visited.has(neighbor)) return;
+        if (!isOperationalCell(state.grid[neighbor]) || state.grid[neighbor].type !== 'green' || visited.has(neighbor)) return;
         visited.add(neighbor);
         queue.push(neighbor);
       });
@@ -169,7 +175,7 @@ export function applyAutomaticOperationModes(state) {
     - (Number(state.lastTickSummary?.demand) || 0);
   const changes = [];
   state.grid.forEach((cell, index) => {
-    if (!cell || cell.operationMode !== 'auto' || (Number(cell.level) || 1) < 3) return;
+    if (!isOperationalCell(cell) || cell.project || cell.operationMode !== 'auto' || (Number(cell.level) || 1) < 3) return;
     let resolvedMode = 'normal';
     if (cell.type === 'residential') resolvedMode = margin <= 1 ? 'forced' : 'normal';
     else if (cell.type === 'factory') resolvedMode = margin <= 1 ? 'eco' : margin >= 5 ? 'boost' : 'normal';
@@ -200,9 +206,10 @@ export function buildCityModifierContext(state, {
   const greenCluster = hasGreenCluster(state, boardCoords);
   const greenFactoryHealthMultiplierByIndex = {};
   state.grid.forEach((cell, index) => {
-    if (!cell) return;
-    const mode = operationModeDefinition(cell.type, resolvedOperationMode(cell))?.modifier
-      || identityModifier();
+    if (!isOperationalCell(cell)) return;
+    const mode = cell.project?.kind === 'upgrade'
+      ? identityModifier()
+      : operationModeDefinition(cell.type, resolvedOperationMode(cell))?.modifier || identityModifier();
     const eventBase = eventModifiers
       ? modifierAt(eventModifiers, index)
       : activeEvent.byFacility?.(index) || identityModifier();
@@ -325,6 +332,19 @@ export function setBatteryPolicy(state, index, policy) {
     state.decisionCounts.batteryPolicyChanges = (state.decisionCounts.batteryPolicyChanges || 0) + 1;
   }
   return { ok: true, before, after: policy, definition: BATTERY_POLICIES[policy] };
+}
+
+export function setFacilityPriority(state, index, priority) {
+  const cell = state.grid[index];
+  if (!cell) return { ok: false, reason: 'invalid_facility' };
+  if (!FACILITY_PRIORITIES.has(priority)) return { ok: false, reason: 'invalid_priority' };
+  const before = cell.priority || 'normal';
+  cell.priority = priority;
+  if (before !== priority) {
+    state.decisionCounts ||= {};
+    state.decisionCounts.priorityChanges = (state.decisionCounts.priorityChanges || 0) + 1;
+  }
+  return { ok: true, before, after: priority };
 }
 
 export function setFacilityOperationMode(state, index, mode) {

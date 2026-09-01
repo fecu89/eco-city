@@ -55,7 +55,7 @@ test('quests 1 through 7 have reachable gates under their actual caps, grid, pow
   const quest3 = stateFor(3, [[0, 'green']]);
   expect(evaluateCurrentQuest(quest3).ready).toBe(true);
 
-  const quest4 = stateFor(4, [[0, 'thermal'], [13, 'thermal'], [1, 'data'], [2, 'residential'], [3, 'residential'], [4, 'factory']]);
+  const quest4 = stateFor(4, [[6, 'thermal'], [7, 'data'], [15, 'factory'], [17, 'residential'], [18, 'residential'], [10, 'green']]);
   settleHours(quest4, 2);
   expect(quest4.questStatus).toBe('ready_to_claim');
 
@@ -77,6 +77,24 @@ test('quests 1 through 7 have reachable gates under their actual caps, grid, pow
   const quest7Summaries = settleHours(quest7, 2);
   expect(quest7Summaries.at(-1).routes.some((route) => quest7.grid[route.from]?.type === 'solar' && route.delivered > 0)).toBe(true);
   expect(quest7.questStatus).toBe('ready_to_claim');
+});
+
+test('quest 5 reaches its low-carbon target without a hidden angular dispatch advantage', () => {
+  const state = stateFor(5, [
+    [4, 'thermal'],
+    [7, 'nuclear'],
+    [6, 'data'],
+    [3, 'factory'],
+    [1, 'residential'],
+    [2, 'residential'],
+    [5, 'green'],
+  ]);
+
+  const summaries = settleHours(state, 2);
+  expect(summaries.every(({ lowCarbonPercent }) => lowCarbonPercent >= 40)).toBe(true);
+  expect(summaries.every(({ hourlyCarbon }) => hourlyCarbon <= 12)).toBe(true);
+  expect(summaries.every(({ netCredits }) => netCredits > 0)).toBe(true);
+  expect(state.questStatus).toBe('ready_to_claim');
 });
 
 test('quests 8 through 15 each have a reachable real-system completion state', () => {
@@ -108,7 +126,7 @@ test('quests 8 through 15 each have a reachable real-system completion state', (
   const quest13 = stateFor(13, [[0, 'nuclear'], [13, 'thermal'], [1, 'residential'], [2, 'residential'], [3, 'battery', { batteryStoredLowCarbon: 5 }]]);
   quest13.elapsedGameHours = 11;
   const quest13Summaries = settleHours(quest13, 3);
-  expect(quest13Summaries.map(({ hour }) => hour)).toEqual([19, 20, 21]);
+  expect(quest13Summaries.map(({ hour }) => hour)).toEqual([20, 21, 22]);
   expect(quest13Summaries.every(({ batteryStored }) => batteryStored >= 5)).toBe(true);
   expect(quest13.questStatus).toBe('ready_to_claim');
 

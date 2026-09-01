@@ -1,4 +1,5 @@
 import { WORKFORCE_LEVELS } from '../core/Constants.js';
+import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 
@@ -12,12 +13,7 @@ export function calculateWorkforce(grid = [], modifierContext = null) {
 
   grid.forEach((cell, index) => {
     if (!cell) return;
-    const modifier = modifierContext?.byFacility?.[index]?.combined
-      || modifierContext?.byFacility?.[index]
-      || {};
-    const multiplier = Number.isFinite(Number(modifier.workforce)) ? Number(modifier.workforce) : 1;
-    const flat = Number.isFinite(Number(modifier.workforceFlat)) ? Number(modifier.workforceFlat) : 0;
-    const value = Math.max(0, levelValue(cell.type, cell.level) * multiplier + flat);
+    const value = effectiveFacilityStats(cell, facilityModifierAt(modifierContext, index)).workforce;
     if (cell.type === 'residential') capacity += value;
     else used += value;
   });

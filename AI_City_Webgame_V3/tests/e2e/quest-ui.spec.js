@@ -88,6 +88,8 @@ test.describe('quest economy HUD', () => {
       state.grid[2] = { type: 'residential', level: 1, priority: 'essential' };
       state.grid[3] = { type: 'factory', level: 1, priority: 'normal' };
       state.grid[4] = { type: 'data', level: 1, priority: 'normal' };
+      // 핵발전은 화력 또는 가동 중인 저장 예비력이 있어야 전력을 공급한다.
+      state.grid[5] = { type: 'thermal', level: 1, priority: 'normal' };
       window.__refreshGameForTest();
     });
 
@@ -189,11 +191,16 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('body')).not.toContainText('숨은 운영비');
   });
 
-  test('quest 15 reward opens the operational final report without another validation gate', async ({ gamePage: page }) => {
+  test('a passed stress test opens the five-axis report before the optional quiz', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const state = window.__GAME_STATE__;
-      state.questIndex = 15;
-      state.questStatus = 'ready_to_claim';
+      state.progression.chapter = 4;
+      state.progression.objectiveSetId = null;
+      state.stressTest = {
+        status: 'passed', phaseIndex: 5, phaseHour: 0,
+        result: { passed: true, blackoutHours: 0, minimumEssentialSupply: 92, averageEssentialSupply: 98, averageNetIncome: 3, carbonRiskHours: 0, waterViolationHours: 0, batteryEnergyUsed: 10, recoveryHours: 1, maxConsecutiveBankruptcyHours: 0, finalCredits: 20 },
+      };
+      state.campaignComplete = true;
       state.baseline = { dev: 5, balance: -2, carbon: 8, water: 9 };
       state.simulationTotals = {
         hours: 2,
@@ -205,6 +212,14 @@ test.describe('quest economy HUD', () => {
         essentialOutageHours: 0,
         overcrowding: 1,
         health: 0.4,
+        deliveredEnergy: 20,
+        renewableDeliveredEnergy: 15,
+        nuclearDeliveredEnergy: 0,
+        batteryEnergyUsed: 10,
+        grossIncome: 8,
+        factoryIncome: 2,
+        peakDemand: 10,
+        peakAvailableSupply: 12,
       };
       window.__refreshGameForTest();
     });
@@ -212,11 +227,41 @@ test.describe('quest economy HUD', () => {
     await openQuestPanel(page);
     await page.locator('#questPanelClaimBtn').click();
     await expect(page.locator('#modalCard')).toContainText('기후 생존 도시 성적표');
-    await expect(page.locator('#modalCard')).toContainText('운영 점수');
-    await expect(page.locator('#modalCard')).toContainText('설계 점수');
-    await expect(page.locator('#modalCard')).toContainText('지식 점수');
-    await expect(page.locator('#modalCard')).toContainText('퀴즈 정답률');
-    await expect(page.locator('#modalCard')).toContainText('평균 송전 효율');
+    await expect(page.locator('#modalCard')).toContainText('도시 운영');
+    await expect(page.locator('#modalCard')).toContainText('전력 안정성');
+    await expect(page.locator('#modalCard')).toContainText('운영 대응');
+    await expect(page.locator('#finalBonusQuizBtn')).toContainText('최대 +10');
     await expect(page.locator('#validationBtn')).toHaveCount(0);
+  });
+
+  test('optional concept quiz returns to the report and only adds a separate bonus', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.progression.chapter = 4;
+      state.progression.objectiveSetId = null;
+      state.stressTest = {
+        status: 'passed', phaseIndex: 5, phaseHour: 0,
+        result: { passed: true, blackoutHours: 0, minimumEssentialSupply: 90, averageEssentialSupply: 95, averageNetIncome: 2, carbonRiskHours: 0, waterViolationHours: 0, batteryEnergyUsed: 5, recoveryHours: 2, maxConsecutiveBankruptcyHours: 0, finalCredits: 10 },
+      };
+      state.campaignComplete = true;
+      state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+      window.__refreshGameForTest();
+    });
+    await openQuestPanel(page);
+    await page.locator('#questPanelClaimBtn').click();
+    const operatingBefore = await page.locator('.final-score-breakdown .summary-card').first().locator('strong').textContent();
+    await page.locator('#finalBonusQuizBtn').click();
+
+    for (let index = 0; index < 4; index++) {
+      const correctIndex = await page.evaluate(() => window.__GAME_STATE__.quizPool[window.__GAME_STATE__.quizIndex].options.findIndex((option) => option.correct));
+      await page.locator(`#questQuizOptions [data-index="${correctIndex}"]`).click();
+      await page.locator('#questQuizNext').click();
+    }
+    await expect(page.locator('#modalCard')).toContainText('개념 퀴즈 보너스');
+    await expect(page.locator('#modalCard')).toContainText('+10점');
+    await page.locator('#questQuizFinish').click();
+    await expect(page.locator('.final-score-breakdown')).toContainText('+10 / 10');
+    expect(await page.locator('.final-score-breakdown .summary-card').first().locator('strong').textContent()).toBe(operatingBefore);
+    await expect(page.locator('#finalBonusQuizBtn')).toHaveCount(0);
   });
 });

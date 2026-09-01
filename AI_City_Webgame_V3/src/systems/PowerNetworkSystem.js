@@ -3,6 +3,7 @@ import { getDemandMultiplier, getSolarMultiplier, getWindMultiplier } from './Cl
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
+import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
 const LOW_CARBON = new Set(['nuclear', 'solar', 'wind', 'tidal']);
@@ -10,6 +11,19 @@ const PRIORITY = { essential: 0, normal: 1, saving: 2 };
 
 const inferCoordinates = (grid) => createHexCoordinates(grid.length === 37 ? 3 : 2);
 const distance = (a, b, coordinates) => hexDistance(coordinates[a], coordinates[b]);
+
+function sourceDispatchOrder(a, b) {
+  // 동일 전력망에서는 셀 배열 번호나 화면 각도가 아니라 저탄소 급전 원칙과 육각 거리만 결과를 결정한다.
+  return Number(b.source.lowCarbon) - Number(a.source.lowCarbon)
+    || b.efficiency - a.efficiency
+    || a.source.index - b.source.index;
+}
+
+function candidateLowCarbonShare(candidate) {
+  if (candidate.source) return candidate.source.lowCarbon ? 1 : 0;
+  const stored = candidate.battery.lowCarbon + candidate.battery.fossil;
+  return stored ? candidate.battery.lowCarbon / stored : 0;
+}
 
 export function directEfficiency(tileDistance, lossPerExtraTile = POWER_RULES.LOSS_PER_EXTRA_TILE) {
   return round2(Math.max(
@@ -49,6 +63,7 @@ export function calculatePowerNetwork({
   batteryReserveUnlocked = false,
   modifierContext = null,
 }) {
+  grid = operationalGrid(grid);
   const coordinates = coords || inferCoordinates(grid);
   const transmissionLossPerTile = modifierContext?.city?.transmissionLossPerExtraTile
     ?? POWER_RULES.LOSS_PER_EXTRA_TILE;
@@ -79,6 +94,7 @@ export function calculatePowerNetwork({
     }
     if (cell.type === 'battery') {
       const level = STORAGE_LEVELS[cell.level];
+      const projectProfile = operationProfileForCell(cell);
       const requestedPolicy = cell.batteryPolicy || 'auto';
       const policy = requestedPolicy === 'essential'
         ? (emergencyReserveUnlocked && cell.level >= 3 ? requestedPolicy : 'auto')
@@ -94,8 +110,8 @@ export function calculatePowerNetwork({
       batteries.push({
         index,
         capacity,
-        throughput: level.throughput,
-        throughputLeft: level.throughput,
+        throughput: level.throughput * projectProfile.batteryThroughput,
+        throughputLeft: level.throughput * projectProfile.batteryThroughput,
         lowCarbon: rawLowCarbon * storedScale,
         fossil: rawFossil * storedScale,
         policy,
@@ -107,8 +123,14 @@ export function calculatePowerNetwork({
       heatwave,
       adjacentGreen: grid.some((other, otherIndex) => other?.type === 'green' && distance(index, otherIndex, coordinates) === 1),
     });
-    if (demand > 0) consumers.push({ index, demand, priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal') });
+    if (demand > 0) consumers.push({
+      index,
+      type: cell.type,
+      demand,
+      priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
+    });
   });
+  const generationAvailable = sourceDefinitions.reduce((sum, source) => sum + source.available, 0);
 
   const hasThermalReserve = sourceDefinitions.some(({ type }) => type === 'thermal');
   const hasStoredBatteryReserve = batteryReserveUnlocked && batteries.some(({ lowCarbon, fossil }) => lowCarbon + fossil > 0);
@@ -134,7 +156,7 @@ export function calculatePowerNetwork({
       let delivered = 0;
       const candidates = sources
         .map((source) => ({ source, efficiency: routeEfficiency(source.index, battery.index) }))
-        .sort((a, b) => b.efficiency - a.efficiency || a.source.index - b.source.index);
+        .sort(sourceDispatchOrder);
       candidates.forEach(({ source, efficiency }) => {
         if (remaining <= 0) return;
         const possible = Math.min(remaining, source.available * efficiency);
@@ -184,7 +206,9 @@ export function calculatePowerNetwork({
   const { sources, facilityPower, batteryOperations, routes } = allocation;
   const activeBatteries = batteries.filter(({ index }) => batteryOperations[index]?.canOperate);
 
-  consumers.sort((a, b) => (PRIORITY[a.priority] ?? 1) - (PRIORITY[b.priority] ?? 1) || a.index - b.index);
+  consumers.sort((a, b) => (PRIORITY[a.priority] ?? 1) - (PRIORITY[b.priority] ?? 1)
+    || (POWER_RULES.CONSUMER_TYPE_ORDER[a.type] ?? 99) - (POWER_RULES.CONSUMER_TYPE_ORDER[b.type] ?? 99)
+    || a.index - b.index);
   let lowCarbonDelivered = allocation.lowCarbonDelivered;
   let deliveredTotal = allocation.deliveredTotal;
   const demandTotal = batteries.reduce((sum, battery) => sum + levelValue(
@@ -208,7 +232,9 @@ export function calculatePowerNetwork({
         efficiency: round2(routeEfficiency(source.index, battery.index) * batteryHubEfficiency),
       }));
     });
-    candidates.sort((a, b) => b.efficiency - a.efficiency || (a.source?.index ?? a.battery.index) - (b.source?.index ?? b.battery.index));
+    candidates.sort((a, b) => candidateLowCarbonShare(b) - candidateLowCarbonShare(a)
+      || b.efficiency - a.efficiency
+      || (a.source?.index ?? a.battery.index) - (b.source?.index ?? b.battery.index));
 
     for (const candidate of candidates) {
       if (remaining <= 0) break;
@@ -271,7 +297,9 @@ export function calculatePowerNetwork({
     const stored = battery.lowCarbon + battery.fossil;
     const room = Math.max(0, battery.capacity - stored);
     if (batteryOperations[battery.index].canOperate && room > 0 && battery.throughputLeft > 0) {
-      const chargeSources = [...sources].sort((a, b) => routeEfficiency(b.index, battery.index) - routeEfficiency(a.index, battery.index));
+      const chargeSources = [...sources].sort((a, b) => Number(b.lowCarbon) - Number(a.lowCarbon)
+        || routeEfficiency(b.index, battery.index) - routeEfficiency(a.index, battery.index)
+        || a.index - b.index);
       for (const source of chargeSources) {
         const efficiency = routeEfficiency(source.index, battery.index) * batteryHubEfficiency;
         const charge = Math.min(room - (battery.lowCarbon + battery.fossil - stored), battery.throughputLeft, source.available * efficiency);
@@ -297,6 +325,7 @@ export function calculatePowerNetwork({
     delivered: round2(deliveredTotal),
     loss: round2(Math.max(0, demandTotal - deliveredTotal)),
     lowCarbonDelivered: round2(lowCarbonDelivered),
+    generationAvailable: round2(generationAvailable),
     lowCarbonSurplus: round2(sources
       .filter(({ lowCarbon }) => lowCarbon)
       .reduce((sum, source) => sum + Math.max(0, source.available), 0)),

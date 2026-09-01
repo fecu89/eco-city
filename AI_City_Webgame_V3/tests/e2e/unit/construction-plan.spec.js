@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
+import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 
 const PlanSystem = await import('../../../src/systems/ConstructionPlanSystem.js').catch(() => ({}));
 const {
@@ -57,8 +58,8 @@ test('nuclear and its thermal reserve can be queued in either order', () => {
   state.constructionPlan = [{ index: 0, type: 'nuclear' }, { index: 1, type: 'thermal' }];
   expect(assessConstructionPlan(state)).toMatchObject({ ok: true, totalCost: 13 });
   expect(commitConstructionPlan(state)).toMatchObject({ ok: true, totalCost: 13 });
-  expect(state.grid[0]?.type).toBe('nuclear');
-  expect(state.grid[1]?.type).toBe('thermal');
+  expect(state.grid[0]).toMatchObject({ type: 'nuclear', project: { kind: 'build', durationHours: 18 } });
+  expect(state.grid[1]).toMatchObject({ type: 'thermal', project: { kind: 'build', durationHours: 12 } });
 });
 
 test('a completed storage hub and existing battery satisfy a nuclear construction plan', () => {
@@ -76,10 +77,39 @@ test('successful commit writes every planned facility and charges once', () => {
   state.constructionPlan = [{ index: 0, type: 'residential' }, { index: 1, type: 'thermal' }];
   const result = commitConstructionPlan(state);
   expect(result).toMatchObject({ ok: true, totalCost: 7 });
-  expect(result.placements).toHaveLength(2);
+  expect(result.projects).toHaveLength(2);
   expect(state.credits).toBe(23);
   expect(state.turn).toBe(2);
   expect(state.constructionPlan).toEqual([]);
+  expect(state.grid[0]).toMatchObject({
+    type: 'residential',
+    level: 1,
+    project: { kind: 'build', elapsedHours: 0, durationHours: 5, paidCost: 2 },
+  });
+  expect(state.grid[1]).toMatchObject({
+    type: 'thermal',
+    level: 1,
+    project: { kind: 'build', elapsedHours: 0, durationHours: 12, paidCost: 5 },
+  });
+  expect(result.metrics).toMatchObject({ supply: 0, demand: 0, carbon: 0, water: 0 });
+});
+
+test('new plans validate against the completed target of existing projects without recharging them', () => {
+  const state = preparedState(5, 10, ['residential', 'thermal']);
+  state.grid[0] = {
+    type: 'residential',
+    level: 1,
+    operationMode: 'normal',
+    project: createBuildProject({ type: 'residential', paidCost: 2 }),
+  };
+  state.constructionPlan = [{ index: 1, type: 'thermal' }];
+
+  const assessment = assessConstructionPlan(state);
+
+  expect(assessment).toMatchObject({ ok: true, totalCost: 5, projectedCredits: 5 });
+  expect(commitConstructionPlan(state)).toMatchObject({ ok: true, totalCost: 5 });
+  expect(state.grid[0].project).toMatchObject({ kind: 'build', paidCost: 2 });
+  expect(state.grid[1].project).toMatchObject({ kind: 'build', paidCost: 5 });
 });
 
 test('a batch without enough residents is rejected with the exact shortage', () => {

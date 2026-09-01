@@ -1,9 +1,39 @@
 import { test, expect } from '@playwright/test';
+import { statSync } from 'node:fs';
+import path from 'node:path';
+
+test('runtime background track is web-compressed while the source master stays outside public', () => {
+  const runtime = statSync(path.resolve(process.cwd(), 'public/assets/eco-city.mp3')).size;
+  const source = statSync(path.resolve(process.cwd(), 'assets-source/audio/eco-city-original.mp3')).size;
+  expect(runtime).toBeLessThan(2_000_000);
+  expect(runtime / source).toBeLessThan(0.5);
+});
 
 test('background music starts after the first gesture and stops cleanly from settings', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.clear();
-    window.__audioProbe = { contexts: 0, resumes: 0, oscillatorsStarted: 0, oscillatorsStopped: 0 };
+    window.__audioProbe = {
+      contexts: 0, resumes: 0, audioElements: 0, musicPlays: 0, musicPauses: 0, musicSrc: '',
+    };
+    class FakeAudio {
+      constructor(src) {
+        window.__audioProbe.audioElements += 1;
+        window.__audioProbe.musicSrc = src;
+        this.src = src;
+        this.currentTime = 0;
+        this.loop = false;
+        this.preload = '';
+        this.volume = 1;
+      }
+      play() {
+        window.__audioProbe.musicPlays += 1;
+        return Promise.resolve();
+      }
+      pause() { window.__audioProbe.musicPauses += 1; }
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    window.Audio = FakeAudio;
     class FakeParam {
       constructor(value = 0) { this.value = value; }
       linearRampToValueAtTime(value) { this.value = value; }
@@ -27,8 +57,8 @@ test('background music starts after the first gesture and stops cleanly from set
           frequency: new FakeParam(0),
           connect() {},
           disconnect() {},
-          start() { window.__audioProbe.oscillatorsStarted += 1; },
-          stop() { window.__audioProbe.oscillatorsStopped += 1; },
+          start() {},
+          stop() {},
         };
       }
       async resume() {
@@ -48,12 +78,14 @@ test('background music starts after the first gesture and stops cleanly from set
   await expect.poll(() => page.evaluate(() => window.__audioProbe)).toMatchObject({
     contexts: 1,
     resumes: 1,
-    oscillatorsStarted: 3,
+    audioElements: 1,
+    musicPlays: 1,
   });
+  expect(await page.evaluate(() => window.__audioProbe.musicSrc)).toContain('/assets/eco-city.mp3');
 
   for (let pageIndex = 0; pageIndex < 2; pageIndex++) await page.locator('#storyNext').click();
   await page.locator('[data-hud-target="settings"]').first().click();
   await page.locator('#musicBtn').click();
   await expect(page.locator('#musicBtn')).not.toHaveClass(/active/);
-  await expect.poll(() => page.evaluate(() => window.__audioProbe.oscillatorsStopped)).toBe(3);
+  await expect.poll(() => page.evaluate(() => window.__audioProbe.musicPauses)).toBe(1);
 });

@@ -1,5 +1,6 @@
 import Chart from 'chart.js/auto';
 import { gameState } from '../core/GameState.js';
+import { CHART_MOTION, SIMULATION } from '../core/Constants.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -28,6 +29,21 @@ export function chartValues(state = gameState) {
   ];
 }
 
+export function chartAnimationOptions({ panelVisible, reducedMotion, timeScale }) {
+  const duration = panelVisible && !reducedMotion && timeScale > 0
+    ? Math.round((SIMULATION.HOUR_MS / timeScale) * CHART_MOTION.ACTIVE_INTERVAL_FRACTION)
+    : 0;
+  return { duration, easing: CHART_MOTION.EASING };
+}
+
+function currentAnimationOptions() {
+  const panelVisible = canvasEl
+    ?.closest('[data-hud-panel]')
+    ?.getAttribute('aria-hidden') === 'false';
+  const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+  return chartAnimationOptions({ panelVisible, reducedMotion, timeScale: gameState.timeScale });
+}
+
 export function updateChart() {
   const m = gameState.metrics;
   if (!m) return;
@@ -53,7 +69,7 @@ export function updateChart() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 320 },
+        animation: currentAnimationOptions(),
         scales: {
           r: {
             min: 0,
@@ -69,6 +85,7 @@ export function updateChart() {
     });
   } else {
     chart.data.datasets[0].data = values;
+    chart.options.animation = currentAnimationOptions();
     chart.update();
   }
 }

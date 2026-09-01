@@ -37,3 +37,24 @@ test('the last thermal reserve cannot enter demolition confirmation while nuclea
   await expect(page.locator('#modalCard')).toContainText('화력발전');
   await expect(page.locator('#modalCard')).toContainText('LEVEL 1');
 });
+
+test('factory management actions remain visible in a short desktop viewport', async ({ gamePage: page }) => {
+  await page.setViewportSize({ width: 1024, height: 480 });
+  await page.evaluate(() => {
+    const state = window.__GAME_STATE__;
+    state.questIndex = 11;
+    state.upgradePermitLevel = 3;
+    state.credits = 100;
+    state.grid[0] = { type: 'factory', level: 2, priority: 'normal', operationMode: 'normal' };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  const demolish = page.locator('#demolishBtn');
+  const upgrade = page.locator('#upgradeBtn');
+  await expect(demolish).toBeVisible();
+  await expect(upgrade).toBeVisible();
+  const [demolishBox, upgradeBox] = await Promise.all([demolish.boundingBox(), upgrade.boundingBox()]);
+  expect(demolishBox.y + demolishBox.height).toBeLessThanOrEqual(476);
+  expect(upgradeBox.y + upgradeBox.height).toBeLessThanOrEqual(476);
+});

@@ -22,7 +22,7 @@ function scheduleDeck(deck, seed, startHour, cycle = 0) {
       startAt: cursor,
       endAt: cursor + definition.durationHours,
     };
-    cursor = item.endAt + EVENT_GAP_HOURS;
+    cursor = item.endAt + EVENT_GAP_HOURS + EVENT_FORECAST_HOURS;
     return item;
   });
 }
@@ -45,14 +45,14 @@ function ensureSchedule(state) {
   const hasDrought = state.events.schedule.some(({ type }) => type === 'drought');
   if (state.events.completed.length >= 2 && !hasDrought) {
     const lastEnd = Math.max(state.elapsedGameHours, ...state.events.schedule.map(({ endAt }) => endAt));
-    state.events.schedule.push(...scheduleDeck(['drought'], state.events.seed, lastEnd + EVENT_GAP_HOURS - EVENT_FORECAST_HOURS, 1));
+    state.events.schedule.push(...scheduleDeck(['drought'], state.events.seed, lastEnd + EVENT_GAP_HOURS, 1));
   }
   const done = completedIds(state);
   const hasFuture = state.events.schedule.some((item) => !done.has(item.id) && item.endAt > state.elapsedGameHours);
   if (!hasFuture) {
     const lastEnd = Math.max(state.elapsedGameHours, ...state.events.schedule.map(({ endAt }) => endAt));
     const cycle = Math.floor(state.events.schedule.length / FULL_EVENT_DECK.length) + 1;
-    state.events.schedule.push(...scheduleDeck(FULL_EVENT_DECK, state.events.seed, lastEnd + EVENT_GAP_HOURS - EVENT_FORECAST_HOURS, cycle));
+    state.events.schedule.push(...scheduleDeck(FULL_EVENT_DECK, state.events.seed, lastEnd + EVENT_GAP_HOURS, cycle));
   }
 }
 

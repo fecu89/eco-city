@@ -96,9 +96,9 @@ test('v6 normalization clamps scale, facility level, and battery storage while a
   });
 });
 
-test('v6 state serializes and hydrates every redesign state group', () => {
+test('current state serializes and hydrates every redesign state group', () => {
   const state = new GameState();
-  expect(SAVE_VERSION).toBe(6);
+  expect(SAVE_VERSION).toBe(7);
   state.progression.chapter = 3;
   state.progression.objectiveSetId = 'resilience';
   state.expansion.phase = 1;
@@ -117,9 +117,9 @@ test('v6 state serializes and hydrates every redesign state group', () => {
   expect(restored.decisionCounts.modeChanges).toBe(2);
 });
 
-test('the full migration chain ends at v6', () => {
+test('the full migration chain passes through v6 and ends at v7', () => {
   const migrated = migrateSaveData(v5Save());
-  expect(migrated.v).toBe(6);
+  expect(migrated.v).toBe(7);
 });
 
 test('v6 state and migrated payloads omit obsolete diagnosis state', () => {

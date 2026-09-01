@@ -9,6 +9,7 @@ import {
 } from '../../../src/systems/QuestSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
 import { QUESTS } from '../../../src/core/QuestDefinitions.js';
+import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 
 const powered = (ratio = 1) => ({ demand: 2, delivered: 2 * ratio, ratio });
 const summary = (overrides = {}) => ({
@@ -43,6 +44,22 @@ test('quest 1 becomes ready with two homes and claims its reward once', () => {
   expect(state.unlockedFacilities.has('thermal')).toBe(true);
   expect(claimCurrentQuest(state)).toMatchObject({ ok: false });
   expect(state.credits).toBe(before + 4);
+});
+
+test('unfinished construction does not satisfy facility-count quests', () => {
+  const state = new GameState();
+  state.grid[0] = {
+    type: 'residential',
+    level: 1,
+    project: createBuildProject({ type: 'residential', paidCost: 2 }),
+  };
+  state.grid[1] = {
+    type: 'residential',
+    level: 1,
+    project: createBuildProject({ type: 'residential', paidCost: 2 }),
+  };
+
+  expect(evaluateCurrentQuest(state).ready).toBe(false);
 });
 
 test('quest 14 needs late growth plus four consecutive low-carbon, lower-water profitable hours', () => {

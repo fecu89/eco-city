@@ -8,6 +8,7 @@ import {
   buildCityModifierContext,
   effectiveFacilityStats,
   identityModifier,
+  setFacilityPriority,
   setFacilityOperationMode,
 } from '../../../src/systems/CityModifierSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
@@ -71,6 +72,15 @@ test('mode change rejects locked choices and returns a before-after operating fo
   expect(changed.forecast.carbon.after).toBeGreaterThan(changed.forecast.carbon.before);
   expect(changed.forecast.workforce.after).toBe(changed.forecast.workforce.before + 1);
   expect(state.decisionCounts.modeChanges).toBe(1);
+});
+
+test('priority changes are validated and counted only when the player selects a different priority', () => {
+  const state = new GameState();
+  state.grid[2] = factory(2);
+  expect(setFacilityPriority(state, 2, 'essential')).toMatchObject({ ok: true, before: 'normal', after: 'essential' });
+  expect(setFacilityPriority(state, 2, 'essential')).toMatchObject({ ok: true, before: 'essential', after: 'essential' });
+  expect(setFacilityPriority(state, 2, 'invalid')).toMatchObject({ ok: false, reason: 'invalid_priority' });
+  expect(state.decisionCounts.priorityChanges).toBe(1);
 });
 
 test('data eco mode stops research while focused research mode advances forty percent faster', () => {

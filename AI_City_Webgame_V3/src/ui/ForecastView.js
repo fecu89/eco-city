@@ -1,5 +1,4 @@
-import { CITY_EVENTS } from '../core/EventDefinitions.js';
-import { STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_HOURS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import { gameState } from '../core/GameState.js';
 
 let root = null;
@@ -51,7 +50,7 @@ export function renderForecast() {
   if (next) {
     const definition = CITY_EVENTS[next.type];
     const until = Math.max(0, next.startAt - gameState.elapsedGameHours);
-    small.textContent = until <= 6 ? '6시간 기후 예보' : '다음 이벤트';
+    small.textContent = until <= EVENT_FORECAST_HOURS ? `${EVENT_FORECAST_HOURS}시간 기후 예보` : '다음 이벤트';
     label.textContent = `${until}시간 후 ${definition.label}`;
     root.title = `${definition.description} · ${definition.durationHours}시간 지속`;
     icon?.setAttribute?.('data-lucide', definition.icon);

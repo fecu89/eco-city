@@ -2,7 +2,7 @@ import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { closeModal, $modal, setModal } from './Modal.js';
 
-export const ONBOARDING_VERSION = 2;
+export const ONBOARDING_VERSION = 3;
 
 const STORY_PAGES = Object.freeze([
   Object.freeze({
@@ -21,10 +21,10 @@ const STORY_PAGES = Object.freeze([
   }),
   Object.freeze({
     chapter: '생존 목표',
-    date: '저탄소 전환',
+    date: '예상 작전 시간 15~30분',
     title: '생존에서 전환으로',
-    copy: '바다에 둘러싸인 이 섬은 최대 37칸뿐입니다. 첫 임무는 주거지 2개 건설입니다. 이후 15개 퀘스트를 따라 저장 허브와 데이터센터별 연구를 운영하고, 탄소 위기 전에 저탄소 도시를 완성하세요.',
-    accent: '첫 임무: 주거지 2개 · 이후 하단 퀘스트 메뉴',
+    copy: '바다에 둘러싸인 이 섬은 최대 37칸뿐입니다. 6개 기초 임무를 마치면 확장 방향과 선택 목표를 직접 정합니다. 예보를 보고 시설 모드·저장 정책·연구를 조절한 뒤 마지막 도시 스트레스 테스트를 통과하세요.',
+    accent: '6개 기초 임무 → 선택 목표 → 기후 이벤트 → 최종 시험',
   }),
 ]);
 

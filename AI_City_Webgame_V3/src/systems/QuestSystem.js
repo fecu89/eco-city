@@ -4,12 +4,15 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
 import { evaluateObjectiveSet, isObjectiveCampaignActive } from './ObjectiveSystem.js';
+import { isOperationalCell } from './ConstructionProjectSystem.js';
 
-const facilities = (state, type) => state.grid.filter((cell) => cell?.type === type);
+const facilities = (state, type) => state.grid.filter((cell) => isOperationalCell(cell) && cell.type === type);
 
 function hasAdjacent(state, index, types) {
   const coords = createHexCoordinates(state.boardRadius);
-  return neighborIndices(index, coords).some((neighbor) => types.has(state.grid[neighbor]?.type));
+  return neighborIndices(index, coords).some((neighbor) => (
+    isOperationalCell(state.grid[neighbor]) && types.has(state.grid[neighbor].type)
+  ));
 }
 
 export function evaluateCurrentQuest(state) {
@@ -86,7 +89,7 @@ export function claimCurrentQuest(state) {
 }
 
 const allRatios = (state, type, summary) => state.grid
-  .map((cell, index) => (cell?.type === type ? summary.facilityPower?.[index]?.ratio ?? 0 : null))
+  .map((cell, index) => (isOperationalCell(cell) && cell.type === type ? summary.facilityPower?.[index]?.ratio ?? 0 : null))
   .filter((ratio) => ratio != null);
 
 export function applySimulationQuestProgress(state, summary) {
@@ -96,6 +99,7 @@ export function applySimulationQuestProgress(state, summary) {
   switch (state.questIndex) {
     case 2:
       condition = Object.entries(summary.facilityEconomy || {}).some(([index, item]) => state.grid[index]?.type === 'factory'
+        && isOperationalCell(state.grid[index])
         && hasAdjacent(state, Number(index), new Set(['thermal']))
         && (summary.facilityPower?.[index]?.ratio ?? 0) >= 0.5
         && item.operationRatio >= 0.5
@@ -104,7 +108,7 @@ export function applySimulationQuestProgress(state, summary) {
     case 3:
       return evaluateCurrentQuest(state);
     case 4:
-      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => state.grid[index]?.type === 'data' && item.ratio >= 0.9);
+      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => isOperationalCell(state.grid[index]) && state.grid[index].type === 'data' && item.ratio >= 0.9);
       break;
     case 5:
       condition = facilities(state, 'nuclear').length > 0
@@ -116,10 +120,11 @@ export function applySimulationQuestProgress(state, summary) {
       const baselineWater = Number.isFinite(state.baseline?.hourlyWater)
         ? state.baseline.hourlyWater
         : summary.hourlyWater;
-      condition = state.grid.some((cell, dataIndex) => cell?.type === 'data'
+      condition = state.grid.some((cell, dataIndex) => isOperationalCell(cell) && cell.type === 'data'
         && (summary.facilityPower?.[dataIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
         && neighborIndices(dataIndex, createHexCoordinates(state.boardRadius)).some((coolingIndex) => (
-          state.grid[coolingIndex]?.type === 'cooling'
+          isOperationalCell(state.grid[coolingIndex])
+          && state.grid[coolingIndex].type === 'cooling'
           && (summary.facilityPower?.[coolingIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
         )))
         && summary.hourlyWater <= baselineWater;
@@ -142,11 +147,11 @@ export function applySimulationQuestProgress(state, summary) {
       break;
     }
     case 11:
-      condition = summary.netCredits > 0 && state.grid.some((cell, index) => cell?.type === 'residential' && hasAdjacent(state, index, new Set(['green'])));
+      condition = summary.netCredits > 0 && state.grid.some((cell, index) => isOperationalCell(cell) && cell.type === 'residential' && hasAdjacent(state, index, new Set(['green'])));
       break;
     case 12: {
       const ratios = state.grid
-        .map((cell, index) => (cell && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type))
+        .map((cell, index) => (isOperationalCell(cell) && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type))
           ? summary.facilityPower?.[index]?.ratio ?? 0
           : null))
         .filter((ratio) => ratio != null);
@@ -157,7 +162,7 @@ export function applySimulationQuestProgress(state, summary) {
       condition = summary.hour >= 19 && summary.hour <= 23 && summary.deliveredPower >= summary.demand && summary.batteryStored >= 5;
       break;
     case 14:
-      condition = (state.research.completedIds.has('renewable3') || state.grid.some((cell) => cell?.level >= 3))
+      condition = (state.research.completedIds.has('renewable3') || state.grid.some((cell) => isOperationalCell(cell) && cell.level >= 3))
         && summary.lowCarbonPercent >= 70
         && summary.hourlyWater < (state.baseline?.hourlyWater ?? Infinity)
         && summary.netCredits > 0;

@@ -20,6 +20,34 @@ test('facility limits expose the approved cumulative capacity through all fiftee
   expect(getFacilityLimits(15)).toMatchObject({ residential: 10, nuclear: 2, solar: 6, tidal: 3 });
 });
 
+test('redesigned objective rewards grant usable permits instead of only unlocking cards', () => {
+  const state = new GameState();
+  state.questIndex = 7;
+  state.progression.objectiveSetId = 'specialization';
+  state.progression.completedObjectiveSetIds = ['transition-choice'];
+  state.unlockedFacilities.add('battery');
+  state.unlockedFacilities.add('wind');
+
+  expect(getFacilityPermit(state, 'battery')).toMatchObject({ ok: true, limit: 2 });
+  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: true, limit: 2 });
+});
+
+test('resilience and stress preparation raise redesigned city capacity without legacy quest advancement', () => {
+  const state = new GameState();
+  state.questIndex = 7;
+  state.progression.objectiveSetId = 'resilience';
+  state.progression.completedObjectiveSetIds = ['transition-choice', 'specialization'];
+  expect(getFacilityPermit(state, 'residential')).toMatchObject({ ok: true, limit: 9 });
+  expect(getFacilityPermit(state, 'battery')).toMatchObject({ ok: true, limit: 4 });
+  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: true, limit: 4 });
+
+  state.progression.objectiveSetId = null;
+  state.progression.completedObjectiveSetIds.push('resilience');
+  state.stressTest.status = 'ready';
+  expect(getFacilityPermit(state, 'solar')).toMatchObject({ ok: true, limit: 6 });
+  expect(getFacilityPermit(state, 'tidal')).toMatchObject({ ok: true, limit: 3 });
+});
+
 test('committed and planned facilities share one quest cap', () => {
   const state = new GameState();
   state.questIndex = 1;

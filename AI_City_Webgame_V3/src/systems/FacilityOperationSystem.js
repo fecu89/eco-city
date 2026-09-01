@@ -1,5 +1,6 @@
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
+import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
 
@@ -24,7 +25,8 @@ function strongestCoolingSupport(grid, index, coords, facilityOperations) {
     const powerRatio = Math.max(0, Math.min(1, Number(facilityOperations[coolerIndex]?.powerRatio) || 0));
     const levelBonus = coolerLevel >= 2 ? 1.25 : 1;
     const rangeMultiplier = tileDistance === 2 ? 0.5 : 1;
-    return Math.max(strongest, powerRatio * levelBonus * rangeMultiplier);
+    const projectMultiplier = operationProfileForCell(cooler).functionality;
+    return Math.max(strongest, powerRatio * levelBonus * rangeMultiplier * projectMultiplier);
   }, 0);
 }
 
@@ -38,6 +40,7 @@ export function calculateEnvironmentalOperations({
   facilityOperations = {},
   modifierContext = null,
 }) {
+  grid = operationalGrid(grid);
   const boardCoords = topologyFor(grid, coords);
   const byFacility = {};
   let hourlyCarbon = 0;

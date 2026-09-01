@@ -4,6 +4,7 @@ import { calcMetrics, getBoardCoordinates, validatePlacement } from './BoardSyst
 import { getFacilityPermitForCount, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 import { constructionCostForCell } from './ZoneSystem.js';
+import { createBuildProject, finalGridAfterProjects } from './ConstructionProjectSystem.js';
 
 function copyPlan(plan) {
   return (plan || []).map(({ index, type }) => ({ index, type }));
@@ -22,10 +23,12 @@ function typeCounts(plan) {
 
 export function assessConstructionPlan(state, planOverride = state.constructionPlan) {
   const items = copyPlan(planOverride);
-  const projectedGrid = copyGrid(state.grid);
+  const finalCurrentGrid = finalGridAfterProjects(state.grid);
+  const projectedGrid = copyGrid(finalCurrentGrid);
   const errors = [];
   const counts = typeCounts(items);
   let totalCost = 0;
+  const paidCostByIndex = {};
 
   Object.entries(counts).forEach(([type, plannedCount]) => {
     const permit = getFacilityPermitForCount(state, type, plannedCount - 1);
@@ -38,7 +41,9 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
       const stressMultiplier = state.stressTest?.status === 'running'
         ? STRESS_TEST_RULES.CONSTRUCTION_COST_MULTIPLIER
         : 1;
-      totalCost = roundCredits(totalCost + constructionCostForCell(state, item.index, item.type) * stressMultiplier);
+      const paidCost = roundCredits(constructionCostForCell(state, item.index, item.type) * stressMultiplier);
+      paidCostByIndex[item.index] = paidCost;
+      totalCost = roundCredits(totalCost + paidCost);
     }
     const validation = validatePlacement(state, item.type, item.index, {
       grid: projectedGrid,
@@ -63,7 +68,7 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
     if (!dependency.ok) errors.push({ index: null, type: 'nuclear', ...dependency });
   }
 
-  const workforce = validateWorkforceTransition(state.grid, projectedGrid);
+  const workforce = validateWorkforceTransition(finalCurrentGrid, projectedGrid);
   if (!workforce.ok) {
     errors.push({
       index: null,
@@ -94,6 +99,7 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
     totalCost,
     projectedCredits,
     projectedGrid,
+    paidCostByIndex,
     workforce,
   };
 }
@@ -125,22 +131,34 @@ export function commitConstructionPlan(state) {
   const assessment = assessConstructionPlan(state);
   if (!assessment.ok) return { ...assessment, ok: false, reason: 'invalid_plan' };
 
-  const placements = assessment.items.map(({ index, type }) => ({
+  const nextGrid = copyGrid(state.grid);
+  const projects = assessment.items.map(({ index, type }) => ({
     index,
     key: type,
     type: FACILITIES[type].name,
     level: 1,
+    durationHours: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }).durationHours,
   }));
-  state.grid = assessment.projectedGrid;
+  assessment.items.forEach(({ index, type }) => {
+    nextGrid[index] = {
+      type,
+      level: 1,
+      operationMode: 'normal',
+      ...(type === 'battery' ? { batteryPolicy: 'auto' } : {}),
+      project: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }),
+    };
+  });
+  state.grid = nextGrid;
   state.credits = assessment.projectedCredits;
-  state.turn += placements.length;
+  state.turn += projects.length;
   state.metrics = calcMetrics(state.grid, getBoardCoordinates(state));
   state.constructionPlan = [];
-  state.selectedCell = placements.at(-1)?.index ?? null;
+  state.selectedCell = projects.at(-1)?.index ?? null;
   return {
     ok: true,
     reason: null,
-    placements,
+    projects,
+    placements: projects,
     totalCost: assessment.totalCost,
     projectedCredits: state.credits,
     metrics: state.metrics,

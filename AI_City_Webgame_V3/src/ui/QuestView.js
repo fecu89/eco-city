@@ -75,6 +75,10 @@ export function initQuestView(elements, changed) {
     researchQuizReturnIndex = dataCenterIndex;
     renderQuestQuizModal();
   });
+  eventBus.on(Events.FINAL_QUIZ_REQUESTED, () => {
+    startQuestQuiz(gameState, 'climate-council');
+    renderQuestQuizModal();
+  });
   els.expand?.addEventListener('click', () => {
     detailsExpanded = !detailsExpanded;
     renderQuest();
@@ -218,7 +222,9 @@ function renderQuestQuizModal() {
       const accelerationText = result.acceleration
         ? result.acceleration.appliedJobs.length
           ? `${RESEARCH[result.researchId]?.name || result.researchId} ${result.acceleration.hours}시간 단축`
-          : '이 연구는 이미 완료되었습니다.'
+          : result.acceleration.reason === 'question_already_credited'
+            ? '이 문항의 가속 보상은 이전 시도에서 이미 반영되었습니다.'
+            : '이 연구는 이미 완료되었습니다.'
         : '';
       $modal('#questQuizExplain').innerHTML = `<div class="quiz-explain"><strong>${result.correct ? '정답' : '오답'}</strong><br>${escapeHtml(result.explain)}${accelerationText ? `<br><b>${escapeHtml(accelerationText)}</b>` : ''}</div>`;
       $modal('#questQuizNext').disabled = false;
@@ -234,7 +240,8 @@ function renderQuestQuizModal() {
 function renderQuestQuizResultModal(result) {
   if (result.researchId) {
     const definition = RESEARCH[result.researchId];
-    const reducedHours = (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT) * result.correct;
+    const creditedCount = gameState.research.quizCreditQuestionIds?.[result.researchId]?.length || 0;
+    const reducedHours = (definition.durationHours / RESEARCH_RULES.QUIZ_QUESTION_COUNT) * creditedCount;
     setModal(`
       <div class="modal-head"><div><span class="eyebrow">RESEARCH QUIZ COMPLETE</span><h2>${escapeHtml(definition.name)} 가속 결과</h2></div></div>
       <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>단축</span><strong>${reducedHours}시간</strong></div></div>
@@ -247,6 +254,20 @@ function renderQuestQuizResultModal(result) {
       closeModal();
       eventBus.emit(Events.RESEARCH_QUIZ_CLOSED, { dataCenterIndex });
       onChanged();
+    });
+    return;
+  }
+  if (gameState.stressTest?.status === 'passed') {
+    const bonus = result.correct * 2.5;
+    setModal(`
+      <div class="modal-head"><div><span class="eyebrow">OPTIONAL BONUS</span><h2>개념 퀴즈 보너스</h2></div></div>
+      <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>보너스</span><strong>+${bonus}점</strong></div></div>
+      <div class="callout"><strong>운영 점수는 바뀌지 않습니다.</strong><p>퀴즈 보너스는 도시 운영 100점과 별도로 최종 합계에만 표시됩니다.</p></div>
+      <div class="modal-actions"><button class="btn primary" id="questQuizFinish">최종 보고서로</button></div>
+    `, { id: 'final-bonus-result', pausesSimulation: true });
+    $modal('#questQuizFinish').addEventListener('click', () => {
+      eventBus.emit(Events.SAVE_REQUESTED, {});
+      eventBus.emit(Events.REPORT_OPEN_REQUESTED, {});
     });
     return;
   }

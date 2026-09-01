@@ -20,6 +20,13 @@ import {
   constructionCostForCell,
   isExpansionCellActive,
 } from './ZoneSystem.js';
+import {
+  createBuildProject,
+  createUpgradeProject,
+  finalGridAfterProjects,
+  isOperationalCell,
+  operationalGrid,
+} from './ConstructionProjectSystem.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (v) => Math.round(v * 10) / 10;
@@ -27,6 +34,7 @@ const BATTERY_CONSUMER_TYPES = Object.freeze(['residential', 'factory', 'data', 
 
 function batteryHasConsumerNeighbor(grid, batteryIndex, coords) {
   return grid.some((cell, consumerIndex) => cell
+    && isOperationalCell(cell)
     && BATTERY_CONSUMER_TYPES.includes(cell.type)
     && isBatteryHubForConsumer(batteryIndex, consumerIndex, coords));
 }
@@ -44,7 +52,7 @@ export function neighborIndices(index, coords = getBoardCoordinates()) {
 }
 
 export function hasNeighbor(grid, index, coords, types) {
-  return neighborIndices(index, coords).some((i) => grid[i] && types.includes(grid[i].type));
+  return neighborIndices(index, coords).some((i) => isOperationalCell(grid[i]) && types.includes(grid[i].type));
 }
 
 export function getCellSpatial(grid, index, coords = getBoardCoordinates()) {
@@ -113,6 +121,7 @@ export function placementPreview(facilityKey, grid, coords = getBoardCoordinates
 }
 
 export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContext = null) {
+  grid = operationalGrid(grid);
   const previewOperations = Object.fromEntries(grid
     .map((cell, index) => cell ? [index, { powerRatio: 1, operationRatio: 1 }] : null)
     .filter(Boolean));
@@ -296,6 +305,7 @@ export function validateUpgrade(state, index) {
   const cell = state.grid[index];
   if (!state.isEditable) return { ok: false, reason: 'not_editable' };
   if (!cell) return { ok: false, reason: 'invalid_cell' };
+  if (cell.project) return { ok: false, reason: 'project_in_progress', facility: FACILITIES[cell.type] };
   const facility = FACILITIES[cell.type];
   if (cell.level >= facility.maxLevel) return { ok: false, reason: 'max_level', facility };
   const nextLevel = cell.level + 1;
@@ -306,10 +316,11 @@ export function validateUpgrade(state, index) {
   }
   const cost = upgradeCost(cell);
   if (state.credits < cost) return { ok: false, reason: 'insufficient_credits', cost, missingCredits: cost - state.credits, facility };
-  const projectedGrid = state.grid.map((item, cellIndex) => cellIndex === index
+  const finalCurrentGrid = finalGridAfterProjects(state.grid);
+  const projectedGrid = finalCurrentGrid.map((item, cellIndex) => cellIndex === index
     ? { ...item, level: nextLevel }
     : item);
-  const workforce = validateWorkforceTransition(state.grid, projectedGrid);
+  const workforce = validateWorkforceTransition(finalCurrentGrid, projectedGrid);
   if (!workforce.ok) {
     return { ok: false, reason: 'insufficient_workforce', cost, nextLevel, facility, ...workforce };
   }
@@ -340,6 +351,7 @@ export function upgradeRequirementMessage(state, validation) {
     return `강화 후 인력이 ${validation.shortage}명 부족합니다. 주거지를 먼저 건설하거나 강화하세요.`;
   }
   if (validation.reason === 'max_level') return '이미 최대 레벨입니다.';
+  if (validation.reason === 'project_in_progress') return '현재 공사가 끝난 뒤 다시 시도하세요.';
   if (validation.reason === 'not_editable') return '현재 퀘스트에서는 시설을 강화할 수 없습니다.';
   return '이 시설을 지금 강화할 수 없습니다.';
 }
@@ -367,6 +379,7 @@ export function placeFacility(index) {
     level: 1,
     operationMode: 'normal',
     ...(key === 'battery' ? { batteryPolicy: 'auto' } : {}),
+    project: createBuildProject({ type: key, paidCost: validation.buildCost }),
   };
   gameState.credits = roundCredits(gameState.credits - validation.buildCost);
   gameState.turn++;
@@ -383,16 +396,28 @@ export function upgradeCell(index) {
   const cost = validation.cost;
 
   gameState.credits = roundCredits(gameState.credits - cost);
-  cell.level++;
+  cell.project = createUpgradeProject({ cell, paidCost: cost });
   gameState.turn++;
   const metrics = refreshMetrics();
-  return { ok: true, index, type: f.name, level: cell.level, cost, metrics };
+  return {
+    ok: true,
+    index,
+    type: f.name,
+    level: cell.level,
+    targetLevel: cell.project.toLevel,
+    durationHours: cell.project.durationHours,
+    cost,
+    metrics,
+  };
 }
+
+export const startUpgrade = upgradeCell;
 
 export function demolishCell(index) {
   const cell = gameState.grid[index];
   if (!cell) return { ok: false, reason: 'empty' };
   if (!gameState.isEditable) return { ok: false, reason: 'not_editable' };
+  if (cell.project) return { ok: false, reason: 'project_in_progress' };
   const permit = validateDemolitionPermit(gameState, index);
   if (!permit.ok) return permit;
   const refund = demolitionRefund(cell);

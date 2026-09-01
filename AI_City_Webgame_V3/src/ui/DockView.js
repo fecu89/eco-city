@@ -61,7 +61,8 @@ function orderedFacilities() {
 }
 
 export function renderDock() {
-  dockEl.innerHTML = '';
+  const existingButtons = new Map([...dockEl.querySelectorAll('[data-facility]')]
+    .map((button) => [button.dataset.facility, button]));
   orderedFacilities().forEach(([key, f]) => {
     const questLocked = !gameState.unlockedFacilities.has(key);
     const researchLocked = key === 'tidal' && (gameState.research.techLevels.tidal || 0) < 1;
@@ -69,7 +70,7 @@ export function renderDock() {
     const unaffordable = gameState.credits < f.cost;
     const permit = getFacilityPermit(gameState, key, gameState.constructionPlan || []);
     const permitBlocked = !locked && !permit.ok;
-    const btn = document.createElement('button');
+    const btn = existingButtons.get(key) || document.createElement('button');
     btn.className = 'facility-btn'
       + (gameState.selectedFacility === key ? ' active' : '')
       + (locked ? ' locked' : '')
@@ -84,28 +85,38 @@ export function renderDock() {
         : unaffordable
         ? `${f.name} — ${formatCredits(f.cost - gameState.credits)} 부족`
         : `${f.name} — 보드에서 선택하면 인접 보너스/갈등 구역이 표시됩니다.`;
-    btn.innerHTML = `
+    const markup = `
       <div class="facility-card-main"><span class="f-icon">${f.icon}</span><span class="facility-card-identity"><strong>${f.name}</strong><span class="cost">-${formatCredits(f.cost)}</span>${!locked ? `<span class="facility-limit" aria-label="현재 ${permit.current}, 계획 ${permit.planned}, 최대 ${permit.limit}">${permit.current}${permit.planned ? ` +${permit.planned}` : ''} / ${permit.limit}</span>` : ''}</span></div>
     `;
-    btn.addEventListener('pointerenter', () => renderFacilityDetail(key));
-    btn.addEventListener('focus', () => renderFacilityDetail(key));
-    btn.addEventListener('click', () => {
-      renderFacilityDetail(key);
-      if (locked || unaffordable || permitBlocked) {
-        eventBus.emit(Events.TOAST_SHOW, {
-          title: `${f.name} 건설 불가`,
-          text: locked
-            ? facilityUnlockMessage(gameState, key)
-            : permitBlocked
-              ? permit.message
-              : `${formatCredits(f.cost - gameState.credits)}가 더 필요합니다.`,
-        });
-        return;
-      }
-      selectFacility(key);
-      renderDock();
-    });
+    if (btn.innerHTML !== markup) btn.innerHTML = markup;
+    if (!btn.dataset.bound) {
+      btn.dataset.bound = 'true';
+      btn.addEventListener('pointerenter', () => renderFacilityDetail(key));
+      btn.addEventListener('focus', () => renderFacilityDetail(key));
+      btn.addEventListener('click', () => {
+        renderFacilityDetail(key);
+        const currentLocked = btn.classList.contains('locked');
+        const currentUnaffordable = btn.classList.contains('unaffordable');
+        const currentPermitBlocked = btn.classList.contains('permit-capped');
+        if (currentLocked || currentUnaffordable || currentPermitBlocked) {
+          const currentPermit = getFacilityPermit(gameState, key, gameState.constructionPlan || []);
+          eventBus.emit(Events.TOAST_SHOW, {
+            title: `${f.name} 건설 불가`,
+            text: currentLocked
+              ? facilityUnlockMessage(gameState, key)
+              : currentPermitBlocked
+                ? currentPermit.message
+                : `${formatCredits(f.cost - gameState.credits)}가 더 필요합니다.`,
+          });
+          return;
+        }
+        selectFacility(key);
+        renderDock();
+      });
+    }
     dockEl.appendChild(btn);
+    existingButtons.delete(key);
   });
+  existingButtons.forEach((button) => button.remove());
   renderFacilityDetail();
 }

@@ -26,6 +26,7 @@ import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
 import { ambientDurationBounds, createAmbientMotionController } from '../systems/CityAmbientMotionSystem.js';
 import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
 import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
+import { projectProgress } from '../systems/ConstructionProjectSystem.js';
 import { createCityEnvironment3D } from './CityEnvironment3D.js';
 
 // 모든 레이어는 씬 수명 동안 유지된다. 상태 갱신은 instance matrix/color/count만 바꾸므로
@@ -77,6 +78,8 @@ let canvasEl;
 let containerEl;
 let cameraHintEl;
 let cameraResetEl;
+const constructionHudEls = new Map();
+const constructionHudPool = [];
 let resizeObserver;
 let cameraInteractionReady = false;
 let currentRadius = BOARD.INITIAL_RADIUS;
@@ -115,6 +118,8 @@ let buildingLightMesh;
 let buildingLightMaterial;
 let smokeEffectMesh;
 let statusLightMesh;
+let constructionFoundationMesh;
+let constructionScaffoldMesh;
 let facilityMaterial;
 let tileMaterial;
 let stateRingMaterial;
@@ -404,6 +409,32 @@ function createSceneLayers() {
   );
   stateRingMesh.name = 'cell-state-rings';
 
+  const constructionFoundationMaterial = ownMaterial(new THREE.MeshStandardMaterial({
+    color: 0x607080,
+    roughness: 0.92,
+    metalness: 0.02,
+  }));
+  constructionFoundationMesh = makeInstancedMesh(
+    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    constructionFoundationMaterial,
+    MAX_CELLS,
+  );
+  constructionFoundationMesh.name = 'construction-foundations';
+
+  const constructionScaffoldMaterial = ownMaterial(new THREE.MeshStandardMaterial({
+    color: 0xffbd59,
+    emissive: 0x4a2d08,
+    emissiveIntensity: 0.18,
+    roughness: 0.58,
+    metalness: 0.28,
+  }));
+  constructionScaffoldMesh = makeInstancedMesh(
+    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    constructionScaffoldMaterial,
+    MAX_CELLS * 6,
+  );
+  constructionScaffoldMesh.name = 'construction-scaffolds';
+
   const rotorMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xd8f7ff,
     side: THREE.DoubleSide,
@@ -474,6 +505,8 @@ function prewarmGpuBuffers() {
     ...planGhostMeshes.values(),
     ...supplementMeshes.values(),
     stateRingMesh,
+    constructionFoundationMesh,
+    constructionScaffoldMesh,
     windRotorMesh,
     ambientAgentMesh,
     buildingLightMesh,
@@ -558,6 +591,75 @@ function worldPosition(index, coordinates = currentCoords) {
   return coord ? axialToWorld(coord, BOARD.HEX_SIZE) : { x: 0, z: 0 };
 }
 
+function createConstructionHud() {
+  const hud = document.createElement('div');
+  hud.className = 'world-construction-progress';
+  hud.dataset.worldConstructionProgress = '';
+  hud.hidden = true;
+  hud.innerHTML = '<div><strong>건설 중</strong><span>0%</span></div><em role="progressbar" aria-label="시설 공사 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></em>';
+  containerEl.appendChild(hud);
+  return hud;
+}
+
+function acquireConstructionHud(config) {
+  let hud = constructionHudEls.get(config.index);
+  if (!hud) {
+    hud = constructionHudPool.pop() || createConstructionHud();
+    constructionHudEls.set(config.index, hud);
+  }
+  hud.dataset.projectIndex = String(config.index);
+  hud.dataset.projectKind = config.project.kind;
+  return hud;
+}
+
+function releaseInactiveConstructionHuds(activeIndices) {
+  constructionHudEls.forEach((hud, index) => {
+    if (activeIndices.has(index)) return;
+    hud.hidden = true;
+    hud.classList.remove('selected');
+    delete hud.dataset.projectIndex;
+    delete hud.dataset.projectKind;
+    constructionHudEls.delete(index);
+    constructionHudPool.push(hud);
+  });
+}
+
+function syncConstructionHud(tickProgress = 0) {
+  if (!camera || !canvasEl || !containerEl) return;
+  const projectConfigs = currentConfigs.filter((item) => item?.project);
+  const activeIndices = new Set(projectConfigs.map(({ index }) => index));
+  releaseInactiveConstructionHuds(activeIndices);
+  if (!projectConfigs.length) return;
+
+  camera.updateMatrixWorld();
+  const rect = canvasEl.getBoundingClientRect();
+  const containerRect = containerEl.getBoundingClientRect();
+  projectConfigs.forEach((config) => {
+    const hud = acquireConstructionHud(config);
+    const { x, z } = worldPosition(config.index);
+    const projected = new THREE.Vector3(x, 1.02, z).project(camera);
+    const screenX = rect.left - containerRect.left + (projected.x + 1) * rect.width / 2;
+    const screenY = rect.top - containerRect.top + (1 - projected.y) * rect.height / 2;
+    const progress = projectProgress(config.project, tickProgress);
+    const percent = Math.round(progress * 100);
+    const label = config.project.kind === 'build' ? '건설 중' : '강화 중';
+    hud.style.left = `${screenX}px`;
+    hud.style.top = `${screenY}px`;
+    hud.classList.toggle('selected', Boolean(config.selected));
+    hud.querySelector('strong').textContent = label;
+    hud.querySelector('span').textContent = `${percent}%`;
+    const progressbar = hud.querySelector('[role="progressbar"]');
+    progressbar.setAttribute('aria-label', `${label} ${percent}%`);
+    progressbar.setAttribute('aria-valuenow', (progress * 100).toFixed(1));
+    progressbar.querySelector('i').style.width = `${progress * 100}%`;
+    hud.hidden = false;
+  });
+}
+
+export function refreshCityConstructionProgress(tickProgress = 0) {
+  syncConstructionHud(tickProgress);
+}
+
 function rebuildAmbientTopology() {
   residentialIndices.length = 0;
   greenIndices.length = 0;
@@ -565,7 +667,7 @@ function rebuildAmbientTopology() {
   const staleEffectIds = [...activeAmbientEffects.values()]
     .filter((effect) => {
       const config = currentConfigs[effect.cellIndex];
-      return !config || config.empty || config.type !== effect.type;
+      return !config || config.empty || config.type !== effect.type || config.project?.kind === 'build';
     })
     .map((effect) => effect.id);
   staleEffectIds.forEach((id) => {
@@ -574,7 +676,7 @@ function rebuildAmbientTopology() {
   });
 
   currentConfigs.forEach((config, index) => {
-    if (!config || config.empty || !config.type) return;
+    if (!config || config.empty || !config.type || config.project?.kind === 'build') return;
     if (config.type === 'residential') residentialIndices.push(index);
     if (config.type === 'green') greenIndices.push(index);
   });
@@ -595,7 +697,8 @@ function ambientProgress(effect, now) {
 }
 
 function updateWindRotorInstances(now = performance.now()) {
-  const rotorIndices = typeCellIndices.get('wind');
+  const rotorIndices = typeCellIndices.get('wind')
+    .filter((cellIndex) => currentConfigs[cellIndex]?.project?.kind !== 'build');
   rotorIndices.forEach((cellIndex, instanceIndex) => {
     const config = visualConfigAt(currentConfigs, cellIndex);
     const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
@@ -773,6 +876,7 @@ function startFacilityAmbientEffect({ id, type, cellIndex, durationMs }) {
     !config
     || config.empty
     || config.type !== type
+    || config.project?.kind === 'build'
     || type === 'green'
     || activeAmbientEffects.size >= CITY_AMBIENT_MOTION.MAX_ACTIVE_EFFECTS
     || ambientEffectForCell(cellIndex)
@@ -911,6 +1015,18 @@ function facilityRotationY(type, cellIndex) {
   return turn * CITY_BUILDING_ORIENTATION.step;
 }
 
+function constructionStageForConfig(config) {
+  const project = config?.project;
+  if (!project) return null;
+  const ratio = Number.isFinite(Number(project.progress))
+    ? Number(project.progress)
+    : (Number(project.elapsedHours) || 0) / Math.max(1, Number(project.durationHours) || 1);
+  const progress = Math.max(0, Math.min(1, ratio));
+  if (progress >= 0.7) return 'shell';
+  if (progress >= 0.3) return 'skeleton';
+  return 'foundation';
+}
+
 function updateTileInstances(configs, coordinates) {
   const count = Math.min(coordinates.length, MAX_CELLS);
   for (let index = 0; index < count; index++) {
@@ -927,7 +1043,9 @@ function updateFacilityInstances(configs, coordinates, now) {
   FACILITY_TYPES.forEach((type) => { typeCellIndices.get(type).length = 0; });
   for (let index = 0; index < configs.length; index++) {
     const config = visualConfigAt(configs, index);
-    if (!config?.empty && typeCellIndices.has(config.type)) typeCellIndices.get(config.type).push(index);
+    const stage = constructionStageForConfig(config);
+    const showFacility = config?.project?.kind !== 'build' || stage === 'shell';
+    if (!config?.empty && showFacility && typeCellIndices.has(config.type)) typeCellIndices.get(config.type).push(index);
   }
 
   FACILITY_TYPES.forEach((type) => {
@@ -938,7 +1056,8 @@ function updateFacilityInstances(configs, coordinates, now) {
       const config = visualConfigAt(configs, cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
       const { x, z } = worldPosition(cellIndex, coordinates);
-      const visualScale = visualScaleAt(cellIndex, level.scale, now);
+      const shellScale = config.project?.kind === 'build' ? 0.82 : 1;
+      const visualScale = visualScaleAt(cellIndex, level.scale * shellScale, now);
       const visualY = visualYAt(cellIndex, now);
       setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex));
       const facilityColor = facilityColorFor(type, config.level);
@@ -955,6 +1074,37 @@ function updateFacilityInstances(configs, coordinates, now) {
   });
 }
 
+function updateConstructionInstances(configs, coordinates) {
+  let foundationCount = 0;
+  let scaffoldCount = 0;
+  configs.forEach((config, cellIndex) => {
+    if (!config?.project) return;
+    const stage = constructionStageForConfig(config);
+    const { x, z } = worldPosition(cellIndex, coordinates);
+    const foundationHeight = config.project.kind === 'upgrade' ? 0.035 : 0.065;
+    setBoxInstance(constructionFoundationMesh, foundationCount, x, 0.14 + foundationHeight / 2, z, 0.58, foundationHeight, 0.5);
+    constructionFoundationMesh.setColorAt(foundationCount, _color.setHex(config.project.kind === 'upgrade' ? 0x557b8c : 0x66727a));
+    foundationCount += 1;
+
+    const height = stage === 'foundation' ? 0.13 : stage === 'skeleton' ? 0.55 : 0.78;
+    const half = 0.38;
+    [[-half, -half], [half, -half], [-half, half], [half, half]].forEach(([dx, dz]) => {
+      setBoxInstance(constructionScaffoldMesh, scaffoldCount, x + dx, 0.17 + height / 2, z + dz, 0.025, height, 0.025);
+      constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(0xffbd59));
+      scaffoldCount += 1;
+    });
+    if (stage !== 'foundation') {
+      [-half, half].forEach((dz) => {
+        setBoxInstance(constructionScaffoldMesh, scaffoldCount, x, 0.17 + height, z + dz, 0.41, 0.025, 0.025);
+        constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(0xffd27a));
+        scaffoldCount += 1;
+      });
+    }
+  });
+  finishInstances(constructionFoundationMesh, foundationCount);
+  finishInstances(constructionScaffoldMesh, scaffoldCount);
+}
+
 function updateBuildingLightInstances() {
   if (!buildingLightMesh || !currentConfigs.length || worldPhase !== 'night') {
     if (buildingLightMesh) finishInstances(buildingLightMesh, 0);
@@ -962,7 +1112,7 @@ function updateBuildingLightInstances() {
   }
   let lightCount = 0;
   currentConfigs.forEach((config, index) => {
-    if (!config || config.empty || !config.type) return;
+    if (!config || config.empty || !config.type || config.project?.kind === 'build') return;
     const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
     const { x, z } = worldPosition(index);
     const y = 0.3 * level.scale;
@@ -997,6 +1147,7 @@ function updateInstances(configs, coordinates, now = performance.now()) {
   if (!renderer) return;
   updateTileInstances(configs, coordinates);
   updateFacilityInstances(configs, coordinates, now);
+  updateConstructionInstances(configs, coordinates);
   updateMarkerInstances(configs, coordinates, now);
   updateBuildingLightInstances();
 }
@@ -1143,7 +1294,7 @@ export function initCityScene3D(container) {
 
   ambientMotionController = createAmbientMotionController({
     getCandidates: () => currentConfigs
-      .filter((config) => config && !config.empty && config.type && config.type !== 'green')
+      .filter((config) => config && !config.empty && config.type && config.type !== 'green' && config.project?.kind !== 'build')
       .map((config) => ({ type: config.type, cellIndex: config.index })),
     onStart: (effect) => {
       if (startFacilityAmbientEffect(effect)) return;
@@ -1171,6 +1322,17 @@ export function initCityScene3D(container) {
     const coord = currentCoords[index];
     if (!coord) return null;
     return { index, ...coord, ...worldPosition(index) };
+  };
+  window.__getCellScreenPosition = (index) => {
+    if (!canvasEl || !camera || !currentCoords[index]) return null;
+    const { x, z } = worldPosition(index);
+    camera.updateMatrixWorld();
+    const projected = new THREE.Vector3(x, 0.04, z).project(camera);
+    const rect = canvasEl.getBoundingClientRect();
+    return {
+      x: rect.left + (projected.x + 1) * rect.width / 2,
+      y: rect.top + (1 - projected.y) * rect.height / 2,
+    };
   };
 
   cameraController.reset(currentRadius);
@@ -1308,6 +1470,7 @@ function renderFrame(now) {
     shouldRender = true;
   }
   if (!shouldRender || !renderer) return;
+  syncConstructionHud();
   renderer.render(scene, camera);
   renderCount++;
   needsRender = false;
@@ -1338,6 +1501,7 @@ export function renderCityScene3D(cellConfigs, boardRadius) {
   rebuildAmbientTopology();
   syncPlanGhosts();
   syncBuildGhost();
+  syncConstructionHud();
   needsRender = true;
 }
 
@@ -1395,8 +1559,14 @@ export function getCityRendererStats() {
     boardRadius: currentRadius,
     hexCellCount: currentCoords.length,
     facilityInstances,
+    constructionSiteCount: currentConfigs.filter((config) => Boolean(config.project)).length,
+    constructionStages: currentConfigs.reduce((counts, config) => {
+      const stage = constructionStageForConfig(config);
+      if (stage) counts[stage] = (counts[stage] || 0) + 1;
+      return counts;
+    }, {}),
     facilityVisualSamples,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 6,
+    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 8,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1465,6 +1635,10 @@ export function disposeCityScene3D() {
   cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('pointerup', stopCameraButtonEvent);
   cameraResetEl?.removeEventListener('click', resetCameraFromButton);
+  constructionHudEls.forEach((hud) => hud.remove());
+  constructionHudPool.forEach((hud) => hud.remove());
+  constructionHudEls.clear();
+  constructionHudPool.length = 0;
   canvasEl?.removeEventListener('pointerdown', capturePointer);
   canvasEl?.removeEventListener('pointermove', updatePointer);
   canvasEl?.removeEventListener('pointerup', handlePointerClick);
@@ -1494,6 +1668,8 @@ export function disposeCityScene3D() {
   buildingLightMaterial = null;
   smokeEffectMesh = null;
   statusLightMesh = null;
+  constructionFoundationMesh = null;
+  constructionScaffoldMesh = null;
   currentWorldHour = 8;
   currentSkyState = getSkyState(currentWorldHour);
   visualHourOverride = null;

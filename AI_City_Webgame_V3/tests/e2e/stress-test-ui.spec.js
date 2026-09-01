@@ -13,6 +13,7 @@ test('final stress test starts from the quest panel, owns the forecast strip, an
     window.__refreshGameForTest();
   });
 
+  await page.locator('[data-hud-target="quest"]').first().click();
   await expect(page.locator('#questPanelTitle')).toHaveText('도시 스트레스 테스트');
   await expect(page.locator('#questPanelClaimBtn')).toHaveText('테스트 시작');
   await page.locator('#questPanelClaimBtn').click();

@@ -2,8 +2,9 @@ import { test, expect } from '../fixtures/game-test.js';
 import { clickCell } from '../helpers/playthrough.js';
 
 test.describe('fullscreen world HUD', () => {
-  test('top HUD uses the same compact credit, power, carbon, water, labor order as facility detail', async ({ gamePage: page }) => {
+  test('top HUD prioritizes credit flow, power margin, battery, carbon, and water while workforce stays in city status', async ({ gamePage: page }) => {
     await page.evaluate(() => {
+      window.__setTimeScale(0);
       const state = window.__GAME_STATE__;
       state.credits = 12.5;
       state.lastSettlementDelta = 0.25;
@@ -11,6 +12,7 @@ test.describe('fullscreen world HUD', () => {
         hourlyCarbon: 3.4,
         deliveredPower: 6,
         demand: 5,
+        batteryStored: 8.5,
         lowCarbonPercent: 80,
         hourlyWater: 2.5,
         capacity: 8,
@@ -21,18 +23,21 @@ test.describe('fullscreen world HUD', () => {
 
     await expect(page.locator('#credits')).toHaveText('12.50');
     await expect(page.locator('#simNet')).toHaveText('+0.25/h');
+    await expect(page.locator('#simPower')).toHaveText('+1 E');
+    await expect(page.locator('#simBattery')).toHaveText('8.5 E');
     await expect(page.locator('#simCarbonRate')).toHaveText('3.4/h');
     await expect(page.locator('#simWater')).toHaveText('2.5/h');
-    await expect(page.locator('#simLabor')).toHaveText('6/8');
-    await expect(page.locator('#simulationHud [data-metric="labor"]')).toHaveAttribute('title', '사용 인력 6 / 전체 인구 8');
+    await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 6 / 전체 인구 8');
+    await expect(page.locator('#simulationHud [data-metric="labor"]')).toHaveCount(0);
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(5);
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
-      .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
+      .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);
   });
 
   test('large HUD values use compact units while accessible labels keep exact values', async ({ gamePage: page }) => {
     await page.evaluate(() => {
+      window.__setTimeScale(0);
       const state = window.__GAME_STATE__;
       state.credits = 1_250_000;
       state.lastSettlementDelta = 12_500;
@@ -40,6 +45,7 @@ test.describe('fullscreen world HUD', () => {
         hourlyCarbon: 1_250,
         deliveredPower: 12_500,
         demand: 10_000,
+        batteryStored: 12_500,
         lowCarbonPercent: 80,
         hourlyWater: 1_200_000,
         capacity: 12_500,
@@ -51,11 +57,48 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#credits')).toHaveText('1.25M');
     await expect(page.locator('#simulationHud [data-metric="credit"]')).toHaveAttribute('title', /1,250,000\.00/);
     await expect(page.locator('#simNet')).toHaveText('+12.5K/h');
-    await expect(page.locator('#simPower')).toHaveText('12.5K/10K E');
+    await expect(page.locator('#simPower')).toHaveText('+2.5K E');
+    await expect(page.locator('#simBattery')).toHaveText('12.5K E');
     await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/h');
     await expect(page.locator('#simWater')).toHaveText('1.2M/h');
-    await expect(page.locator('#simLabor')).toHaveText('11K/12.5K');
-    await expect(page.locator('#simPower').locator('xpath=..')).toHaveAttribute('aria-label', /12,500/);
+    await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 11K / 전체 인구 12.5K');
+    await expect(page.locator('#simPower').locator('xpath=..')).toHaveAttribute('aria-label', /여유 2,500/);
+  });
+
+  test('clicking a red power metric opens a centered list of current causes', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      const state = window.__GAME_STATE__;
+      state.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+      state.grid[1] = { type: 'data', level: 2, operationMode: 'research' };
+      state.grid[2] = { type: 'wind', level: 1 };
+      state.research.jobs = {
+        solar2: { id: 'solar2', dataCenterIndex: 1, status: 'running', elapsedEffectiveHours: 0 },
+      };
+      state.events.schedule = [{ id: 'wind-now', type: 'lowWind', announceAt: 0, startAt: 0, endAt: 6 }];
+      state.events.activeId = 'wind-now';
+      state.lastTickSummary = {
+        hourlyCarbon: 2,
+        hourlyWater: 2,
+        deliveredPower: 4,
+        demand: 7,
+        batteryStored: 0,
+        lowCarbonPercent: 60,
+        capacity: 10,
+        used: 7,
+      };
+      window.__refreshGameForTest();
+    });
+
+    const powerMetric = page.locator('#simulationHud [data-metric="power"]');
+    await expect(powerMetric).toHaveClass(/metric-danger/);
+    await powerMetric.click();
+
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(page.locator('#modalCard')).toContainText('전력 부족 원인');
+    await expect(page.locator('#modalCard')).toContainText('전력 부족 3E');
+    await expect(page.locator('#modalCard')).toContainText('집중 연구 +2E');
+    await expect(page.locator('#modalCard')).toContainText('무풍');
   });
 
   test('time navigation has one play-pause toggle and one 1x-4x speed toggle', async ({ gamePage: page }) => {
@@ -362,9 +405,8 @@ test.describe('fullscreen world HUD', () => {
     await page.evaluate(() => window.__clickCell(0));
     await page.locator('#confirmBuildBtn').click();
     await page.evaluate(() => window.__clickCell(0));
-    await expect(page.locator('.facility-inspector-grid')).toBeVisible();
-    await expect(page.locator('.facility-inspector-grid')).toContainText('전체 인구');
-    await expect(page.locator('.facility-inspector-grid')).toContainText('+10명');
+    await expect(page.locator('[data-construction-console="build"]')).toBeVisible();
+    await expect(page.locator('[data-construction-console="build"]')).toContainText('공사 중에는');
     await page.locator('.modal-card .close-modal').click();
 
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);

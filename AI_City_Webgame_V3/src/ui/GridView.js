@@ -1,4 +1,5 @@
 import { gameState } from '../core/GameState.js';
+import { FACILITIES } from '../core/Constants.js';
 import { getBoardCoordinates, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { initCityScene3D, renderCityScene3D, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
@@ -36,9 +37,10 @@ function setForecastMetric(metric, value, delta) {
 function syncForecastMetrics(assessment) {
   if (!buildConfirmEls?.metrics) return;
   const forecast = assessment.items.length
-    ? buildConfirmEls.getForecast?.(assessment.projectedGrid)
+    ? buildConfirmEls.getForecast?.(assessment)
     : null;
   buildConfirmEls.metrics.classList.toggle('hidden', !forecast);
+  buildConfirmEls.timeline?.classList.toggle('hidden', !forecast);
   if (!forecast) return;
   const { current, projected } = forecast;
   setForecastMetric('credit', `${signed(projected.netCredits, 2)}/h`, `Δ ${signed(projected.netCredits - current.netCredits, 2)}`);
@@ -54,6 +56,24 @@ function syncForecastMetrics(assessment) {
     `${formatCompactNumber(projected.labor.used, { fractionDigits: 0 })}/${formatCompactNumber(projected.labor.capacity, { fractionDigits: 0 })}명`,
     `필요 Δ ${signed(projected.labor.used - current.labor.used, 0)} · 인구 Δ ${signed(projected.labor.capacity - current.labor.capacity, 0)}`,
   );
+  if (buildConfirmEls.timeline) {
+    const warningLabels = {
+      power_shortfall: '전력 부족',
+      negative_income: '운영 적자',
+      workforce_shortage: '인력 부족',
+      battery_empty: '배터리 고갈',
+      city_event_started: '기상이변 시작',
+    };
+    const risk = forecast.worstInterval?.warnings?.length
+      ? ` · 위험 ${forecast.worstInterval.hourOffset}h`
+      : ' · 안정';
+    buildConfirmEls.timeline.querySelector('[data-forecast-summary]').textContent = `${forecast.horizonHours}시간${risk}`;
+    buildConfirmEls.timeline.querySelector('[data-forecast-events]').innerHTML = forecast.timeline.map(({ hourOffset, completed, warnings }) => {
+      const names = completed.map(({ type }) => FACILITIES[type]?.name || type).join(' · ');
+      const warning = warnings.length ? ` · ${warnings.map((item) => warningLabels[item] || item).join(', ')}` : '';
+      return `<li><b>+${hourOffset}시간</b><span>${names} 완공${warning}</span></li>`;
+    }).join('');
+  }
 }
 
 function clearPlan() {
@@ -173,6 +193,10 @@ function buildCellConfigs() {
       empty: false,
       type: cell.type,
       level: cell.level,
+      project: cell.project ? {
+        ...cell.project,
+        progress: cell.project.elapsedHours / cell.project.durationHours,
+      } : null,
     };
   });
 }

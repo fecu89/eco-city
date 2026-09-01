@@ -25,22 +25,32 @@ import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
 import { BATTERY_POLICIES, OPERATION_MODES, availableOperationModes } from '../core/OperationDefinitions.js';
 import { EXPANSION_SIDES, ZONE_TRAITS } from '../core/ZoneDefinitions.js';
 import { startObjectiveCampaign } from '../systems/ObjectiveSystem.js';
-import { STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_HOURS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import { startStressTest } from '../systems/StressTestSystem.js';
 import {
   buildCityModifierContext,
   availableBatteryPolicies,
   facilityModifierAt,
   previewFacilityOperationMode,
+  setFacilityPriority,
   setFacilityOperationMode,
   setBatteryPolicy,
 } from '../systems/CityModifierSystem.js';
+import {
+  cancelConstructionProject,
+  operationProfileForCell,
+  projectProgress,
+  projectRefund,
+  projectStage,
+} from '../systems/ConstructionProjectSystem.js';
 
 let refreshAll = () => {};
 let inspectorIndex = null;
-export function initStageModals(refreshCallback) {
+let getUpgradeForecast = null;
+export function initStageModals(refreshCallback, options = {}) {
   refreshAll = refreshCallback;
-  eventBus.on(Events.SIMULATION_TICKED, refreshOpenInspector);
+  getUpgradeForecast = options.getUpgradeForecast || null;
+  eventBus.on(Events.SIMULATION_TICKED, () => refreshOpenInspector());
   eventBus.on(Events.RESEARCH_QUIZ_CLOSED, ({ dataCenterIndex }) => {
     if (Number.isInteger(dataCenterIndex) && gameState.grid[dataCenterIndex]?.type === 'data') {
       openFacilityInspectorModal(dataCenterIndex);
@@ -82,7 +92,7 @@ export function openExpansionChoiceModal() {
   }));
 }
 
-function refreshOpenInspector() {
+function refreshOpenInspector(tickProgress = 0) {
   if (inspectorIndex == null || getModalState()?.id !== 'facility') return;
   const live = gameState.lastTickSummary;
   const power = live?.facilityPower?.[inspectorIndex];
@@ -90,6 +100,27 @@ function refreshOpenInspector() {
   const environment = live?.facilityEnvironment?.[inspectorIndex];
   const cell = gameState.grid[inspectorIndex];
   if (!cell) return;
+  if (cell.project) {
+    const progress = projectProgress(cell.project, tickProgress);
+    const percent = Math.round(progress * 100);
+    const remaining = Math.max(0, cell.project.durationHours - cell.project.elapsedHours);
+    const progressEl = $modal('[data-project-progress]');
+    const remainingEl = $modal('[data-project-remaining]');
+    const barEl = $modal('[data-project-progress-bar]');
+    if (!progressEl || !remainingEl || !barEl) {
+      openFacilityInspectorModal(inspectorIndex);
+      return;
+    }
+    progressEl.textContent = `${percent}%`;
+    remainingEl.textContent = `남은 ${remaining}시간`;
+    barEl.style.width = `${progress * 100}%`;
+    barEl.closest('.construction-project-bar')?.setAttribute('aria-valuenow', progress.toFixed(3));
+    return;
+  }
+  if ($modal('[data-construction-console]')) {
+    openFacilityInspectorModal(inspectorIndex);
+    return;
+  }
   const modifierContext = buildCityModifierContext(gameState);
   const stats = cellStats(cell, facilityModifierAt(modifierContext, inspectorIndex));
   const incomeEl = $modal('#facilityLiveIncome');
@@ -104,17 +135,22 @@ function refreshOpenInspector() {
   if (researchRoot && refreshResearchPanelLive(researchRoot)) openFacilityInspectorModal(inspectorIndex);
 }
 
+export function refreshStageConstructionProgress(tickProgress = 0) {
+  refreshOpenInspector(tickProgress);
+}
+
 export function openHelpModal() {
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY</span><h2>기후 생존 도시 · 15레벨</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
+    <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY · 15~30 MIN</span><h2>기후 생존 도시 · 4개 챕터</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
     <div class="help-grid">
       <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 반투명 계획으로 올린 뒤, 하단의 N개 확정을 눌러 한꺼번에 건설합니다.</p></article>
       <article><span>02</span><h3>운영</h3><p>1초마다 1시간이 흐르며 수입·전력·탄소·물이 정산됩니다. 화면에는 날짜만 표시됩니다.</p></article>
       <article><span>03</span><h3>전력망</h3><p>거리가 멀수록 송전 손실이 커지고 저장장치는 중심과 인접한 6방향의 손실을 줄입니다.</p></article>
-      <article><span>04</span><h3>퀘스트</h3><p>현재 퀘스트 조건을 유지한 뒤 직접 보상을 받아 다음 레벨로 갑니다.</p></article>
-      <article><span>05</span><h3>기후 대응</h3><p>시간당 탄소 ${CARBON_CRISIS.SAFE_HOURLY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_HOURS}시간이 지나면 도시가 중단됩니다. 기준 이하는 위험 시간을 회복합니다.</p></article>
+      <article><span>04</span><h3>목표와 선택</h3><p>6개 기초 임무 뒤에는 목표 카드 3개 중 2개, 마지막에는 4개 중 3개를 골라 달성합니다.</p></article>
+      <article><span>05</span><h3>기후 대응</h3><p>기상이변은 ${EVENT_FORECAST_HOURS}시간 전에 예보되며 첫 예보 때 자동 일시정지됩니다. 시간당 탄소 ${CARBON_CRISIS.SAFE_HOURLY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_HOURS}시간이 지나면 도시가 중단됩니다.</p></article>
       <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 50%입니다.</p></article>
     </div>
+    <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → 에너지·연구 전문화 → 예고된 기후 이벤트 대응 → 도시 스트레스 테스트 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
     <div class="callout"><strong>시설 허가</strong><p>퀘스트 레벨마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 저탄소 저장 허브 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
     <div class="callout"><strong>인구와 필요 인력</strong><p>주거지는 전체 인구를 늘리고, 발전소·공장·데이터센터 같은 운영 시설은 인력을 사용합니다. 계획 전체의 필요 인력이 인구를 넘으면 건설을 확정할 수 없습니다.</p></div>
     <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_HOURS.CAPSTONE / RESEARCH_RULES.GAME_HOURS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 4문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
@@ -123,10 +159,123 @@ export function openHelpModal() {
   $modal('.close-modal').addEventListener('click', closeModal);
 }
 
+export function openEventPreparationModal(cityEvent) {
+  const definition = CITY_EVENTS[cityEvent?.type];
+  if (!definition) return false;
+  setModal(`
+    <div class="modal-head"><div><span class="eyebrow">${EVENT_FORECAST_HOURS}H EARLY WARNING · PAUSED</span><h2>${definition.label} 대비 시간</h2></div></div>
+    <div class="demolition-warning event-preparation-warning">
+      <strong>기상이변이 시작되기 전에 도시 시간을 자동으로 일시정지했습니다.</strong>
+      <p>창을 닫아도 시간은 멈춰 있습니다. 건설·운영 모드·전력 우선순위·배터리 정책을 조정한 뒤 상단 재생 버튼을 누르세요.</p>
+    </div>
+    <div class="callout"><strong>예상 영향 · ${definition.durationHours}시간 지속</strong><p>${definition.description}</p></div>
+    <div class="callout"><strong>권장 대비</strong><p>${definition.preparation}</p></div>
+    <div class="modal-actions"><button class="btn primary" id="eventPreparationCloseBtn">준비 시작</button></div>
+  `, { id: 'event-preparation', dismissible: false });
+  $modal('#eventPreparationCloseBtn').addEventListener('click', closeModal);
+  return true;
+}
+
+function activePressure() {
+  if (gameState.stressTest?.status === 'running') {
+    const phase = STRESS_PHASES[gameState.stressTest.phaseIndex];
+    return phase ? { type: phase.id, label: phase.label } : null;
+  }
+  const active = gameState.events?.schedule?.find(({ id }) => id === gameState.events.activeId);
+  return active ? { type: active.type, label: CITY_EVENTS[active.type]?.label || active.type } : null;
+}
+
+function groupedFacilityValues(values, key) {
+  const grouped = {};
+  Object.entries(values || {}).forEach(([rawIndex, item]) => {
+    const cell = gameState.grid[Number(rawIndex)];
+    const value = Number(item?.[key]) || 0;
+    if (!cell || value <= 0) return;
+    grouped[cell.type] = (grouped[cell.type] || 0) + value;
+  });
+  return Object.entries(grouped)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4)
+    .map(([type, value]) => `${FACILITIES[type]?.name || type} ${round1(value)}`);
+}
+
+function metricCauseData(metric) {
+  const summary = gameState.lastTickSummary || {};
+  const pressure = activePressure();
+  const margin = round1((summary.deliveredPower || 0) - (summary.demand || 0));
+  const activeResearchCount = Object.values(gameState.research?.jobs || {}).filter((job) => (
+    Number.isInteger(job.dataCenterIndex)
+    && gameState.grid[job.dataCenterIndex]?.operationMode !== 'eco'
+  )).length;
+  const titles = {
+    credit: '크레딧 적자 원인',
+    power: '전력 부족 원인',
+    battery: '배터리 부족 원인',
+    carbon: 'CO₂ 초과 원인',
+    water: '물 사용 초과 원인',
+  };
+  const data = { title: titles[metric] || '도시 지표 원인', current: '', causes: [], action: '' };
+
+  if (metric === 'power') {
+    data.current = margin < 0 ? `전력 부족 ${round1(Math.abs(margin))}E` : `전력 여유 +${margin}E`;
+    if (activeResearchCount) data.causes.push(`집중 연구 +${round1(activeResearchCount * RESEARCH_RULES.EXTRA_DEMAND)}E`);
+    if (pressure?.type === 'lowWind') data.causes.push('무풍 · 풍력 출력이 평소의 35%로 감소');
+    if (pressure?.type === 'lowWindNight') data.causes.push('무풍 야간 · 풍력 -60%, 태양광 출력 정지');
+    if (pressure?.type === 'nightPeak') data.causes.push('야간 피크 · 주거 수요 +25%, 태양광 출력 감소');
+    if (pressure?.type === 'heatwave') data.causes.push('폭염 · 주거 전력 수요 +25%');
+    groupedFacilityValues(summary.facilityPower, 'demand').forEach((label) => data.causes.push(`${label}E 수요`));
+    data.action = '시설 모드를 절약으로 바꾸거나, 필수시설 우선순위·배터리 정책·발전 여유를 조정하세요.';
+  } else if (metric === 'credit') {
+    data.current = `시간당 ${gameState.lastSettlementDelta >= 0 ? '+' : ''}${round1(gameState.lastSettlementDelta)} 💰`;
+    groupedFacilityValues(summary.facilityEconomy, 'upkeep').forEach((label) => data.causes.push(`${label} 💰/h 유지비`));
+    if (summary.expansionUpkeep > 0) data.causes.push(`확장 대지 ${round1(summary.expansionUpkeep)} 💰/h 유지비`);
+    if (summary.health > 0) data.causes.push(`오염 건강비 ${round1(summary.health)} 💰/h`);
+    data.action = '공장 운영 모드와 불필요한 유지비를 조정하고, 전력이 끊긴 수익 시설을 먼저 복구하세요.';
+  } else if (metric === 'battery') {
+    data.current = `현재 저장 ${round1(summary.batteryStored || 0)}E`;
+    const operations = Object.values(summary.batteryOperations || {});
+    const charged = operations.reduce((sum, operation) => sum + (Number(operation.charged) || 0), 0);
+    const discharged = operations.reduce((sum, operation) => sum + (Number(operation.discharged) || 0), 0);
+    if (discharged > 0) data.causes.push(`이번 시간 방전 ${round1(discharged)}E`);
+    if (charged <= 0) data.causes.push('충전 잉여 전력 없음 또는 배터리 보조전력 부족');
+    data.action = '배터리와 수요 시설을 인접시키고, 낮은 수요 시간에 발전 잉여를 확보하세요.';
+  } else if (metric === 'carbon') {
+    data.current = `현재 ${round1(summary.hourlyCarbon || 0)} CO₂/h · 안전선 ${CARBON_CRISIS.SAFE_HOURLY}`;
+    groupedFacilityValues(summary.facilityEnvironment, 'carbon').forEach((label) => data.causes.push(`${label} CO₂/h`));
+    data.action = '공장을 친환경 모드로 전환하거나 저탄소 발전 비중과 녹지 완충을 늘리세요.';
+  } else if (metric === 'water') {
+    const hasLimit = summary.waterLimit != null && Number.isFinite(Number(summary.waterLimit));
+    const limit = hasLimit ? Number(summary.waterLimit) : null;
+    data.current = `현재 ${round1(summary.hourlyWater || 0)}/h${limit != null ? ` · 한도 ${round1(limit)}/h` : ''}`;
+    groupedFacilityValues(summary.facilityEnvironment, 'water').forEach((label) => data.causes.push(`${label}/h`));
+    if (pressure?.type === 'drought') data.causes.push('물 부족 예보 · 도시 물 한도 25% 감소');
+    data.action = '데이터센터·발전소 가까이에 냉각순환 시설을 배치하고 운영 모드를 조정하세요.';
+  }
+  if (!data.causes.length) data.causes.push('직전 정산에서 추가 원인이 기록되지 않았습니다. 다음 시간 정산 후 다시 확인하세요.');
+  return data;
+}
+
+export function openHudMetricCausesModal(metric) {
+  const data = metricCauseData(metric);
+  setModal(`
+    <div class="modal-head"><div><span class="eyebrow">LIVE DIAGNOSIS</span><h2>${escapeHtml(data.title)}</h2></div><button class="icon-btn close-modal" aria-label="원인 창 닫기"><i data-lucide="x"></i></button></div>
+    <section class="metric-cause-current"><span>직전 정산</span><strong>${escapeHtml(data.current)}</strong></section>
+    <ol class="metric-cause-list">${data.causes.map((cause) => `<li><i data-lucide="scan-search" aria-hidden="true"></i><span>${escapeHtml(cause)}</span></li>`).join('')}</ol>
+    <div class="callout metric-cause-action"><strong>대응 선택지</strong><p>${escapeHtml(data.action)}</p></div>
+    <div class="modal-actions"><button class="btn primary close-modal" type="button">확인</button></div>
+  `, { id: 'hud-metric-causes', pausesSimulation: false });
+  $$modal('.close-modal').forEach((button) => button.addEventListener('click', closeModal));
+}
+
 export function openFacilityInspectorModal(index) {
   const cell = gameState.grid[index];
   if (!cell) return;
   inspectorIndex = index;
+
+  if (cell.project) {
+    openConstructionProjectModal(index);
+    return;
+  }
 
   const facility = FACILITIES[cell.type];
   const modifierContext = buildCityModifierContext(gameState);
@@ -233,8 +382,11 @@ export function openFacilityInspectorModal(index) {
     openFacilityInspectorModal(index);
   });
   $$modal('#facilityPriorityControls button').forEach((button) => button.addEventListener('click', () => {
-    cell.priority = button.dataset.priority;
-    eventBus.emit(Events.FACILITY_PRIORITY_CHANGED, { index, priority: cell.priority });
+    const result = setFacilityPriority(gameState, index, button.dataset.priority);
+    if (!result.ok) return;
+    if (result.before !== result.after) {
+      eventBus.emit(Events.FACILITY_PRIORITY_CHANGED, { index, priority: result.after });
+    }
     refreshAll();
     openFacilityInspectorModal(index);
   }));
@@ -291,13 +443,158 @@ export function openFacilityInspectorModal(index) {
       });
       return;
     }
-    const result = upgradeCell(index);
+    openUpgradeForecastModal(index, currentValidation);
+  });
+}
+
+function startUpgradeProject(index) {
+  const cell = gameState.grid[index];
+  const facility = FACILITIES[cell?.type];
+  const result = upgradeCell(index);
+  if (!result.ok) return result;
+  eventBus.emit(Events.UPGRADE_STARTED, result);
+  eventBus.emit(Events.SAVE_REQUESTED, {});
+  closeModal();
+  refreshAll();
+  eventBus.emit(Events.TOAST_SHOW, {
+    kicker: 'UPGRADE STARTED',
+    title: `${facility.name} 강화 공사 시작`,
+    text: `Lv.${result.targetLevel} 완공까지 ${result.durationHours}게임시간 · 현재 성능은 제한 가동됩니다.`,
+  });
+  return result;
+}
+
+function forecastValue(snapshot, key, suffix = '') {
+  return `${round1(snapshot?.[key] || 0)}${suffix}`;
+}
+
+function openUpgradeForecastModal(index, validation) {
+  const cell = gameState.grid[index];
+  if (!cell || !validation.ok) return;
+  const facility = FACILITIES[cell.type];
+  const forecast = getUpgradeForecast?.(index, validation.cost);
+  if (!forecast) return startUpgradeProject(index);
+  const eventHour = forecast.hourly.find((hour) => hour.summary.cityEvent?.started)?.hourOffset;
+  const worst = forecast.worstInterval;
+  const warningText = worst?.warnings?.length
+    ? `${worst.hourOffset}시간 뒤 ${worst.warnings.map((warning) => ({
+      power_shortfall: '전력 부족',
+      negative_income: '운영 적자',
+      workforce_shortage: '인력 부족',
+      battery_empty: '배터리 고갈',
+      city_event_started: '기상이변 시작',
+    }[warning] || warning)).join(' · ')}`
+    : '예측 구간에 즉시 감지된 운영 위험이 없습니다.';
+  const snapshots = [
+    ['현재', forecast.current],
+    ['공사 중', forecast.during],
+    ['완공 후', forecast.completed],
+  ];
+  setModal(`
+    <div data-upgrade-forecast>
+      <div class="modal-head"><div><span class="eyebrow">UPGRADE FORECAST</span><h2>${facility.icon} ${facility.name} Lv.${cell.level} → Lv.${validation.nextLevel}</h2></div><button class="icon-btn close-modal" aria-label="강화 예측 닫기"><i data-lucide="x"></i></button></div>
+      <p class="muted">${forecast.horizonHours}게임시간 동안 기존 시설은 제한 가동되며, 완공 틱부터 새 레벨 성능으로 정산됩니다.</p>
+      <div class="upgrade-forecast-grid">
+        ${snapshots.map(([label, snapshot]) => `<section><strong>${label}</strong><span>전력 ${forecastValue(snapshot, 'deliveredPower', 'E')} / ${forecastValue(snapshot, 'demand', 'E')}</span><span>순수익 ${forecastValue(snapshot, 'netCredits', ' 💰/h')}</span><span>CO₂ ${forecastValue(snapshot, 'hourlyCarbon', '/h')}</span><span>물 ${forecastValue(snapshot, 'hourlyWater', '/h')}</span></section>`).join('')}
+      </div>
+      <div class="callout ${worst?.warnings?.length ? 'danger-callout' : ''}"><strong>가장 위험한 예측 구간</strong><p>${escapeHtml(warningText)}${eventHour ? ` · 기상이변이 ${eventHour}시간 뒤 공사 중 시작됩니다.` : ''}</p></div>
+      <div class="modal-actions"><button class="btn secondary" id="cancelUpgradeProjectBtn">돌아가기</button><button class="btn primary" id="confirmUpgradeProjectBtn">${formatCredits(validation.cost)} 지불 · 강화 착공</button></div>
+    </div>
+  `, { id: 'upgrade-forecast', pausesSimulation: false });
+  $modal('.close-modal').addEventListener('click', closeModal);
+  $modal('#cancelUpgradeProjectBtn').addEventListener('click', () => openFacilityInspectorModal(index));
+  $modal('#confirmUpgradeProjectBtn').addEventListener('click', () => {
+    const current = validateUpgrade(gameState, index);
+    if (!current.ok) return openFacilityInspectorModal(index);
+    startUpgradeProject(index);
+  });
+}
+
+const PROJECT_STAGE_LABELS = Object.freeze({
+  foundation: '기초 공사',
+  skeleton: '골조 조립',
+  shell: '외장 마감',
+  complete: '완공',
+});
+
+function projectOperationDescription(cell) {
+  if (cell.project.kind === 'build') return '공사 중에는 수입·발전·소비·운영비·인력·인접 효과가 모두 0입니다.';
+  const profile = operationProfileForCell(cell);
+  if (cell.type === 'residential') return '기존 인구·수입·전력·물 성능의 80%로 운영하며, 운영비는 100% 유지됩니다.';
+  if (cell.type === 'battery') return '저장량과 기존 용량은 유지되며 충·방전 출력이 50%로 제한됩니다.';
+  if (cell.type === 'data') return '전력 70% · 연구 50% · 수입 60%로 가동하며, 운영비와 인력은 100% 유지됩니다.';
+  return `기존 레벨 성능의 ${Math.round(profile.supply * 100)}%로 가동하며, 운영비와 인력은 100% 유지됩니다.`;
+}
+
+function openConstructionProjectModal(index) {
+  const cell = gameState.grid[index];
+  const project = cell?.project;
+  if (!cell || !project) return;
+  const facility = FACILITIES[cell.type];
+  const percent = Math.round(projectProgress(project) * 100);
+  const remaining = Math.max(0, project.durationHours - project.elapsedHours);
+  const refund = projectRefund(project);
+  const kindLabel = project.kind === 'build' ? '신규 건설' : `Lv.${project.fromLevel} → Lv.${project.toLevel} 강화`;
+  const targetLabel = project.kind === 'build' ? `Lv.${cell.level}` : `Lv.${project.toLevel}`;
+
+  setModal(`
+    <div class="facility-console construction-console" data-facility-console="${cell.type}" data-construction-console="${project.kind}">
+      <header class="facility-console-header">
+        <div class="facility-console-identity"><span class="facility-console-icon">${facility.icon}</span><div><span class="eyebrow">${project.kind === 'build' ? 'CONSTRUCTION SITE' : 'FACILITY UPGRADE'}</span><h2>${facility.name} · ${kindLabel}</h2><p>도시 시설 #${index} · 목표 ${targetLabel}</p></div></div>
+        <div class="facility-console-live"><span>남은 ${remaining}시간</span><b>${PROJECT_STAGE_LABELS[projectStage(project)]}</b></div>
+        <button class="icon-btn close-modal" aria-label="공사 창 닫기"><i data-lucide="x"></i></button>
+      </header>
+      <div class="facility-console-scroll">
+        <section class="construction-project-status">
+          <div class="construction-project-heading"><span>${kindLabel}</span><strong data-project-progress>${percent}%</strong></div>
+          <div class="construction-project-bar" role="progressbar" aria-label="공사 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i data-project-progress-bar style="width:${percent}%"></i></div>
+          <div class="construction-project-time"><span>${project.elapsedHours} / ${project.durationHours} 게임시간</span><b data-project-remaining>남은 ${remaining}시간</b></div>
+        </section>
+        <div class="construction-stage-row" aria-label="공사 단계">
+          ${['foundation', 'skeleton', 'shell'].map((stage) => `<span class="${projectStage(project) === stage ? 'active' : ''}">${PROJECT_STAGE_LABELS[stage]}</span>`).join('')}
+        </div>
+        <div class="callout"><strong>${project.kind === 'build' ? '아직 운영 전' : '제한 가동 중'}</strong><p>${projectOperationDescription(cell)}</p></div>
+        <div class="demolition-breakdown"><span>실제 결제 ${formatCredits(project.paidCost)}</span><span>현재 환급 ${formatCredits(refund || 0)}</span><span>완공 틱부터 새 성능 적용</span></div>
+      </div>
+      <footer class="facility-console-footer">
+        <button class="btn secondary" type="button" data-console-close>닫기</button>
+        <button class="btn danger" type="button" id="cancelProjectBtn"><i data-lucide="${project.kind === 'build' ? 'trash-2' : 'x'}"></i> ${project.kind === 'build' ? '현장 철거' : '강화 취소'} · +${formatCredits(refund || 0)}</button>
+      </footer>
+    </div>
+  `, { id: 'facility', pausesSimulation: false });
+  $$modal('.close-modal,[data-console-close]').forEach((button) => button.addEventListener('click', closeModal));
+  $modal('#cancelProjectBtn')?.addEventListener('click', () => openProjectCancelConfirmModal(index));
+}
+
+function openProjectCancelConfirmModal(index) {
+  const cell = gameState.grid[index];
+  const project = cell?.project;
+  if (!cell || !project) return;
+  const facility = FACILITIES[cell.type];
+  const refund = projectRefund(project);
+  const actionLabel = project.kind === 'build' ? '건설 현장을 철거' : '강화를 취소';
+  setModal(`
+    <div data-project-cancel-confirm>
+      <div class="modal-head"><div><span class="eyebrow danger-label">CANCEL PROJECT</span><h2>${facility.icon} ${facility.name} ${actionLabel}할까요?</h2></div></div>
+      <div class="demolition-warning">
+        <strong>${project.kind === 'build' ? '건설 현장이 제거됩니다.' : `기존 Lv.${project.fromLevel} 성능으로 즉시 복귀합니다.`}</strong>
+        <p>진행 시간은 복구되지 않습니다. 실제 결제 ${formatCredits(project.paidCost)} 중 현재 구간 환급액은 ${formatCredits(refund || 0)}입니다.</p>
+      </div>
+      <div class="modal-actions"><button class="btn secondary" id="keepProjectBtn">공사 계속</button><button class="btn danger" id="confirmCancelProjectBtn">취소 확정 · +${formatCredits(refund || 0)}</button></div>
+    </div>
+  `, { id: 'project-cancel', pausesSimulation: false, dismissible: false });
+  $modal('#keepProjectBtn').addEventListener('click', () => openFacilityInspectorModal(index));
+  $modal('#confirmCancelProjectBtn').addEventListener('click', () => {
+    const result = cancelConstructionProject(gameState, index);
     if (!result.ok) return;
-    eventBus.emit(Events.BOARD_UPGRADED, result);
+    eventBus.emit(result.kind === 'build' ? Events.CONSTRUCTION_CANCELLED : Events.UPGRADE_CANCELLED, result);
+    eventBus.emit(Events.SAVE_REQUESTED, {});
     closeModal();
     refreshAll();
-    eventBus.emit(Events.TOAST_SHOW, { title: '시설 업그레이드', text: `${facility.name} → Lv.${cell.level}` });
-    eventBus.emit(Events.AUDIO_SFX, { name: 'upgrade' });
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: `${facility.name} 공사 취소`,
+      text: `${formatCredits(result.refund)} 환급${result.kind === 'upgrade' ? ' · 기존 레벨 정상 가동 복귀' : ''}`,
+    });
   });
 }
 
@@ -353,32 +650,43 @@ function openDemolitionConfirmModal(index) {
 export function openReportModal() {
   const report = Report.computeReport();
   const operation = report.operations;
-  const delta = (value) => value > 0 ? `+${value}` : `${value}`;
+  const axisLabels = {
+    powerStability: '전력 안정성',
+    environment: '환경',
+    economy: '경제',
+    resourceUse: '자원 효율',
+    operatingResponse: '운영 대응',
+  };
+  const quizComplete = Object.hasOwn(gameState.quizResults, 'climate-council');
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">FINAL REPORT</span><h2>기후 생존 도시 성적표</h2></div></div>
-    <div class="final-rank"><div class="rank-icon">${report.tier.icon}</div><h2>${escapeHtml(report.tier.title)} · ${report.total}점</h2><p>15개 퀘스트에서 만든 도시의 실제 운영 기록입니다.</p></div>
+    <div class="final-rank"><div class="rank-icon">${report.tier.icon}</div><h2>${escapeHtml(report.profile.title)} · 운영 ${report.operatingTotal}점</h2><p>${report.profile.developing ? '현재 도시에서 가장 가까운 발전 방향입니다.' : '운영 기록에서 뚜렷하게 나타난 도시 유형입니다.'} ${report.profile.reasons.map(escapeHtml).join(' · ')}</p></div>
     <div class="summary-grid final-score-breakdown">
-      <div class="summary-card"><span>운영 점수</span><strong>${report.operationsScore} / 50</strong></div>
-      <div class="summary-card"><span>설계 점수</span><strong>${report.designScore} / 30</strong></div>
-      <div class="summary-card"><span>지식 점수</span><strong>${report.knowledgeScore} / 20</strong></div>
-      <div class="summary-card"><span>퀴즈 정답률</span><strong>${report.knowledgeAccuracy}%</strong></div>
+      <div class="summary-card"><span>도시 운영</span><strong>${report.operatingTotal} / 100</strong></div>
+      <div class="summary-card"><span>퀴즈 보너스</span><strong>+${report.quizBonus} / 10</strong></div>
+      <div class="summary-card"><span>최종 합계</span><strong>${report.totalWithBonus} / 110</strong></div>
+      <div class="summary-card"><span>생존 시험</span><strong>${report.stress.passed ? '통과' : '기록 없음'}</strong></div>
+    </div>
+    <div class="report-axis-grid">
+      ${Object.entries(report.axes).map(([id, item]) => `<article><div><span>${axisLabels[id]}</span><b>${item.score} / ${item.max}</b></div><div class="objective-card-progress"><i style="width:${item.value}%"></i></div><small>${item.value}점 지표</small></article>`).join('')}
     </div>
     <div class="summary-grid">
-      <div class="summary-card"><span>시간당 순수익</span><strong>${formatCredits(operation.averageNetCredits)}/h</strong></div>
+      <div class="summary-card"><span>시간당 순수익</span><strong>${formatCredits(operation.averageNetIncome)}/h</strong></div>
       <div class="summary-card"><span>평균 송전 효율</span><strong>${operation.averageTransmissionEfficiency}%</strong></div>
-      <div class="summary-card"><span>저탄소 전력</span><strong>${operation.averageLowCarbonPercent}%</strong></div>
-      <div class="summary-card"><span>필수시설 정전</span><strong>${operation.essentialOutageHours}시간</strong></div>
-      <div class="summary-card"><span>고용률</span><strong>${operation.averageEmploymentRate}%</strong></div>
-      <div class="summary-card"><span>산업 인력 충족</span><strong>${operation.averageIndustryFill}%</strong></div>
-      <div class="summary-card"><span>탄소 변화</span><strong>${delta(report.carbonDelta)}</strong></div>
-      <div class="summary-card"><span>물 변화</span><strong>${delta(report.waterDelta)}</strong></div>
+      <div class="summary-card"><span>재생전력 비중</span><strong>${operation.renewableShare}%</strong></div>
+      <div class="summary-card"><span>배터리 공급</span><strong>${operation.batteryEnergyUsed}E</strong></div>
+      <div class="summary-card"><span>필수시설 평균</span><strong>${report.stress.averageEssentialSupply}%</strong></div>
+      <div class="summary-card"><span>최저 공급</span><strong>${report.stress.minimumEssentialSupply}%</strong></div>
+      <div class="summary-card"><span>탄소 위험</span><strong>${report.stress.carbonRiskHours}시간</strong></div>
+      <div class="summary-card"><span>물 초과</span><strong>${report.stress.waterViolationHours}시간</strong></div>
     </div>
-    <div class="callout"><strong>운영 패널티</strong><p>누적 과밀 ${formatCredits(operation.overcrowdingCost)} · 건강/민원 ${formatCredits(operation.healthCost)}</p></div>
-    <div class="modal-actions"><button class="btn secondary" id="exportBtn"><i data-lucide="download"></i> 결과 저장</button><button class="btn primary" id="closeFinalBtn">도시 계속 보기</button></div>
+    <div class="callout"><strong>운영 패널티 ${report.penalties}점</strong><p>긴급지원과 장기 탄소 압력이 있을 때만 운영 100점에서 차감됩니다. 과밀 ${formatCredits(operation.overcrowdingCost)} · 건강/민원 ${formatCredits(operation.healthCost)}</p></div>
+    <div class="modal-actions"><button class="btn secondary" id="exportBtn"><i data-lucide="download"></i> 결과 저장</button>${quizComplete ? '' : '<button class="btn secondary" id="finalBonusQuizBtn">개념 퀴즈 · 최대 +10</button>'}<button class="btn primary" id="closeFinalBtn">도시 계속 보기</button></div>
   `, { id: 'final-report', pausesSimulation: true });
   anime({ targets: '.final-rank .rank-icon', scale: [0.4, 1], rotate: [-15, 0], duration: 500, easing: 'easeOutElastic(1, .6)' });
   $modal('#closeFinalBtn').addEventListener('click', closeModal);
   $modal('#exportBtn').addEventListener('click', exportResultFile);
+  $modal('#finalBonusQuizBtn')?.addEventListener('click', () => eventBus.emit(Events.FINAL_QUIZ_REQUESTED, {}));
 }
 
 export function openStressTestModal(onStarted = null) {

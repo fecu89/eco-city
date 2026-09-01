@@ -6,6 +6,7 @@ import {
   evaluateObjectiveSet,
   startObjectiveCampaign,
 } from '../../../src/systems/ObjectiveSystem.js';
+import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 
 const summary = (overrides = {}) => ({
   netCredits: 0,
@@ -69,6 +70,26 @@ test('specialization offers technology, grid, and citizen paths but requires onl
   expect(result).toMatchObject({ completedCount: 2, required: 2, ready: true });
   expect(result.cards.find(({ id }) => id === 'specialization-citizen').completed).toBe(false);
   expect(claimObjectiveSet(state)).toMatchObject({ ok: true, reward: { credits: 10 }, nextSetId: 'resilience' });
+});
+
+test('unfinished essential facilities do not dilute objective supply evaluation', () => {
+  const state = expandedState();
+  state.progression.objectiveSetId = 'specialization';
+  state.progression.objectiveProgress = {};
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+  state.grid[1] = {
+    type: 'residential',
+    level: 1,
+    priority: 'essential',
+    project: createBuildProject({ type: 'residential', paidCost: 2 }),
+  };
+
+  let result;
+  for (let hour = 0; hour < 3; hour += 1) {
+    result = evaluateObjectiveSet(state, summary({ employmentRate: 0.9, facilityPower: { 0: { ratio: 1 } } }));
+  }
+
+  expect(result.cards.find(({ id }) => id === 'specialization-citizen').completed).toBe(true);
 });
 
 test('resilience set passes with three of four independent strategies and readies stress test', () => {

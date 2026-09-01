@@ -4,7 +4,12 @@ import {
   isBatteryNeighbor,
   calculatePowerNetwork,
 } from '../../../src/systems/PowerNetworkSystem.js';
-import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
+import {
+  coordKey,
+  createHexCoordinates,
+  hexDistance,
+  neighborIndices,
+} from '../../../src/systems/HexGridSystem.js';
 
 const cell = (type, extra = {}) => ({
   type,
@@ -28,6 +33,53 @@ test('battery hub covers all six adjacent hexes, but not radius two', () => {
     expect(isBatteryNeighbor(0, neighbor, coords)).toBe(true);
   }
   expect(isBatteryNeighbor(0, 7, coords)).toBe(false);
+});
+
+test('all six adjacent directions have identical distance and direct transmission efficiency', () => {
+  const coords = createHexCoordinates(2);
+  for (const neighbor of neighborIndices(0, coords)) {
+    expect(hexDistance(coords[0], coords[neighbor])).toBe(1);
+    const grid = Array(19).fill(null);
+    grid[0] = cell('thermal');
+    grid[neighbor] = cell('data');
+    const result = calculatePowerNetwork({ grid, coords, hour: 12 });
+    expect(result.facilityPower[neighbor]).toMatchObject({ ratio: 1 });
+    expect(result.routes.find((route) => route.to === neighbor)?.efficiency).toBe(1);
+  }
+});
+
+test('rotating an identical hex city cannot change data-center power priority', () => {
+  const coords = createHexCoordinates(2);
+  const indexByCoord = new Map(coords.map((coord, index) => [coordKey(coord), index]));
+  const rotateCoord = ({ q, r }) => ({ q: -r, r: q + r });
+  const rotateIndex = (index, turns) => {
+    let coord = coords[index];
+    for (let turn = 0; turn < turns; turn += 1) coord = rotateCoord(coord);
+    return indexByCoord.get(coordKey(coord));
+  };
+  const placements = [
+    [6, 'thermal'],
+    [7, 'data'],
+    [15, 'factory'],
+    [17, 'residential'],
+    [18, 'residential'],
+    [10, 'green'],
+  ];
+
+  const samples = Array.from({ length: 6 }, (_, turns) => {
+    const grid = Array(19).fill(null);
+    placements.forEach(([index, type]) => { grid[rotateIndex(index, turns)] = cell(type); });
+    const dataIndex = rotateIndex(7, turns);
+    const result = calculatePowerNetwork({ grid, coords, hour: 12 });
+    return {
+      ratio: result.facilityPower[dataIndex].ratio,
+      efficiency: result.routes.find((route) => route.to === dataIndex)?.efficiency,
+    };
+  });
+
+  expect(samples.every(({ ratio }) => ratio >= 0.9)).toBe(true);
+  expect(new Set(samples.map(({ ratio }) => ratio)).size).toBe(1);
+  expect(new Set(samples.map(({ efficiency }) => efficiency)).size).toBe(1);
 });
 
 test('essential consumers receive scarce power before normal consumers', () => {

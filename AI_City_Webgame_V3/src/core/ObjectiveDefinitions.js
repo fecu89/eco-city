@@ -1,3 +1,5 @@
+import { EVENT_FORECAST_HOURS } from './EventDefinitions.js';
+
 const card = (id, category, title, description, durationHours = 0) => Object.freeze({
   id,
   category,
@@ -45,7 +47,7 @@ export const OBJECTIVE_SETS = Object.freeze({
     required: 3,
     cards: Object.freeze([
       card('resilience-profit', 'economy', '지속 흑자', '양의 순수익을 4시간 유지', 4),
-      card('resilience-event-reserve', 'energy', '비상 예비력', '이벤트 중 필수시설 90%·저장량 5E를 4시간 유지', 4),
+      card('resilience-event-reserve', 'energy', '비상 예비력', `${EVENT_FORECAST_HOURS}시간 전 예보에 대비해 이벤트 중 필수시설 90%·저장량 5E를 4시간 유지`, 4),
       card('resilience-environment', 'environment', '저탄소 물관리', '저탄소 70%·물 제한 이내를 4시간 유지', 4),
       card('resilience-technology', 'technology', '고도화', '고급 연구 1개 또는 기능 시설 Lv.3 달성'),
     ]),
