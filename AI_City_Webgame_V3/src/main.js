@@ -1,5 +1,5 @@
 import './style.css';
-import { CARBON_CRISIS, FACILITIES, FLOATING_PANEL_STORAGE, LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { CARBON_CRISIS, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -45,13 +45,11 @@ import {
   openHudMetricCausesModal,
   openStressTestModal,
   openStressResultModal,
-  openEventPreparationModal,
   refreshStageConstructionProgress,
 } from './ui/StageModals.js';
 import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 import { createContinuousClockView } from './ui/ContinuousClockView.js';
-import { currentObjectiveEvaluation } from './systems/ObjectiveSystem.js';
 import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from './core/EventDefinitions.js';
 import { initForecastView, renderForecast } from './ui/ForecastView.js';
 import { showEventResult } from './ui/EventResultView.js';
@@ -89,6 +87,7 @@ const els = {
   boardSizeChip: $('#boardSizeChip'),
   cityGrid: $('#cityGrid'),
   boardOverlay: $('#boardOverlay'),
+  buildPanel: $('#buildPanel'),
   facilityDock: $('#facilityDock'),
   facilityDetail: $('#facilityDetail'),
   buildConfirm: $('#buildConfirm'),
@@ -98,8 +97,6 @@ const els = {
   buildPlanCost: $('#buildPlanCost'),
   buildPlanBalance: $('#buildPlanBalance'),
   buildPlanError: $('#buildPlanError'),
-  cancelBuildBtn: $('#cancelBuildBtn'),
-  confirmBuildBtn: $('#confirmBuildBtn'),
 
   cityChart: $('#cityChart'),
 
@@ -248,10 +245,12 @@ function completeConstructionPlan() {
   result.projects.forEach((project) => eventBus.emit(Events.CONSTRUCTION_STARTED, project));
   eventBus.emit(Events.BUILD_PLAN_COMMITTED, result);
   eventBus.emit(Events.SAVE_REQUESTED, {});
+  const [startedProject] = result.projects;
+  const startedFacility = result.projects.length === 1 ? FACILITIES[startedProject.key] : null;
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: 'CONSTRUCTION STARTED',
-    title: `${result.projects.length}개 시설 착공`,
-    text: '게임 날짜가 흐르면 각각의 공사 기간에 맞춰 완공됩니다.',
+    title: startedFacility ? `${startedFacility.icon} ${startedFacility.name} 착공` : `${result.projects.length}개 시설 착공`,
+    text: '게임 날짜가 흐르면 공사 기간에 맞춰 완공됩니다.',
   });
   refreshAll();
   return result;
@@ -268,7 +267,7 @@ function forecastOperationsForGrid(grid) {
     tickIndex: gameState.tickIndex,
     heatwave: gameState.climateAlert === 'extreme_heat',
     additionalDemandByIndex: researchDemandByIndex(gameState),
-    batteryReserveUnlocked: gameState.claimedQuestIds?.has?.('storage-hub') === true,
+    batteryReserveUnlocked: gameState.claimedQuestIds?.has?.(GRID_RESERVE_RULES.BATTERY_SUBSTITUTE_QUEST_ID) === true,
     modifierContext,
   });
   const economy = settleEconomy({
@@ -282,6 +281,8 @@ function forecastOperationsForGrid(grid) {
     ...economy,
     deliveredPower: power.delivered,
     demand: power.demand,
+    generationAvailable: power.generationAvailable,
+    generationAvailableByIndex: power.generationAvailableByIndex,
   };
 }
 
@@ -315,12 +316,14 @@ function constructionForecastForAssessment(assessment) {
   return { current, projected, ...forecast };
 }
 
-function operationSnapshotFromForecastDay(day) {
+function operationSnapshotFromForecastDay(day, facilityIndex) {
   if (!day) return null;
   return {
     netCredits: day.summary.netCredits,
     deliveredPower: day.summary.deliveredPower,
     demand: day.summary.demand,
+    generationAvailable: day.summary.generationAvailable,
+    facilityGenerationAvailable: day.summary.generationAvailableByIndex?.[facilityIndex] || 0,
     dailyCarbon: day.summary.dailyCarbon,
     dailyWater: day.summary.dailyWater,
     used: day.summary.used,
@@ -337,13 +340,15 @@ function upgradeForecastForIndex(index, paidCost) {
       netCredits: currentEconomy.netCredits,
       deliveredPower: currentEconomy.deliveredPower,
       demand: currentEconomy.demand,
+      generationAvailable: currentEconomy.generationAvailable,
+      facilityGenerationAvailable: currentEconomy.generationAvailableByIndex?.[index] || 0,
       dailyCarbon: currentEconomy.dailyCarbon,
       dailyWater: currentEconomy.dailyWater,
       used: currentEconomy.labor.used,
       capacity: currentEconomy.labor.capacity,
     },
-    during: operationSnapshotFromForecastDay(prediction.daily[0]),
-    completed: operationSnapshotFromForecastDay(prediction.daily.at(-1)),
+    during: operationSnapshotFromForecastDay(prediction.daily[0], index),
+    completed: operationSnapshotFromForecastDay(prediction.daily.at(-1), index),
   };
 }
 
@@ -362,6 +367,7 @@ function confirmActiveConstructionPlan() {
   const risk = constructionRiskForPlan(assessment);
   if (risk.risky) {
     openConstructionRiskModal({
+      facility: assessment.items.length === 1 ? FACILITIES[assessment.items[0]?.type] || null : null,
       planCount: assessment.items.length,
       currentEconomy: risk.currentEconomy,
       projectedEconomy: risk.projectedEconomy,
@@ -479,12 +485,10 @@ function boot() {
     cost: els.buildPlanCost,
     balance: els.buildPlanBalance,
     error: els.buildPlanError,
-    cancel: els.cancelBuildBtn,
-    confirm: els.confirmBuildBtn,
     getForecast: constructionForecastForAssessment,
   });
   initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
-  initDockView(els.facilityDock, els.facilityDetail);
+  initDockView(els.facilityDock, els.facilityDetail, els.buildPanel);
   initHudView(els, syncWorldHud);
   initQuestView({
     root: document.querySelector('.quest-panel-current'),
@@ -509,13 +513,11 @@ function boot() {
   initFeedbackBridge();
   eventBus.on(Events.CITY_EVENT_FORECASTED, (cityEvent) => {
     const definition = CITY_EVENTS[cityEvent.type];
-    setPlayerTimeScale(0);
-    openEventPreparationModal(cityEvent);
     eventBus.emit(Events.TOAST_SHOW, {
       kicker: `${EVENT_FORECAST_DAYS}일 기후 예보`,
       title: `${definition.label} 대비 시작`,
       text: `${definition.durationDays}일 지속 · ${definition.description}`,
-      meta: '준비를 마친 뒤 상단 재생 버튼을 누르세요.',
+      meta: '도시 시간은 계속 흐릅니다. 퀘스트 창에서 대비 조건을 확인하세요.',
       priority: true,
       kind: 'event-forecast-alert',
       duration: 7000,
@@ -691,11 +693,17 @@ window.render_game_to_text = () => {
       chapter: gameState.progression.chapter,
       tutorialQuestIndex: gameState.progression.tutorialQuestIndex,
       tutorialQuestStatus: gameState.progression.tutorialQuestStatus,
-      objectiveSetId: gameState.progression.objectiveSetId,
-      completedObjectiveSetIds: [...gameState.progression.completedObjectiveSetIds],
-      objectives: currentObjectiveEvaluation(gameState)?.cards.map(({ id, completed, value, target }) => ({
-        id, completed, value, target,
-      })) || [],
+    },
+    climateCampaign: {
+      questIndex: gameState.questIndex,
+      status: gameState.climateCampaign.status,
+      eventType: gameState.climateCampaign.eventType,
+      attempt: gameState.climateCampaign.attempt,
+      progress: { ...gameState.climateCampaign.progress },
+      lastResult: gameState.climateCampaign.lastResult
+        ? { ...gameState.climateCampaign.lastResult }
+        : null,
+      completedEventTypes: [...gameState.climateCampaign.completedEventTypes],
     },
     expansion: {
       phase: gameState.expansion.phase,

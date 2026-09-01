@@ -2,7 +2,7 @@ import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constan
 import { roundCredits } from './Money.js';
 import { normalizeConstructionProject } from '../systems/ConstructionProjectSystem.js';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 const initialCellIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
 

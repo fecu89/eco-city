@@ -9,7 +9,7 @@ test.describe('quest economy HUD', () => {
   test('shows the level-one quest inside its menu and keeps the world free of evidence UI', async ({ gamePage: page }) => {
     await expect(page.locator('#questTracker')).toHaveCount(0);
     const panel = await openQuestPanel(page);
-    await expect(panel).toContainText('LEVEL 1 / 15');
+    await expect(panel).toContainText('LEVEL 1 / 19');
     await expect(page.locator('#questPanelTitle')).toHaveText('2040, 첫 시민');
     await expect(page.locator('#questPanelReward')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questPanelReward')).not.toContainText('thermal');
@@ -38,12 +38,14 @@ test.describe('quest economy HUD', () => {
     });
     await openQuestPanel(page);
     await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
+    // 보상 원자성만 검증하므로 실시간 일일 정산이 클릭 사이에 끼어들지 않게 한다.
+    await page.evaluate(() => window.__setTimeScale(0));
     const before = await page.evaluate(() => window.__GAME_STATE__.credits);
     await page.locator('#questPanelClaimBtn').click();
     await expect(page.locator('#questRewardClose')).toHaveCount(0);
     await expect(page.locator('.toast.quest-reward-alert')).toContainText('공장·화력발전 해금');
-    await expect(page.locator('#questPanel')).toContainText('LEVEL 2 / 15');
-    await expect(page.locator('#questPanelGoal')).toContainText('흑자로 2시간');
+    await expect(page.locator('#questPanel')).toContainText('LEVEL 2 / 19');
+    await expect(page.locator('#questPanelGoal')).toContainText('흑자로 2일');
     await expect(page.locator('#questPanelReward')).toContainText('녹지 해금');
     expect(await page.evaluate(() => window.__GAME_STATE__.credits)).toBe(before + 4);
     expect(await page.evaluate(() => window.__GAME_STATE__.unlockedFacilities.has('factory'))).toBe(true);
@@ -147,6 +149,42 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#diagnosisProgress, #diagnosisToggleBtn, #diagnosisHintBtn')).toBeHidden();
   });
 
+  test('quest 7 is shown as research preparation instead of a climate disaster', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 7;
+      state.questStatus = 'active';
+      state.progression.chapter = 2;
+      state.climateCampaign.status = 'locked';
+      window.__refreshGameForTest();
+    });
+
+    const panel = await openQuestPanel(page);
+    await expect(page.locator('#phaseText')).toHaveText('전환 준비 1 / 4');
+    await expect(panel).toContainText('LEVEL 7 / 19');
+    await expect(panel.locator('#questPanelTitle')).toHaveText('태양광 연구 기초');
+    await expect(panel.locator('#questPanelClaimBtn')).toHaveText('진행 중');
+    await expect(page.locator('#forecastStrip')).not.toContainText('폭염');
+  });
+
+  test('quest rewards explain the staged level-three upgrade permits before monsoon', async ({ gamePage: page }) => {
+    const rewardAt = async (questIndex) => {
+      await page.evaluate((index) => {
+        const state = window.__GAME_STATE__;
+        state.questIndex = index;
+        state.questStatus = 'active';
+        window.__refreshGameForTest();
+      }, questIndex);
+      const panel = await openQuestPanel(page);
+      return panel.locator('#questPanelReward').textContent();
+    };
+
+    expect(await rewardAt(10)).toContain('화력발전·핵발전·풍력 Lv.3 강화 허가');
+    expect(await rewardAt(11)).toContain('태양광·조력발전 Lv.3 강화 허가');
+    expect(await rewardAt(12)).toContain('Lv.3 강화 허가');
+    expect(await rewardAt(12)).toContain('기후회복 생태축 해금');
+  });
+
   test('green spaces keep birds hidden until one pooled flock visits', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       const configs = Array(25).fill(null).map(() => ({ empty: true }));
@@ -180,9 +218,9 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#modal')).toBeHidden();
     await expect(page.locator('.toast.quest-reward-alert')).toContainText('연구도시의 씨앗 완료');
     const alert = page.locator('.toast.quest-alert');
-    await expect(alert).toContainText('LEVEL 5 / 15');
+    await expect(alert).toContainText('LEVEL 5 / 19');
     await expect(alert).toContainText('탄소 전환선');
-    await expect(alert).toContainText('저탄소 전력 40% 이상, CO₂ 12 이하와 흑자를 2시간 유지하세요.');
+    await expect(alert).toContainText('저탄소 전력 40% 이상, CO₂ 12 이하와 흑자를 2일 유지하세요.');
     await expect(alert).toContainText('보상 8.00 💰 · 핵발전 해금');
     await expect(alert.locator('[data-toast-action="quest"]')).toHaveText('새 퀘스트 열기');
     await expect(page.locator('[data-hud-target="quest"]').first()).toHaveAttribute('data-notification', 'new');

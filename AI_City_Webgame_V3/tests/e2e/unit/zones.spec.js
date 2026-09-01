@@ -9,7 +9,7 @@ import {
   expansionUpkeep,
   zoneModifierForCell,
 } from '../../../src/systems/ZoneSystem.js';
-import { expandBoard, validatePlacement } from '../../../src/systems/BoardSystem.js';
+import { expandBoard, placementPreview, validatePlacement } from '../../../src/systems/BoardSystem.js';
 import { buildCityModifierContext, effectiveFacilityStats } from '../../../src/systems/CityModifierSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 
@@ -90,4 +90,36 @@ test('each expansion side exposes a benefit and a competing placement consequenc
   expect(westTraits).toEqual(new Set(['solar', 'residential', 'wind', 'industrial']));
   expect(zoneModifierForCell(state, state.expansion.activeCellIndices.find((i) => cellZoneTrait(state, i) === 'industrial'), 'residential').healthCostFlat)
     .toBeGreaterThan(0);
+});
+
+test('renewable placement preview uses real solar wind and three tidal site bonuses', () => {
+  const state = new GameState();
+  expandBoard(state, 'east');
+  expandBoard(state, 'west');
+  state.unlockedFacilities.add('tidal');
+  state.research.techLevels.tidal = 1;
+  const coords = createHexCoordinates(3);
+  const emptyGrid = Array(37).fill(null);
+
+  const solar = placementPreview('solar', emptyGrid, coords, state);
+  const wind = placementPreview('wind', emptyGrid, coords, state);
+  const tidal = placementPreview('tidal', emptyGrid, coords, state);
+
+  expect(solar.siteBenefits).toBeInstanceOf(Map);
+  expect(wind.siteBenefits).toBeInstanceOf(Map);
+  expect(tidal.siteBenefits).toBeInstanceOf(Map);
+  expect([...solar.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(5).fill('solar'));
+  expect([...wind.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(5).fill('wind'));
+  expect([...tidal.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(3).fill('tidal'));
+
+  const tidalSites = [...tidal.siteBenefits.keys()];
+  tidalSites.forEach((index) => {
+    expect(zoneModifierForCell(state, index, 'tidal')).toMatchObject({ supply: 1.2 });
+    expect(validatePlacement(state, 'tidal', index)).toMatchObject({ ok: true });
+  });
+  const ordinaryCoast = expansionGroups(coords).east
+    .concat(expansionGroups(coords).west)
+    .find((index) => !tidal.siteBenefits.has(index));
+  expect(validatePlacement(state, 'tidal', ordinaryCoast)).toMatchObject({ ok: true });
+  expect(zoneModifierForCell(state, ordinaryCoast, 'tidal')).toEqual({});
 });

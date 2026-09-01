@@ -9,6 +9,7 @@ const OFFICIAL = Object.freeze({
   people: { creator: 'Kenney', pack: 'Blocky Characters', officialUrl: 'https://kenney.nl/assets/blocky-characters' },
   space: { creator: 'Quaternius', pack: 'Ultimate Space Kit', officialUrl: 'https://quaternius.com/packs/ultimatespacekit.html' },
   farm: { creator: 'Quaternius', pack: 'Farm Buildings Pack', officialUrl: 'https://quaternius.com/packs/farmbuildings.html' },
+  spaceBits: { creator: 'Kay Lousberg', pack: 'Space Bits', officialUrl: 'https://kaylousberg.itch.io/space-bits' },
 });
 
 function external(id, path, source, options = {}) {
@@ -66,28 +67,35 @@ export const ASSETS = Object.freeze({
   }),
   residential: Object.freeze({
     house1: external('residential.house1', '/assets/buildings/residential/house-01.glb', 'suburban', { phase: 'critical', fallback: 'residential' }),
-    house2: external('residential.house2', '/assets/buildings/residential/house-02.glb', 'suburban', { phase: 'unlock', fallback: 'residential' }),
     house3: external('residential.house3', '/assets/buildings/residential/house-03.glb', 'suburban', { phase: 'unlock', fallback: 'residential' }),
-    apartment1: external('residential.apartment1', '/assets/buildings/residential/apartment-01.glb', 'suburban', { phase: 'unlock', fallback: 'residential' }),
-    apartment2: external('residential.apartment2', '/assets/buildings/residential/apartment-02.glb', 'suburban', { phase: 'unlock', fallback: 'residential' }),
+    house4: external('residential.house4', '/assets/buildings/residential/house-04.glb', 'suburban', { phase: 'unlock', fallback: 'residential' }),
   }),
   commercial: Object.freeze({
-    shop1: external('commercial.shop1', '/assets/buildings/commercial/shop-01.glb', 'commercial'),
-    shop2: external('commercial.shop2', '/assets/buildings/commercial/shop-02.glb', 'commercial'),
     medium1: external('commercial.medium1', '/assets/buildings/commercial/commercial-01.glb', 'commercial'),
-    medium2: external('commercial.medium2', '/assets/buildings/commercial/commercial-02.glb', 'commercial'),
+    skyscraperC: external('commercial.skyscraperC', '/assets/buildings/commercial/skyscraper-c.glb', 'commercial', { fallback: 'data' }),
+    skyscraperE: external('commercial.skyscraperE', '/assets/buildings/commercial/skyscraper-e.glb', 'commercial', { fallback: 'data' }),
   }),
   industrial: Object.freeze({
     factorySmall: external('industrial.factorySmall', '/assets/buildings/industrial/factory-small.glb', 'industrial', { phase: 'critical', fallback: 'factory' }),
-    factoryMedium: external('industrial.factoryMedium', '/assets/buildings/industrial/factory-medium.glb', 'industrial', { phase: 'unlock', fallback: 'factory' }),
-    factoryLarge: external('industrial.factoryLarge', '/assets/buildings/industrial/factory-large.glb', 'industrial', { phase: 'unlock', fallback: 'factory' }),
-    chimney: external('industrial.chimney', '/assets/buildings/industrial/chimney.glb', 'industrial', { phase: 'unlock' }),
     storageTank: external('industrial.storageTank', '/assets/buildings/industrial/storage-tank.glb', 'industrial', { phase: 'unlock' }),
+    thermalSmall: external('industrial.thermalSmall', '/assets/buildings/industrial/thermal-n.glb', 'industrial', { phase: 'unlock', fallback: 'thermal' }),
+    thermalMedium: external('industrial.thermalMedium', '/assets/buildings/industrial/thermal-m.glb', 'industrial', { phase: 'unlock', fallback: 'thermal' }),
+    thermalLarge: external('industrial.thermalLarge', '/assets/buildings/industrial/thermal-l.glb', 'industrial', { phase: 'unlock', fallback: 'thermal' }),
+    nuclearSmall: external('industrial.nuclearSmall', '/assets/buildings/industrial/chimney-small.glb', 'industrial', { phase: 'unlock', fallback: 'nuclear' }),
+    nuclearMedium: external('industrial.nuclearMedium', '/assets/buildings/industrial/chimney-medium.glb', 'industrial', { phase: 'unlock', fallback: 'nuclear' }),
+    nuclearLarge: external('industrial.nuclearLarge', '/assets/buildings/industrial/chimney-large-2.glb', 'industrial', { phase: 'unlock', fallback: 'nuclear' }),
+    solarPanelPortrait: external('industrial.solarPanelPortrait', '/assets/buildings/industrial/solar-panel-portrait.glb', 'industrial', { phase: 'unlock', fallback: 'solar' }),
+    solarPanelLandscape: external('industrial.solarPanelLandscape', '/assets/buildings/industrial/solar-panel-landscape.glb', 'industrial', { phase: 'unlock', fallback: 'solar' }),
+    solarPanelLandscapeGroup: external('industrial.solarPanelLandscapeGroup', '/assets/buildings/industrial/solar-panel-landscape-group.glb', 'industrial', { phase: 'unlock', fallback: 'solar' }),
+    detailTankLarge: external('industrial.detailTankLarge', '/assets/buildings/industrial/detail-tank-large.glb', 'industrial', { phase: 'unlock', fallback: 'cooling' }),
+    batteryContainer: external('industrial.batteryContainer', '/assets/buildings/industrial/battery-container-b.glb', 'industrial', { phase: 'unlock', fallback: 'battery' }),
+    windmillLow: external('industrial.windmillLow', '/assets/buildings/industrial/windmill-low.glb', 'industrial', { phase: 'unlock', fallback: 'wind' }),
+    windmill: external('industrial.windmill', '/assets/buildings/industrial/windmill.glb', 'industrial', { phase: 'unlock', fallback: 'wind' }),
   }),
-  energy: Object.freeze({
-    solarSmall: external('energy.solarSmall', '/assets/buildings/energy/solar-small.glb', 'space', { phase: 'unlock', fallback: 'solar' }),
-    solarLarge: external('energy.solarLarge', '/assets/buildings/energy/solar-large.glb', 'space', { phase: 'unlock', fallback: 'solar' }),
-    windBase: external('energy.windBase', '/assets/buildings/energy/wind-turbine.glb', 'farm', { phase: 'unlock', fallback: 'wind' }),
+  tidal: Object.freeze({
+    cargo: external('tidal.cargo', '/assets/buildings/tidal/cargo.glb', 'spaceBits', { phase: 'unlock', fallback: 'tidal' }),
+    cargoDepotA: external('tidal.cargoDepotA', '/assets/buildings/tidal/cargo-depot-a.glb', 'spaceBits', { phase: 'unlock', fallback: 'tidal' }),
+    cargoDepotAlt: external('tidal.cargoDepotAlt', '/assets/buildings/tidal/cargo-depot-alt.glb', 'spaceBits', { phase: 'unlock', fallback: 'tidal' }),
   }),
   environment: Object.freeze({
     coast: Object.freeze({
@@ -149,16 +157,19 @@ export function assetIdsByPhase(phase) {
   return FLAT_ASSETS.filter((asset) => asset.phase === phase).map((asset) => asset.id);
 }
 
+// 세 값이 모두 같으면 레벨이 올라가도 같은 모델을 스케일만 키워서 쓴다(factory/green처럼
+// 단일 모델을 스케일만 다르게 쓰기로 한 시설 포함). 세 값 중 일부가 다르면 그 레벨은
+// 실제로 다른 GLB를 쓴다(순환냉각·풍력은 1·2단계만 공유하고 3단계에서 바뀐다).
 export const FACILITY_ASSET_IDS = Object.freeze({
-  residential: Object.freeze(['residential.house1', 'residential.apartment1', 'residential.apartment2']),
-  factory: Object.freeze(['industrial.factorySmall', 'industrial.factoryMedium', 'industrial.factoryLarge']),
-  data: Object.freeze(['commercial.medium1', 'commercial.medium2', 'commercial.medium2']),
-  thermal: Object.freeze(['industrial.chimney', 'industrial.chimney', 'industrial.chimney']),
-  nuclear: Object.freeze(['industrial.factoryMedium', 'industrial.factoryLarge', 'industrial.factoryLarge']),
-  solar: Object.freeze(['energy.solarSmall', 'energy.solarLarge', 'energy.solarLarge']),
-  wind: Object.freeze(['energy.windBase', 'energy.windBase', 'energy.windBase']),
-  battery: Object.freeze(['industrial.storageTank', 'industrial.storageTank', 'industrial.storageTank']),
-  cooling: Object.freeze(['industrial.storageTank', 'industrial.storageTank', 'industrial.storageTank']),
-  green: Object.freeze(['environment.coast.forest', 'environment.tree2', 'environment.tree3']),
-  tidal: Object.freeze(['industrial.storageTank', 'industrial.factoryMedium', 'industrial.factoryLarge']),
+  residential: Object.freeze(['residential.house1', 'residential.house3', 'residential.house4']),
+  factory: Object.freeze(['industrial.factorySmall', 'industrial.factorySmall', 'industrial.factorySmall']),
+  data: Object.freeze(['commercial.medium1', 'commercial.skyscraperC', 'commercial.skyscraperE']),
+  thermal: Object.freeze(['industrial.thermalSmall', 'industrial.thermalMedium', 'industrial.thermalLarge']),
+  nuclear: Object.freeze(['industrial.nuclearSmall', 'industrial.nuclearMedium', 'industrial.nuclearLarge']),
+  solar: Object.freeze(['industrial.solarPanelPortrait', 'industrial.solarPanelLandscape', 'industrial.solarPanelLandscapeGroup']),
+  wind: Object.freeze(['industrial.windmillLow', 'industrial.windmillLow', 'industrial.windmill']),
+  battery: Object.freeze(['industrial.batteryContainer', 'industrial.batteryContainer', 'industrial.batteryContainer']),
+  cooling: Object.freeze(['industrial.storageTank', 'industrial.storageTank', 'industrial.detailTankLarge']),
+  green: Object.freeze(['environment.coast.forest', 'environment.coast.forest', 'environment.coast.forest']),
+  tidal: Object.freeze(['tidal.cargo', 'tidal.cargoDepotA', 'tidal.cargoDepotAlt']),
 });

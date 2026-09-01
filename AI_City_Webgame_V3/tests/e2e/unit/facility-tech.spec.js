@@ -42,7 +42,7 @@ test('a proven storage hub can reserve a newly placed nuclear facility without t
   gameState.credits = 100;
   gameState.questIndex = 10;
   gameState.unlockedFacilities.add('nuclear');
-  gameState.claimedQuestIds.add('storage-hub');
+  gameState.claimedQuestIds.add('extreme-heat');
   gameState.grid[0] = { type: 'residential', level: 1 };
   gameState.grid[1] = { type: 'battery', level: 1 };
 
@@ -214,4 +214,57 @@ test('level-three renewable upgrades require and receive their own branch resear
     gameState.grid[1] = { type, level: 2, priority: 'normal' };
     expect(validateUpgrade(gameState, 1), type).toMatchObject({ ok: true, nextLevel: 3 });
   }
+});
+
+test('level-three permits open in climate preparation order and every facility is permitted by quest thirteen', () => {
+  const validationFor = (type, questIndex) => {
+    gameState.reset();
+    gameState.questIndex = questIndex;
+    gameState.upgradePermitLevel = 2;
+    gameState.credits = 500;
+    gameState.research.techLevels = {
+      solar: 3, wind: 3, battery: 3, tidal: 3, green: 3,
+    };
+    gameState.grid = Array(19).fill(null);
+    if (type === 'residential') {
+      gameState.grid[0] = { type, level: 2 };
+      return validateUpgrade(gameState, 0);
+    }
+    gameState.grid[0] = { type: 'residential', level: 3 };
+    gameState.grid[1] = { type, level: 2 };
+    return validateUpgrade(gameState, 1);
+  };
+
+  for (const type of ['thermal', 'nuclear', 'wind']) {
+    expect(validationFor(type, 10), `${type} before quest 10 claim`).toMatchObject({
+      ok: false, reason: 'city_permit_required',
+    });
+    expect(validationFor(type, 11), `${type} after quest 10 claim`).toMatchObject({ ok: true, nextLevel: 3 });
+  }
+
+  for (const type of ['solar', 'tidal']) {
+    expect(validationFor(type, 11), `${type} before quest 11 claim`).toMatchObject({
+      ok: false, reason: 'city_permit_required',
+    });
+    expect(validationFor(type, 12), `${type} after quest 11 claim`).toMatchObject({ ok: true, nextLevel: 3 });
+  }
+
+  expect(validationFor('factory', 12)).toMatchObject({ ok: false, reason: 'city_permit_required' });
+  for (const type of Object.keys(FACILITIES)) {
+    expect(validationFor(type, 13), `${type} at quest 13`).toMatchObject({ ok: true, nextLevel: 3 });
+  }
+});
+
+test('level-three permit messages name the quest that unlocks the selected facility', () => {
+  gameState.credits = 500;
+  gameState.upgradePermitLevel = 2;
+  gameState.research.techLevels = { solar: 3, wind: 3, battery: 3, tidal: 3, green: 3 };
+  gameState.grid[0] = { type: 'thermal', level: 2 };
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('퀘스트 10');
+
+  gameState.grid[0] = { type: 'solar', level: 2 };
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('퀘스트 11');
+
+  gameState.grid[0] = { type: 'factory', level: 2 };
+  expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('퀘스트 12');
 });

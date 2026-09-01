@@ -2,7 +2,8 @@ import { gameState } from '../core/GameState.js';
 import { refreshIcons } from './Modal.js';
 import { exactNumberLabel, formatCredits } from './format.js';
 import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
-import { QUESTS } from '../core/QuestDefinitions.js';
+import { QUESTS, questForState } from '../core/QuestDefinitions.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 
 let els = null;
 let onStageUiChanged = () => {};
@@ -11,8 +12,9 @@ const QUEST_GUIDANCE = [
   { through: 4, icon: 'building-2', text: '도시 정착: 수익 시설도 전력·탄소 비용과 함께 설계하세요.' },
   { through: 5, icon: 'leaf', text: '탄소 전환: 핵발전으로 CO₂를 낮추고 도시 흑자를 유지하세요.' },
   { through: 6, icon: 'recycle', text: '물순환 전환: 데이터센터의 폐열을 순환냉각으로 관리하세요.' },
-  { through: 14, icon: 'leaf', text: '저탄소 전환: 저장 허브와 우선순위로 기후 충격을 버티세요.' },
-  { through: 15, icon: 'users', text: '시민위원회: 운영 기록을 바탕으로 최종 판단을 내리세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.PREPARATION_END, icon: 'flask-conical', text: '전환 준비: 연구와 시설 강화를 마치고 풍력·조력 실증망을 가동하세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.CLIMATE_END, icon: 'shield-check', text: '기후 대응: 저장 허브와 우선순위로 기후 충격을 버티세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.FINAL_TEST, icon: 'users', text: '최종 시험: 운영 기록을 바탕으로 복합기후에 대응하세요.' },
 ];
 
 function guidanceForQuest(questIndex) {
@@ -47,8 +49,9 @@ function campaignHeader() {
     };
   }
 
-  if (gameState.questIndex >= 7 && gameState.questIndex <= 14) {
-    const quest = QUESTS[gameState.questIndex - 1];
+  if (gameState.questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START
+    && gameState.questIndex <= CAMPAIGN_QUEST_INDEXES.CLIMATE_END) {
+    const quest = questForState(gameState);
     const event = CITY_EVENTS[gameState.climateCampaign?.eventType || quest?.eventType];
     const campaign = gameState.climateCampaign || {};
     const scheduled = gameState.events.schedule.find(({ id }) => id === campaign.scheduledEventId);
@@ -63,9 +66,19 @@ function campaignHeader() {
             ? '대응 조건을 달성했습니다. 퀘스트 창에서 보상을 받으세요.'
             : '실패 원인을 확인하고 같은 도시로 24일 준비부터 재도전하세요.';
     return {
-      phase: `기후 대응 ${gameState.questIndex - 6} / 8`,
+      phase: `기후 대응 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1} / 8`,
       mission: quest.title,
       guidance: { icon: event?.icon || 'cloud-sun', text },
+    };
+  }
+
+  if (gameState.questIndex >= CAMPAIGN_QUEST_INDEXES.PREPARATION_START
+    && gameState.questIndex <= CAMPAIGN_QUEST_INDEXES.PREPARATION_END) {
+    const quest = questForState(gameState);
+    return {
+      phase: `전환 준비 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.PREPARATION_START + 1} / 4`,
+      mission: quest.title,
+      guidance: guidanceForQuest(gameState.questIndex),
     };
   }
 

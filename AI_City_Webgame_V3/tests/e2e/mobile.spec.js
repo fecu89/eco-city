@@ -32,12 +32,12 @@ test.describe('mobile city controls', () => {
       window.__refreshGameForTest();
     });
 
-    await expect(page.locator('#simNet')).toHaveText('-0.15/h');
+    await expect(page.locator('#simNet')).toHaveText('-0.15/일');
     await expect(page.locator('#simPower')).toHaveText('+1 E');
     await expect(page.locator('#simBattery')).toHaveText('3.5 E');
-    await expect(page.locator('#simCarbonRate')).toHaveText('4.2/h');
+    await expect(page.locator('#simCarbonRate')).toHaveText('4.2/일');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
-    await expect(page.locator('#simWater')).toHaveText('1.8/h');
+    await expect(page.locator('#simWater')).toHaveText('1.8/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 4 / 전체 인구 5');
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
       .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);

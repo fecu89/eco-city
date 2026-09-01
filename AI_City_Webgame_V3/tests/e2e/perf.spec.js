@@ -73,12 +73,12 @@ test.describe('performance', () => {
     });
     await page.locator('[data-hud-target="build"]').first().click();
     for (let i = 0; i < 10; i++) {
+      await page.locator('[data-facility="residential"]').click();
       await page.evaluate((index) => window.__clickCell(index), i);
-    }
-    expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan.length)).toBe(10);
-    await page.locator('#confirmBuildBtn').click();
-    if (await page.locator('#confirmRiskyBuild').isVisible().catch(() => false)) {
-      await page.locator('#confirmRiskyBuild').click();
+      await page.locator('#confirmBuildBtn').click();
+      if (await page.locator('#confirmRiskyBuild').isVisible().catch(() => false)) {
+        await page.locator('#confirmRiskyBuild').click();
+      }
     }
     await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(10);
     await page.waitForTimeout(300);
@@ -94,13 +94,17 @@ test.describe('performance', () => {
     expect(after - before).toBeLessThanOrEqual(2);
   });
 
-  test('representative 37-cell hex city stays within the 24 draw-call budget', async ({ gamePage: page }) => {
+  test('representative 37-cell hex city stays within the 40 draw-call budget', async ({ gamePage: page }) => {
     await renderRepresentativeCity(page);
     const stats = await page.evaluate(() => window.__getCityRendererStats());
 
     expect(stats.occupiedCells).toBe(37);
     expect(stats.facilityInstances).toBe(37);
-    expect(stats.drawCalls).toBeLessThanOrEqual(24);
+    // 화력·원자력·태양광·순환냉각·데이터센터·주거지·조력·풍력이 레벨마다 실제 GLB를
+    // 바꾸면서(공장·에너지저장·녹지는 스케일만 차등) 예산을 24 -> 36 -> 40으로 올렸다
+    // (레벨당 InstancedMesh 최대 1개 추가, 실제로 쓰이는 조합만 지연 생성). 37칸 전부가
+    // 이 시설들의 서로 다른 레벨을 동시에 갖는 최악의 경우를 기준으로 측정했다(실측 38).
+    expect(stats.drawCalls).toBeLessThanOrEqual(40);
   });
 
   test('active zones, operating modes, and a climate event stay inside the same render budget', async ({ gamePage: page }) => {
@@ -125,7 +129,7 @@ test.describe('performance', () => {
 
     expect(stats.occupiedCells).toBe(37);
     expect(Object.values(stats.zoneTileCounts).reduce((sum, count) => sum + count, 0)).toBe(18);
-    expect(stats.drawCalls).toBeLessThanOrEqual(24);
+    expect(stats.drawCalls).toBeLessThanOrEqual(40);
     expect(stats.resourceRevision).toBe(before.resourceRevision);
     await expect(page.locator('#forecastStrip')).toContainText('현재 이벤트');
     await expect(page.locator('#forecastStrip')).toContainText('폭염');
@@ -249,12 +253,12 @@ test.describe('performance', () => {
       state.grid[2].operationMode = 'boost';
       state.grid[7].batteryPolicy = 'reserve30';
       state.events.schedule = [{
-        id: 'perf-low-wind', type: 'lowWind', announceAt: 40, startAt: 46, endAt: 52,
+        id: 'perf-stagnant-air', type: 'stagnantAir', announceAt: 40, startAt: 46, endAt: 52,
       }];
       state.events.activeId = null;
       window.__refreshGameForTest();
     });
-    await expect(page.locator('#forecastStrip')).toContainText('무풍');
+    await expect(page.locator('#forecastStrip')).toContainText('무풍·미세먼지');
     await page.evaluate(() => {
       window.__GPU_BUFFER_COUNTS__.created = 0;
       window.__GPU_BUFFER_COUNTS__.deleted = 0;

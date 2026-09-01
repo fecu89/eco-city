@@ -37,11 +37,11 @@
 
         <div class="simulation-hud" id="simulationHud" aria-live="polite">
           <span class="sim-date"><b id="simTime">2040-01-01</b><small>일자</small></span>
-          <button type="button" class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/h</em></span></button>
+          <button type="button" class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/일</em></span></button>
           <button type="button" class="sim-metric" data-metric="power" aria-label="전력 여유" title="전력 여유"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">±0 E</b></button>
           <button type="button" class="sim-metric" data-metric="battery" aria-label="배터리 저장량" title="배터리 저장량"><i class="sim-metric-icon" data-lucide="battery-charging" aria-hidden="true"></i><b id="simBattery">0 E</b></button>
-          <button type="button" class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="시간당 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/h</b></button>
-          <button type="button" class="sim-metric" data-metric="water" aria-label="물" title="시간당 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/h</b></button>
+          <button type="button" class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="일일 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/일</b></button>
+          <button type="button" class="sim-metric" data-metric="water" aria-label="물" title="일일 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/일</b></button>
         </div>
 
         <div class="time-controls" id="timeControls" aria-label="시간 속도">
@@ -52,7 +52,7 @@
         <span class="sr-only climate-normal" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
       </header>
 
-      <div class="forecast-strip" id="forecastStrip" aria-live="polite">
+      <div class="forecast-strip" id="forecastStrip" aria-live="polite" hidden>
         <i data-lucide="cloud-sun" aria-hidden="true"></i>
         <span><small>도시 기후 예보</small><b>CH.3에서 활성화</b></span>
       </div>
@@ -99,7 +99,7 @@
           </section>
 
           <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
-            <div class="panel-title compact floating-panel-header" tabindex="0" aria-label="도시 상태 창. 방향키로 이동 가능"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">시간당 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
+            <div class="panel-title compact floating-panel-header" tabindex="0" aria-label="도시 상태 창. 방향키로 이동 가능"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">일일 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
             <div class="status-workforce" id="statusWorkforce" aria-live="polite"><i data-lucide="users" aria-hidden="true"></i><span>사용 인력 0 / 전체 인구 0</span></div>
             <canvas id="cityChart" height="190"></canvas>
           </section>
@@ -127,18 +127,18 @@
           </section>
         </aside>
 
-        <div class="build-confirm hidden" id="buildConfirm" role="group" aria-label="건설 후보 확정">
+        <div class="build-confirm hidden" id="buildConfirm" role="group" aria-label="건설 후 예상">
           <div class="build-confirm-main">
             <div class="build-plan-summary">
-              <strong id="buildConfirmText">건설 계획</strong>
+              <strong id="buildConfirmText">건설 후 예상</strong>
               <span><b id="buildPlanCost">0.00 💰</b><em id="buildPlanBalance">잔액 0.00 💰</em></span>
               <small id="buildPlanError" role="status"></small>
             </div>
             <div class="build-confirm-metrics" id="buildConfirmMetrics" aria-label="건설 후 예상 도시 운영값">
-              <span data-metric="credit" aria-label="예상 도시 전체 시간당 순수익"><small>도시 순수익</small><b data-value>±0.00/h</b><em data-delta>±0.00</em></span>
+              <span data-metric="credit" aria-label="예상 도시 전체 일일 순수익"><small>도시 순수익</small><b data-value>±0.00/일</b><em data-delta>±0.00</em></span>
               <span data-metric="power" aria-label="예상 전력 공급과 수요"><small>전력</small><b data-value>0/0E</b><em data-delta>±0E</em></span>
-              <span data-metric="carbon" aria-label="예상 시간당 이산화탄소"><small>CO₂/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
-              <span data-metric="water" aria-label="예상 시간당 물"><small>물/h</small><b data-value>0/h</b><em data-delta>±0</em></span>
+              <span data-metric="carbon" aria-label="예상 일일 이산화탄소"><small>CO₂/일</small><b data-value>0/일</b><em data-delta>±0</em></span>
+              <span data-metric="water" aria-label="예상 일일 물"><small>물/일</small><b data-value>0/일</b><em data-delta>±0</em></span>
               <span data-metric="labor" aria-label="예상 필요 인력과 전체 인구"><small>인력/인구</small><b data-value>0/0명</b><em data-delta>±0</em></span>
             </div>
             <details class="build-forecast-timeline" id="buildForecastTimeline">
@@ -146,8 +146,6 @@
               <ol data-forecast-events></ol>
             </details>
           </div>
-          <button class="btn secondary" id="cancelBuildBtn" type="button">계획 전체 취소</button>
-          <button class="btn primary" id="confirmBuildBtn" type="button">건설 확정</button>
         </div>
 
         <nav class="mobile-bar" aria-label="도시 제어">

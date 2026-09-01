@@ -2,6 +2,12 @@
 // 보드가 3D(Three.js + 레이캐스팅)라 좌표 클릭은 카메라 각도에 취약하다. 게임 로직 테스트는
 // window.__clickCell(index)로 클릭을 시뮬레이션하고, 레이캐스팅 자체는 별도의 마우스 좌표 테스트로 검증한다.
 export async function clickCell(page, index) {
+  // 건설 확정 후에는 무장이 해제되므로(한 번에 하나씩), 매번 현재 선택된 시설 카드를
+  // 다시 눌러 배치 모드를 되살린다. 독이 접혀 있으면(이미 무언가 대기 중이거나 패널이
+  // 닫혀 있으면) 조용히 건너뛴다.
+  const facility = await page.evaluate(() => window.__GAME_STATE__.selectedFacility);
+  const card = page.locator(`#facilityDock [data-facility="${facility}"]`);
+  if (await card.isVisible().catch(() => false)) await card.click();
   await page.evaluate((i) => window.__clickCell(i), index);
   const confirm = page.locator('#confirmBuildBtn');
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
@@ -17,30 +23,31 @@ export async function completeProjectsViaGameClock(page, indices) {
   await page.evaluate((targetIndices) => {
     const state = window.__GAME_STATE__;
     const targets = targetIndices.map((index) => state.grid[index]).filter(Boolean);
-    const remainingHours = Math.max(0, ...targets.map((cell) => (
+    const remainingDays = Math.max(0, ...targets.map((cell) => (
       cell.project
-        ? Math.max(0, cell.project.durationHours - cell.project.elapsedHours)
+        ? Math.max(0, cell.project.durationDays - cell.project.elapsedDays)
         : 0
     )));
-    for (let day = 0; day < remainingHours; day += 1) window.__settleSimulationDay();
+    for (let day = 0; day < remainingDays; day += 1) window.__settleSimulationDay();
   }, indices);
   await page.waitForFunction((targetIndices) => (
     targetIndices.every((index) => window.__GAME_STATE__.grid[index]?.project == null)
   ), indices);
 }
 
+// 한 번에 하나씩만 계획에 담을 수 있으므로(건설 미리보기 -> O/X 확정), 배치마다 선택-클릭-확정을 반복한다.
 export async function buildPlanViaUi(page, placements) {
   await openHudPanel(page, 'build');
   for (const [index, type] of placements) {
     await page.locator(`#facilityDock [data-facility="${type}"]`).click();
     await clickCanvasCell(page, index);
+    await page.locator('#confirmBuildBtn').click();
+    const riskyBuild = page.locator('#confirmRiskyBuild');
+    if (await riskyBuild.isVisible().catch(() => false)) await riskyBuild.click();
+    await page.waitForFunction(([cellIndex, facilityType]) => (
+      window.__GAME_STATE__.grid[cellIndex]?.type === facilityType
+    ), [index, type]);
   }
-  await page.locator('#confirmBuildBtn').click();
-  const riskyBuild = page.locator('#confirmRiskyBuild');
-  if (await riskyBuild.isVisible().catch(() => false)) await riskyBuild.click();
-  await page.waitForFunction((expected) => (
-    expected.every(([index, type]) => window.__GAME_STATE__.grid[index]?.type === type)
-  ), placements);
   await completeProjectsViaGameClock(page, placements.map(([index]) => index));
 }
 
@@ -194,12 +201,13 @@ export async function buildStarterCity(page, count = 5) {
   });
   await openHudPanel(page, 'build');
   for (let i = 0; i < count; i++) {
+    await page.locator('[data-facility="residential"]').click();
     await page.evaluate((index) => window.__clickCell(index), i);
+    await page.locator('#confirmBuildBtn').click();
+    // 운영 적자가 예상되면 이 헬퍼는 의도적으로 경고를 확인하고 계속 진행한다.
+    const riskyBuild = page.locator('#confirmRiskyBuild');
+    if (await riskyBuild.isVisible().catch(() => false)) await riskyBuild.click();
   }
-  await page.locator('#confirmBuildBtn').click();
-  // 일괄 건설로 운영 적자가 예상되면 이 헬퍼는 의도적으로 경고를 확인하고 계속 진행한다.
-  const riskyBuild = page.locator('#confirmRiskyBuild');
-  if (await riskyBuild.isVisible().catch(() => false)) await riskyBuild.click();
   await expectPlanCommitted(page, count);
 }
 

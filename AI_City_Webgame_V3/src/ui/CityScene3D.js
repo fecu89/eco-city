@@ -8,12 +8,14 @@ import {
   CITY_CAMERA,
   CITY_MOTION,
   facilityColorFor,
+  GREEN_VISUAL_LAYOUTS,
   HEX_TILE_VISUALS,
   LEVEL_VISUALS,
   THEME_SCHEMAS,
 } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { assetLoader } from '../assets/AssetLoader.js';
+import { FACILITY_ASSET_IDS } from '../assets/assetRegistry.js';
 import {
   getCityNeutralTexture,
   getFacilityGeometry,
@@ -28,6 +30,8 @@ import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
 import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
 import { projectProgress } from '../systems/ConstructionProjectSystem.js';
 import { createCityEnvironment3D } from './CityEnvironment3D.js';
+
+export { GREEN_VISUAL_LAYOUTS };
 
 // 모든 레이어는 씬 수명 동안 유지된다. 상태 갱신은 instance matrix/color/count만 바꾸므로
 // 시설 선택 미리보기나 연속 배치 때 WebGL 버퍼를 생성·삭제하지 않는다.
@@ -77,7 +81,8 @@ let cameraController;
 let canvasEl;
 let containerEl;
 let cameraHintEl;
-let cameraResetEl;
+let buildOxWidgetEl;
+let buildOxWidgetState = null;
 const constructionHudEls = new Map();
 const constructionHudPool = [];
 let resizeObserver;
@@ -120,6 +125,7 @@ let smokeEffectMesh;
 let statusLightMesh;
 let constructionFoundationMesh;
 let constructionScaffoldMesh;
+let greenDetailMesh;
 let facilityMaterial;
 let tileMaterial;
 let stateRingMaterial;
@@ -127,12 +133,18 @@ let hemisphereLight;
 let sunLight;
 let rimLight;
 const facilityMeshes = new Map();
+// 시설 타입의 1레벨(대표) 인스턴스드 메시. facilityMeshes는 항상 타입당 하나만 유지해
+// 기존 고스트·통계 코드가 "타입 하나 = 메시 하나"를 가정한 채로 그대로 동작한다.
+const extraLevelMeshes = new Map(); // key: `${type}:${level}` — 레벨마다 실제로 다른 모델을 쓰는 시설만 여기 추가된다.
+const facilityCellIndexBuckets = new Map(); // key: type 또는 `${type}:${level}` — updateFacilityInstances의 렌더 버킷
+const cellInstanceRef = new Map(); // cellIndex -> { mesh, instanceIndex } — 통계에서 실제로 어느 메시에 쓰였는지 찾는다.
 const planGhostMeshes = new Map();
 const supplementMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
 let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
 const greenIndices = [];
+let greenDetailCountsByLevel = { 1: 0, 2: 0, 3: 0 };
 const activeMotions = new Map();
 const activeAmbientEffects = new Map();
 const ownedGeometries = new Set();
@@ -271,6 +283,47 @@ function makeInstancedMesh(geometry, material, capacity) {
   return mesh;
 }
 
+// 대부분의 시설은 레벨이 올라가도 같은 모델을 스케일만 키운다(facilityMeshes의 타입별
+// 메시 하나로 충분). 화력·원자력·태양광·순환냉각·데이터센터처럼 레벨마다 실제로
+// 다른 GLB를 쓰는 시설만 `${type}:${level}` 별도 버킷을 받는다.
+function facilityBucketKey(type, level) {
+  const ids = FACILITY_ASSET_IDS[type];
+  if (!ids || level <= 1) return type;
+  const assetId = ids[Math.min(2, level - 1)];
+  if (!assetId || assetId === ids[0]) return type;
+  return `${type}:${level}`;
+}
+
+function buildRuntimeFacilityMaterial(type, level) {
+  const material = getFacilityMaterial(type, level);
+  if (!material) return null;
+  const runtimeMaterial = material.clone();
+  if (runtimeMaterial.userData?.paletteBlackLift) {
+    // 원본 팔레트의 창문·지붕·배관 디테일은 유지하되 순검정 영역만 살짝 들어 올린다.
+    runtimeMaterial.emissive.setHex(0x101820);
+    runtimeMaterial.emissiveIntensity = 0.18;
+  }
+  runtimeMaterial.color.setHex(0xffffff);
+  runtimeMaterial.userData.facilityPaletteMode = runtimeMaterial.map ? 'textured-tint' : 'solid-tint';
+  runtimeMaterial.needsUpdate = true;
+  return ownMaterial(runtimeMaterial);
+}
+
+// 실제 보드에 그 (타입, 레벨) 조합이 처음 나타날 때만 메시를 만든다 — 안 쓰는 조합 때문에
+// 드로우콜/GPU 버퍼 예산이 늘어나지 않는다. 한 번 만들면 씬 수명 동안 재사용한다.
+function getOrCreateFacilityLevelMesh(type, level) {
+  const key = `${type}:${level}`;
+  let mesh = extraLevelMeshes.get(key);
+  if (!mesh) {
+    const geometry = getFacilityGeometry(type, level);
+    const material = buildRuntimeFacilityMaterial(type, level) || facilityMaterial;
+    mesh = makeInstancedMesh(geometry, material, MAX_CELLS);
+    mesh.name = `facility-${key}`;
+    extraLevelMeshes.set(key, mesh);
+  }
+  return mesh;
+}
+
 function createRotorGeometry() {
   const vertices = [];
   const innerRadius = 0.055;
@@ -355,6 +408,18 @@ function createSceneLayers() {
     mesh.name = `facility-${type}`;
     facilityMeshes.set(type, mesh);
   });
+
+  const greenDetailMaterial = ownMaterial(new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.9,
+    metalness: 0,
+  }));
+  greenDetailMesh = makeInstancedMesh(
+    ownGeometry(new THREE.ConeGeometry(1, 1, 5, 1)),
+    greenDetailMaterial,
+    MAX_CELLS * GREEN_VISUAL_LAYOUTS[3].length,
+  );
+  greenDetailMesh.name = 'green-level-details';
 
   ghostMaterial = ownMaterial(new THREE.MeshStandardMaterial({
     color: 0x71f5b4,
@@ -507,6 +572,7 @@ function prewarmGpuBuffers() {
     stateRingMesh,
     constructionFoundationMesh,
     constructionScaffoldMesh,
+    greenDetailMesh,
     windRotorMesh,
     ambientAgentMesh,
     buildingLightMesh,
@@ -527,21 +593,20 @@ function prewarmGpuBuffers() {
 function refreshLoadedAssets() {
   FACILITY_TYPES.forEach((type) => {
     const mesh = facilityMeshes.get(type);
-    mesh.geometry = getFacilityGeometry(type);
-    planGhostMeshes.get(type).geometry = getFacilityGeometry(type);
-    const material = getFacilityMaterial(type);
-    if (material) {
-      const runtimeMaterial = material.clone();
-      if (runtimeMaterial.userData?.paletteBlackLift) {
-        // 원본 팔레트의 창문·지붕·배관 디테일은 유지하되 순검정 영역만 살짝 들어 올린다.
-        runtimeMaterial.emissive.setHex(0x101820);
-        runtimeMaterial.emissiveIntensity = 0.18;
-      }
-      runtimeMaterial.color.setHex(0xffffff);
-      runtimeMaterial.userData.facilityPaletteMode = runtimeMaterial.map ? 'textured-tint' : 'solid-tint';
-      runtimeMaterial.needsUpdate = true;
-      mesh.material = ownMaterial(runtimeMaterial);
-    }
+    mesh.geometry = getFacilityGeometry(type, 1);
+    planGhostMeshes.get(type).geometry = getFacilityGeometry(type, 1);
+    const runtimeMaterial = buildRuntimeFacilityMaterial(type, 1);
+    if (runtimeMaterial) mesh.material = runtimeMaterial;
+  });
+  // 자산이 아직 로딩 중일 때 먼저 만들어진 레벨별 버킷이 있다면(예: 저장된 도시를 바로
+  // 불러온 경우) 실제 모델이 도착한 뒤 지오메트리·머티리얼을 다시 맞춘다.
+  extraLevelMeshes.forEach((mesh, key) => {
+    const separatorIndex = key.indexOf(':');
+    const type = key.slice(0, separatorIndex);
+    const level = Number(key.slice(separatorIndex + 1));
+    mesh.geometry = getFacilityGeometry(type, level);
+    const runtimeMaterial = buildRuntimeFacilityMaterial(type, level);
+    if (runtimeMaterial) mesh.material = runtimeMaterial;
   });
   SUPPLEMENT_TYPES.forEach((type) => {
     const geometry = getSupplementGeometry(type);
@@ -658,6 +723,55 @@ function syncConstructionHud(tickProgress = 0) {
 
 export function refreshCityConstructionProgress(tickProgress = 0) {
   syncConstructionHud(tickProgress);
+}
+
+function createBuildOxWidget() {
+  const widget = document.createElement('div');
+  widget.className = 'world-build-ox';
+  widget.hidden = true;
+  widget.innerHTML = '<button type="button" id="cancelBuildBtn" class="ox-btn ox-cancel" aria-label="건설 취소"><span aria-hidden="true">X</span></button>'
+    + '<button type="button" id="confirmBuildBtn" class="ox-btn ox-confirm" aria-label="건설 확정"><span aria-hidden="true">O</span></button>';
+  widget.querySelector('.ox-cancel').addEventListener('click', () => buildOxWidgetState?.onCancel?.());
+  widget.querySelector('.ox-confirm').addEventListener('click', () => {
+    if (buildOxWidgetState?.disabled) return;
+    buildOxWidgetState?.onConfirm?.();
+  });
+  return widget;
+}
+
+// 건설 중 배지(world-construction-progress)와 같은 높이로 맞춰, 미리보기 모형 바로 위에 붙어 보이게 한다.
+const BUILD_OX_WIDGET_HEIGHT = 1.02;
+
+function syncBuildOxWidget() {
+  if (!buildOxWidgetEl) return;
+  if (!buildOxWidgetState || !camera || !canvasEl || !containerEl) {
+    buildOxWidgetEl.hidden = true;
+    return;
+  }
+  const { index, disabled } = buildOxWidgetState;
+  camera.updateMatrixWorld();
+  const rect = canvasEl.getBoundingClientRect();
+  const containerRect = containerEl.getBoundingClientRect();
+  const { x, z } = worldPosition(index);
+  const projected = new THREE.Vector3(x, BUILD_OX_WIDGET_HEIGHT, z).project(camera);
+  const rawX = rect.left - containerRect.left + (projected.x + 1) * rect.width / 2;
+  const rawY = rect.top - containerRect.top + (1 - projected.y) * rect.height / 2;
+  // 원거리 칸의 투영 좌표가 컨테이너 밖으로 나가면(가장자리 칸, 카메라 앵글) 위젯이 화면 밖에
+  // 숨어 클릭 불가능해지므로, 항상 보이는 영역 안쪽에 머물도록 여백을 두고 고정한다.
+  const marginX = 60;
+  const marginTop = 70;
+  const marginBottom = 20;
+  const screenX = Math.min(Math.max(rawX, marginX), Math.max(marginX, containerRect.width - marginX));
+  const screenY = Math.min(Math.max(rawY, marginTop), Math.max(marginTop, containerRect.height - marginBottom));
+  buildOxWidgetEl.style.left = `${screenX}px`;
+  buildOxWidgetEl.style.top = `${screenY}px`;
+  buildOxWidgetEl.querySelector('.ox-confirm').disabled = Boolean(disabled);
+  buildOxWidgetEl.hidden = false;
+}
+
+export function setBuildOxWidget(state) {
+  buildOxWidgetState = state || null;
+  syncBuildOxWidget();
 }
 
 function rebuildAmbientTopology() {
@@ -1041,17 +1155,30 @@ function updateTileInstances(configs, coordinates) {
 
 function updateFacilityInstances(configs, coordinates, now) {
   FACILITY_TYPES.forEach((type) => { typeCellIndices.get(type).length = 0; });
+  facilityCellIndexBuckets.forEach((indices) => { indices.length = 0; });
+
   for (let index = 0; index < configs.length; index++) {
     const config = visualConfigAt(configs, index);
     const stage = constructionStageForConfig(config);
     const showFacility = config?.project?.kind !== 'build' || stage === 'shell';
-    if (!config?.empty && showFacility && typeCellIndices.has(config.type)) typeCellIndices.get(config.type).push(index);
+    if (config?.empty || !showFacility || !typeCellIndices.has(config.type)) continue;
+    typeCellIndices.get(config.type).push(index);
+    const bucketKey = facilityBucketKey(config.type, config.level);
+    let bucketIndices = facilityCellIndexBuckets.get(bucketKey);
+    if (!bucketIndices) {
+      bucketIndices = [];
+      facilityCellIndexBuckets.set(bucketKey, bucketIndices);
+    }
+    bucketIndices.push(index);
   }
 
-  FACILITY_TYPES.forEach((type) => {
-    const mesh = facilityMeshes.get(type);
+  facilityCellIndexBuckets.forEach((indices, bucketKey) => {
+    const separatorIndex = bucketKey.indexOf(':');
+    const type = separatorIndex === -1 ? bucketKey : bucketKey.slice(0, separatorIndex);
+    const mesh = separatorIndex === -1
+      ? facilityMeshes.get(type)
+      : getOrCreateFacilityLevelMesh(type, Number(bucketKey.slice(separatorIndex + 1)));
     const supplement = supplementMeshes.get(type);
-    const indices = typeCellIndices.get(type);
     indices.forEach((cellIndex, instanceIndex) => {
       const config = visualConfigAt(configs, cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
@@ -1062,6 +1189,7 @@ function updateFacilityInstances(configs, coordinates, now) {
       setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex));
       const facilityColor = facilityColorFor(type, config.level);
       mesh.setColorAt(instanceIndex, _color.setHex(facilityColor));
+      cellInstanceRef.set(cellIndex, { mesh, instanceIndex });
 
       if (supplement) {
         const offset = type === 'nuclear' ? 0.2 : 0.22;
@@ -1072,6 +1200,51 @@ function updateFacilityInstances(configs, coordinates, now) {
     finishInstances(mesh, indices.length);
     if (supplement) finishInstances(supplement, indices.length);
   });
+}
+
+function updateGreenDetailInstances(configs, coordinates, now) {
+  let instanceIndex = 0;
+  greenDetailCountsByLevel = { 1: 0, 2: 0, 3: 0 };
+  configs.forEach((rawConfig, cellIndex) => {
+    const config = visualConfigAt(configs, cellIndex);
+    if (!config || config.empty || config.type !== 'green') return;
+    const stage = constructionStageForConfig(config);
+    if (config.project?.kind === 'build' && stage !== 'shell') return;
+    const levelNumber = Math.max(1, Math.min(3, Number(config.level) || 1));
+    const level = LEVEL_VISUALS[levelNumber] || LEVEL_VISUALS[1];
+    const shellScale = config.project?.kind === 'build' ? 0.82 : 1;
+    const visualScale = visualScaleAt(cellIndex, level.scale * shellScale, now);
+    const visualY = visualYAt(cellIndex, now);
+    const { x, z } = worldPosition(cellIndex, coordinates);
+    const cellRotation = (cellIndex * 0.73 + levelNumber * 0.31) % (Math.PI * 2);
+    GREEN_VISUAL_LAYOUTS[levelNumber].forEach((item) => {
+      const offsetX = item.x * Math.cos(cellRotation) - item.z * Math.sin(cellRotation);
+      const offsetZ = item.x * Math.sin(cellRotation) + item.z * Math.cos(cellRotation);
+      setAmbientInstance(
+        greenDetailMesh,
+        instanceIndex,
+        x + offsetX * visualScale,
+        visualY + item.height * visualScale * 0.5,
+        z + offsetZ * visualScale,
+        item.radius * visualScale,
+        item.height * visualScale,
+        item.radius * visualScale,
+        cellRotation + item.rotation,
+      );
+      const baseColor = facilityColorFor('green', levelNumber);
+      greenDetailMesh.setColorAt(
+        instanceIndex,
+        _color.setHex(baseColor).offsetHSL(
+          item.kind === 'bush' ? -0.015 : 0.012,
+          0.04,
+          item.kind === 'bush' ? -0.07 : 0.04,
+        ),
+      );
+      instanceIndex += 1;
+      greenDetailCountsByLevel[levelNumber] += 1;
+    });
+  });
+  finishInstances(greenDetailMesh, instanceIndex);
 }
 
 function updateConstructionInstances(configs, coordinates) {
@@ -1147,6 +1320,7 @@ function updateInstances(configs, coordinates, now = performance.now()) {
   if (!renderer) return;
   updateTileInstances(configs, coordinates);
   updateFacilityInstances(configs, coordinates, now);
+  updateGreenDetailInstances(configs, coordinates, now);
   updateConstructionInstances(configs, coordinates);
   updateMarkerInstances(configs, coordinates, now);
   updateBuildingLightInstances();
@@ -1214,13 +1388,8 @@ export function initCityScene3D(container) {
     : '드래그 회전 · 우클릭 이동 · 휠 확대';
   container.appendChild(cameraHintEl);
 
-  cameraResetEl = document.createElement('button');
-  cameraResetEl.type = 'button';
-  cameraResetEl.className = 'city-camera-reset';
-  cameraResetEl.title = '3D 시점 초기화';
-  cameraResetEl.setAttribute('aria-label', '3D 시점 초기화');
-  cameraResetEl.textContent = '↺';
-  container.appendChild(cameraResetEl);
+  buildOxWidgetEl = createBuildOxWidget();
+  container.appendChild(buildOxWidgetEl);
 
   renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelRatioCap()));
@@ -1264,9 +1433,6 @@ export function initCityScene3D(container) {
     },
   });
   cameraInteractionReady = true;
-  cameraResetEl.addEventListener('pointerdown', stopCameraButtonEvent);
-  cameraResetEl.addEventListener('pointerup', stopCameraButtonEvent);
-  cameraResetEl.addEventListener('click', resetCameraFromButton);
 
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
@@ -1343,16 +1509,6 @@ export function initCityScene3D(container) {
 
 function capturePointer(event) {
   canvasEl.setPointerCapture(event.pointerId);
-}
-
-function stopCameraButtonEvent(event) {
-  event.stopPropagation();
-}
-
-function resetCameraFromButton(event) {
-  event.stopPropagation();
-  cameraController?.reset(currentRadius);
-  needsRender = true;
 }
 
 function resetCameraForBoardExpansion({ settled } = {}) {
@@ -1471,6 +1627,7 @@ function renderFrame(now) {
   }
   if (!shouldRender || !renderer) return;
   syncConstructionHud();
+  syncBuildOxWidget();
   renderer.render(scene, camera);
   renderCount++;
   needsRender = false;
@@ -1502,6 +1659,7 @@ export function renderCityScene3D(cellConfigs, boardRadius) {
   syncPlanGhosts();
   syncBuildGhost();
   syncConstructionHud();
+  syncBuildOxWidget();
   needsRender = true;
 }
 
@@ -1510,7 +1668,8 @@ export function setCellClickHandler(fn) {
 }
 
 export function getCityRendererStats() {
-  const facilityInstances = [...facilityMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
+  const facilityInstances = [...facilityMeshes.values(), ...extraLevelMeshes.values()]
+    .reduce((total, mesh) => total + mesh.count, 0);
   const firstTileColor = tileMesh?.count ? tileMesh.getColorAt(0, _color).getHex() : null;
   const planGhostCount = [...planGhostMeshes.values()].reduce((total, mesh) => total + mesh.count, 0);
   const facilityVisualSamples = {};
@@ -1520,20 +1679,24 @@ export function getCityRendererStats() {
   const sampleScale = new THREE.Vector3();
   const sampleEuler = new THREE.Euler();
   FACILITY_TYPES.forEach((type) => {
-    const mesh = facilityMeshes.get(type);
     const cellIndices = typeCellIndices.get(type);
-    if (!mesh?.count) return;
-    facilityVisualSamples[type] = Array.from({ length: mesh.count }, (_, instanceIndex) => {
-      mesh.getMatrixAt(instanceIndex, sampleMatrix);
+    if (!cellIndices.length) return;
+    // 레벨마다 다른 메시에 쓰일 수 있으므로(cellInstanceRef), 타입 안에서의 셀 순서는
+    // 유지하되 각 칸이 실제로 기록된 메시·인스턴스 슬롯에서 값을 읽는다.
+    const samples = cellIndices.map((cellIndex) => {
+      const ref = cellInstanceRef.get(cellIndex);
+      if (!ref) return null;
+      ref.mesh.getMatrixAt(ref.instanceIndex, sampleMatrix);
       sampleMatrix.decompose(samplePosition, sampleQuaternion, sampleScale);
       sampleEuler.setFromQuaternion(sampleQuaternion, 'YXZ');
       return {
-        level: currentConfigs[cellIndices[instanceIndex]]?.level || 1,
-        color: mesh.getColorAt(instanceIndex, _color).getHex(),
+        level: currentConfigs[cellIndex]?.level || 1,
+        color: ref.mesh.getColorAt(ref.instanceIndex, _color).getHex(),
         scale: Number(sampleScale.x.toFixed(3)),
         rotationY: Number(sampleEuler.y.toFixed(3)),
       };
-    });
+    }).filter(Boolean);
+    if (samples.length) facilityVisualSamples[type] = samples;
   });
   const smokeVisualSamples = Array.from({ length: smokeEffectMesh?.count || 0 }, (_, instanceIndex) => {
     smokeEffectMesh.getMatrixAt(instanceIndex, sampleMatrix);
@@ -1566,7 +1729,9 @@ export function getCityRendererStats() {
       return counts;
     }, {}),
     facilityVisualSamples,
-    instancedLayers: 1 + facilityMeshes.size + supplementMeshes.size + planGhostMeshes.size + 8,
+    greenDetailInstances: greenDetailMesh?.count ?? 0,
+    greenDetailCountsByLevel: { ...greenDetailCountsByLevel },
+    instancedLayers: 1 + facilityMeshes.size + extraLevelMeshes.size + supplementMeshes.size + planGhostMeshes.size + 9,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1632,13 +1797,13 @@ export function disposeCityScene3D() {
   reducedMotionQuery = null;
   cityEnvironment?.dispose();
   cityEnvironment = null;
-  cameraResetEl?.removeEventListener('pointerdown', stopCameraButtonEvent);
-  cameraResetEl?.removeEventListener('pointerup', stopCameraButtonEvent);
-  cameraResetEl?.removeEventListener('click', resetCameraFromButton);
   constructionHudEls.forEach((hud) => hud.remove());
   constructionHudPool.forEach((hud) => hud.remove());
   constructionHudEls.clear();
   constructionHudPool.length = 0;
+  buildOxWidgetEl?.remove();
+  buildOxWidgetEl = null;
+  buildOxWidgetState = null;
   canvasEl?.removeEventListener('pointerdown', capturePointer);
   canvasEl?.removeEventListener('pointermove', updatePointer);
   canvasEl?.removeEventListener('pointerup', handlePointerClick);
@@ -1648,6 +1813,9 @@ export function disposeCityScene3D() {
   ownedMaterials.forEach((material) => material.dispose());
   renderer?.dispose();
   facilityMeshes.clear();
+  extraLevelMeshes.clear();
+  facilityCellIndexBuckets.clear();
+  cellInstanceRef.clear();
   planGhostMeshes.clear();
   supplementMeshes.clear();
   ownedGeometries.clear();
@@ -1670,6 +1838,8 @@ export function disposeCityScene3D() {
   statusLightMesh = null;
   constructionFoundationMesh = null;
   constructionScaffoldMesh = null;
+  greenDetailMesh = null;
+  greenDetailCountsByLevel = { 1: 0, 2: 0, 3: 0 };
   currentWorldHour = 8;
   currentSkyState = getSkyState(currentWorldHour);
   visualHourOverride = null;

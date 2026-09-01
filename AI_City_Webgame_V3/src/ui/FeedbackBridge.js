@@ -1,9 +1,9 @@
 import { eventBus, Events } from '../core/EventBus.js';
 import { FACILITIES, UI_FEEDBACK } from '../core/Constants.js';
-import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
+import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
+import { gameState } from '../core/GameState.js';
 import { formatCredits } from '../core/Money.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
-import { OBJECTIVE_SETS } from '../core/ObjectiveDefinitions.js';
 
 function questRewardText(quest) {
   const parts = [];
@@ -14,17 +14,29 @@ function questRewardText(quest) {
       .join('·');
     parts.push(`${names} 해금`);
   }
+  if (quest.reward.unlockResearch?.length) {
+    parts.push(`${quest.reward.unlockResearch.map((id) => RESEARCH[id]?.name || id).join('·')} 해금`);
+  }
+  if (quest.reward.upgradePermitFacilities?.length) {
+    const names = quest.reward.upgradePermitFacilities
+      .map((facility) => FACILITIES[facility]?.name || facility)
+      .join('·');
+    parts.push(`${names} Lv.3 강화 허가`);
+  }
+  if (quest.reward.upgradePermitLevel) parts.push(`Lv.${quest.reward.upgradePermitLevel} 강화 허가`);
   return `보상 ${parts.join(' · ') || '최종 성적표'}`;
 }
 
 function showQuestRewardAlert(quest, result) {
-  const nextQuest = result.nextQuest ? QUESTS[result.nextQuest - 1] : null;
+  const nextQuest = result.nextQuest ? questForState(gameState, result.nextQuest) : null;
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: result.campaignComplete ? '최종 퀘스트 완료' : '퀘스트 완료 · 보상 지급',
     title: `${quest.title} 완료`,
     text: questRewardText(quest),
     meta: result.expandGrid
       ? '동부 또는 서부 9칸을 선택해 다음 운영 장을 시작하세요.'
+      : result.expandSecondGrid
+        ? `반대편 9칸과 ${FACILITIES[result.unlockedFacilities?.[0]]?.name || '재생에너지'} 실증 경로가 열렸습니다.`
       : nextQuest
       ? `LEVEL ${nextQuest.index} / ${QUEST_COUNT} · ${nextQuest.title} — ${nextQuest.goal}`
       : '최종 운영 성적표가 열렸습니다.',
@@ -52,31 +64,18 @@ function showQuestAlert(quest, ready = false) {
 
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
-  eventBus.on(Events.OBJECTIVE_READY, ({ set }) => {
+  eventBus.on(Events.CLIMATE_QUEST_RESULT, (result) => {
+    if (result.passed) return;
+    const quest = QUESTS[result.questIndex - 1];
     eventBus.emit(Events.TOAST_SHOW, {
-      kicker: '선택 목표 달성',
-      title: `${set.title} 보상 준비 완료`,
-      text: `${set.required}/${set.cards.length}개 목표를 달성했습니다.`,
-      meta: '목표 창에서 보상을 받고 다음 운영 장으로 이동하세요.',
+      kicker: '기후 대응 결과',
+      title: `${quest?.title || '기후 재난'} 대응 실패`,
+      text: '조건을 달성하지 못했습니다. 24일 준비부터 재도전할 수 있습니다.',
+      meta: '도시는 그대로 유지됩니다. 시설 구성과 운영 설정을 보완해 다시 도전하세요.',
       priority: true,
-      kind: 'quest-alert objective-alert',
+      kind: 'quest-alert climate-quest-result-alert',
       action: 'quest',
-      actionLabel: '목표 열기',
-      duration: UI_FEEDBACK.QUEST_ALERT_MS,
-    });
-    eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });
-  });
-
-  eventBus.on(Events.OBJECTIVE_CLAIMED, ({ setId, reward, nextSetId }) => {
-    eventBus.emit(Events.TOAST_SHOW, {
-      kicker: '운영 목표 보상 지급',
-      title: `${OBJECTIVE_SETS[setId]?.title || setId} 완료`,
-      text: `${formatCredits(reward.credits)} 획득`,
-      meta: nextSetId ? `다음 목표 · ${OBJECTIVE_SETS[nextSetId].title}` : '최종 스트레스 테스트가 준비되었습니다.',
-      priority: true,
-      kind: 'quest-alert quest-reward-alert',
-      action: nextSetId ? 'quest' : null,
-      actionLabel: nextSetId ? '다음 목표 열기' : '',
+      actionLabel: '퀘스트 열기',
       duration: UI_FEEDBACK.QUEST_ALERT_MS,
     });
   });
@@ -100,9 +99,10 @@ export function initFeedbackBridge() {
   });
 
   eventBus.on(Events.RESEARCH_COMPLETED, ({ researchId }) => {
+    const researchName = RESEARCH[researchId]?.name || '도시 기술';
     eventBus.emit(Events.TOAST_SHOW, {
       title: '연구 완료',
-      text: `${researchId} 기술을 도시 시설 강화에 사용할 수 있습니다.`,
+      text: `${researchName} 연구가 완료되어 도시 시설에 적용됩니다.`,
       priority: true,
     });
     eventBus.emit(Events.AUDIO_SFX, { name: 'correct' });

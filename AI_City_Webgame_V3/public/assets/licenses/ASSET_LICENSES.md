@@ -1,8 +1,8 @@
 # AI City 3D Asset Licenses
 
-다운로드/확인일: 2026-08-30
+다운로드/확인일: 2026-08-30 (모델 교체·정리: 2026-09-02)
 
-런타임에 포함된 외부 모델은 모두 제작자의 공식 배포본에서 받은 CC0 에셋이다. 원본 `License.txt`는 이 폴더와 `assets-source/licenses/`에 그대로 보존한다. 자동 다운로드 기록은 `assets-source/acquisition.json`, 사용자 제공본은 `assets-source/manual-acquisition.json`, 실제 선별 파일·원본 파일·SHA-256은 `assets-source/selected.json`에 기록한다.
+런타임에 포함된 외부 모델은 모두 제작자의 공식 배포본에서 받은 CC0 에셋이다. 원본 `License.txt`는 이 폴더와 `assets-source/licenses/`에 그대로 보존한다(원본에 라이선스 파일이 없는 경우 `assets-source/manifest.json`의 출처 정보로 생성한 노트를 대신 보존한다). 자동 다운로드 기록은 `assets-source/acquisition.json`, 사용자 제공본은 `assets-source/manual-acquisition.json`, 실제 선별 파일·원본 파일·SHA-256은 `assets-source/selected.json`에 기록한다.
 
 ## Kenney — Hexagon Kit
 
@@ -23,22 +23,38 @@
 
 - 공식 URL: https://kenney.nl/assets/city-kit-suburban
 - 라이선스: CC0-1.0
-- 사용 모델: `building-type-a.glb`, `building-type-b.glb`, `building-type-c.glb`, `building-type-t.glb`, `building-type-u.glb`
+- 사용 모델: `building-type-a.glb`, `building-type-c.glb`, `building-type-f.glb`
+- 주거지 레벨 실루엣: 1단계 `building-type-a.glb` → 2단계 `building-type-c.glb` → 3단계 `building-type-f.glb`
 - 원본 라이선스: `kenney-suburban-License.txt`
 
 ## Kenney — City Kit Commercial
 
 - 공식 URL: https://kenney.nl/assets/city-kit-commercial
 - 라이선스: CC0-1.0
-- 사용 모델: `building-a.glb`, `building-b.glb`, `building-skyscraper-a.glb`, `building-skyscraper-b.glb`
+- 사용 모델: `building-skyscraper-a.glb`, `building-skyscraper-c.glb`, `building-skyscraper-e.glb`
+- 데이터센터 레벨 실루엣: 1단계 `building-skyscraper-a.glb` → 2단계 `building-skyscraper-c.glb` → 3단계 `building-skyscraper-e.glb`
 - 원본 라이선스: `kenney-commercial-License.txt`
 
 ## Kenney — City Kit Industrial
 
 - 공식 URL: https://kenney.nl/assets/city-kit-industrial
 - 라이선스: CC0-1.0
-- 사용 모델: `building-a.glb`, `building-m.glb`, `building-l.glb`, `chimney-large.glb`, `detail-tank.glb`
+- 사용 모델: `detail-tank.glb`(순환냉각 1·2단계)
 - 원본 라이선스: `kenney-industrial-License.txt`
+
+## Kenney — City Kit Industrial 2.0
+
+- 공식 URL: https://kenney.nl/assets/city-kit-industrial
+- 라이선스: CC0-1.0
+- 사용 모델: `building-s.glb`, `building-n.glb`, `building-m.glb`, `building-l.glb`, `chimney-small.glb`, `chimney-medium.glb`, `chimney-large.glb`, `solar-panel-portrait.glb`, `solar-panel-landscape.glb`, `solar-panel-landscape-group.glb`, `detail-tank-large.glb`, `shipping-container-b.glb`, `windmill-low.glb`, `windmill.glb`
+- 공장: `building-s.glb` 단일 모델(레벨은 스케일만 차등)
+- 화력발전 레벨 실루엣: 1단계 `building-n.glb` → 2단계 `building-m.glb` → 3단계 `building-l.glb`
+- 원자력발전 레벨 실루엣: 1단계 `chimney-small.glb` → 2단계 `chimney-medium.glb` → 3단계 `chimney-large.glb`
+- 태양광 레벨 실루엣: 1단계 `solar-panel-portrait.glb` → 2단계 `solar-panel-landscape.glb` → 3단계 `solar-panel-landscape-group.glb`
+- 순환냉각 레벨 실루엣: 1·2단계 `detail-tank.glb`(1.0 kit, 스케일만 차등) → 3단계 `detail-tank-large.glb`
+- 에너지저장: `shipping-container-b.glb` 단일 모델(레벨은 스케일만 차등)
+- 풍력 레벨 실루엣: 1·2단계 `windmill-low.glb`(스케일만 차등) → 3단계 `windmill.glb`
+- 원본 라이선스: `kenney-industrial2-License.txt`
 
 ## Kenney — Nature Kit
 
@@ -62,27 +78,19 @@
 - 웹 최적화: 게임에서 사용하지 않는 원본 애니메이션을 제거하고 정적 GLB로 패키징
 - 원본 라이선스: `kenney-people-License.txt`
 
-## Quaternius — Ultimate Space Kit
+## Kay Lousberg — Space Bits
 
-- 공식 URL: https://quaternius.com/packs/ultimatespacekit.html
+- 공식 URL: https://kaylousberg.itch.io/space-bits
 - 라이선스: CC0-1.0
-- 제공/검증일: 2026-08-30
-- 사용 원본: `SolarPanel_Ground.gltf`, `SolarPanel_Structure.gltf`
-- 런타임 파일: `solar-small.glb`, `solar-large.glb`
-- 처리: 원본의 내장 버퍼·32px atlas를 GLB로 묶고 meshopt로 무손상 중심 최적화
-- 원본 라이선스: `quaternius-space-License.txt`
-- 참고: 동봉 라이선스 첫 줄은 다른 팩명인 “Ultimate Platformer Pack”으로 표기되어 있으나, 본문은 Quaternius CC0 1.0이고 공식 Ultimate Space Kit 페이지 역시 CC0와 glTF 92종을 명시한다. 원문은 수정하지 않고 보존했다.
-
-## Quaternius — Farm Buildings Pack
-
-- 공식 URL: https://quaternius.com/packs/farmbuildings.html
-- 라이선스: CC0-1.0
-- 제공/검증일: 2026-08-30
-- 사용 원본: `Windmill.obj`, `Windmill.mtl`
-- 런타임 파일: `wind-turbine.glb`
-- 처리: OBJ/MTL의 선형 diffuse 값을 sRGB로 보정해 GLB로 변환하고 평면 색상 재질을 팔레트 1개로 통합. 작은 타일에서 뭉치는 원본 다엽 바퀴 노드는 제거하고 공용 3엽 로터 InstancedMesh를 사용한 뒤 meshopt로 최적화
-- 원본 라이선스: `quaternius-farm-License.txt`
+- 사용 모델: `Cargo.glb`, `Cargo Depot A.glb`, `Cargo Depot-cRtW9KaGs0.glb`
+- 조력발전 레벨 실루엣: 1단계 `Cargo.glb` → 2단계 `Cargo Depot A.glb` → 3단계 `Cargo Depot-cRtW9KaGs0.glb`
+- 원본 아카이브에 `License.txt`가 동봉되어 있지 않아, 사용자가 제공한 출처(Kay Lousberg, itch.io, CC0)로 `assets-source/manifest.json`을 채우고 그 내용으로 라이선스 노트를 생성했다.
+- 원본 라이선스(생성된 노트): `kaylousberg-space-bits-License.txt`
 
 ## 새
 
 외부 모델을 사용하지 않는다. Three.js 코드로 만든 단순 V자 실루엣을 풀링하여 사용한다.
+
+## 정리한 미사용 에셋 (2026-09-02)
+
+레벨별 모델 교체 과정에서 더 이상 어떤 시설에도 참조되지 않게 된 항목을 레지스트리·선별 목록·`public/assets`에서 모두 제거했다: `residential.house2`(building-type-b), `residential.apartment1/2`(building-type-t/u), `commercial.shop1/2`(building-a/b), `commercial.medium2`(building-skyscraper-b), `industrial.factoryMedium/factoryLarge`(building-m/l, 1.0 kit), `industrial.chimney`(chimney-large, 1.0 kit), `energy.solarSmall/solarLarge`(Quaternius Ultimate Space Kit), `energy.windBase`(Quaternius Farm Buildings Pack). Quaternius 두 팩 자체는 더 이상 어떤 런타임 모델도 제공하지 않아 이 문서에서도 제거했다.

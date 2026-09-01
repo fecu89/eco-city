@@ -95,7 +95,7 @@ test('nuclear and its thermal reserve can be queued in either order', () => {
 
 test('a completed storage hub and existing battery satisfy a nuclear construction plan', () => {
   const state = preparedState(10, 30, ['nuclear', 'battery']);
-  state.claimedQuestIds.add('storage-hub');
+  state.claimedQuestIds.add('extreme-heat');
   state.grid[0] = { type: 'residential', level: 1 };
   state.grid[1] = { type: 'battery', level: 1 };
   state.grid[3] = { type: 'residential', level: 1 };

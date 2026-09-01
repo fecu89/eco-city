@@ -2,10 +2,11 @@ import { test, expect } from '../fixtures/game-test.js';
 import { clickCell, clickHudAction, gameStateSnapshot, openHudPanel } from '../helpers/playthrough.js';
 
 test.describe('boot and agent contract', () => {
-  test('boots at level 1 and 08:00 with controllable time', async ({ gamePage: page }) => {
+  test('boots at level 1 on 2040-01-01 with controllable time', async ({ gamePage: page }) => {
     const snapshot = await gameStateSnapshot(page);
     expect(snapshot).toMatchObject({ mode: 'playing', stage: 1, quest: 1, credits: 10 });
-    expect(snapshot.gameTime).toMatchObject({ year: 2040, month: 1, day: 1, hour: 8, timeScale: 1 });
+    expect(snapshot.gameTime).toMatchObject({ year: 2040, month: 1, day: 1, timeScale: 1 });
+    expect(snapshot.gameTime).not.toHaveProperty('hour');
     expect(await page.evaluate(() => typeof window.advanceTime)).toBe('function');
     expect(await page.evaluate(() => typeof window.__settleSimulationDay)).toBe('function');
   });
@@ -18,9 +19,10 @@ test.describe('boot and agent contract', () => {
     expect(snapshot).not.toHaveProperty('evidenceCount');
     expect(snapshot.research).toHaveProperty('jobs');
     expect(snapshot.research).not.toHaveProperty('active');
-    expect(snapshot.visualGameTime).toMatchObject({ year: 2040, month: 1, day: 1 });
+    expect(snapshot.visualGameTime).toMatchObject({ year: 2040, month: 1, day: 2 });
     expect(snapshot).toHaveProperty('carbonCrisisDays');
-    expect(snapshot.progression).toMatchObject({ chapter: 1, tutorialQuestIndex: 1, objectiveSetId: null });
+    expect(snapshot.progression).toMatchObject({ chapter: 1, tutorialQuestIndex: 1 });
+    expect(snapshot.progression).not.toHaveProperty('objectiveSetId');
     expect(snapshot.expansion).toMatchObject({ phase: 0, firstChoice: null });
     expect(snapshot.events).toMatchObject({ activeId: null });
     expect(snapshot.stressTest).toMatchObject({ status: 'locked', phaseIndex: 0 });
@@ -66,18 +68,18 @@ test.describe('construction and inspection', () => {
     expect(after.entities[0]).toMatchObject({ index: 0, type: 'residential' });
   });
 
-  test('shared build detail exposes cost, hourly economy, power, carbon, water and labor', async ({ gamePage: page }) => {
+  test('shared build detail exposes cost, daily economy, power, carbon, water and labor', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     const residential = page.locator('#facilityDock .facility-btn', { hasText: '주거지' });
     await expect(residential).toContainText('-2.00 💰');
     const detail = page.locator('#facilityDetail');
     await expect(detail).toContainText('주거 세금');
-    await expect(detail).toContainText('+0.13~+0.50/h');
-    await expect(detail).toContainText('정상 -2E/h');
+    await expect(detail).toContainText('+0.13~+0.50/일');
+    await expect(detail).toContainText('정상 -2E/일');
     await expect(detail).toContainText('배치 후 하단에서 도시 전체 실제 순변화 확인');
     await expect(detail).toContainText('CO₂');
     await expect(detail.locator('[data-metric="water"]')).toHaveAttribute('aria-label', '물');
-    await expect(detail).toContainText('인구 +10');
+    await expect(detail).toContainText('인구 +6');
 
     await page.evaluate(() => {
       window.__GAME_STATE__.unlockedFacilities.add('cooling');
@@ -101,14 +103,14 @@ test.describe('construction and inspection', () => {
     });
 
     await expect(page.locator('.facility-inspector-grid')).toContainText('주거 세금');
-    await expect(page.locator('#facilityLiveBalance')).toHaveText('+0.20 💰/h');
-    await expect(page.locator('#facilityCityNet')).toHaveText('-0.30 💰/h');
+    await expect(page.locator('#facilityLiveBalance')).toContainText('/일');
+    await expect(page.locator('#facilityCityNet')).toContainText('/일');
     await expect(page.locator('#facilityLivePower')).toContainText('2/2E');
 
     await page.locator('.modal-card .close-modal').click();
     await page.evaluate(() => window.__clickCell(18));
-    await expect(page.locator('#facilityLiveBalance')).toHaveText('-0.50 💰/h');
-    await expect(page.locator('#facilityLivePower')).toHaveText('+13E/h');
+    await expect(page.locator('#facilityLiveBalance')).toHaveText('-0.50 💰/일');
+    await expect(page.locator('#facilityLivePower')).toHaveText('+13E/일');
   });
 
   test('level 3 moves unlocked green space directly behind residential in the build order', async ({ gamePage: page }) => {
@@ -150,8 +152,8 @@ test.describe('construction and inspection', () => {
     });
 
     await clickCell(page, 0);
-    await expect(page.locator('#facilityLiveWater')).toHaveText('1/h');
-    await expect(page.locator('#facilityLiveCarbon')).toHaveText('0 CO₂/h');
+    await expect(page.locator('#facilityLiveWater')).toHaveText('1/일');
+    await expect(page.locator('#facilityLiveCarbon')).toHaveText('0 CO₂/일');
   });
 
   test('unlocked factory placement preview marks a power-plant neighbor', async ({ gamePage: page }) => {

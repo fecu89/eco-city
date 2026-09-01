@@ -67,9 +67,14 @@ export function startQuestQuiz(state, kind, random = null) {
 }
 
 export function startResearchQuiz(state, researchId, random = null) {
-  const questions = RESEARCH_QUIZZES[researchId];
-  if (!RESEARCH[researchId] || !questions) return { ok: false, reason: 'unknown_research' };
+  const questionBank = RESEARCH_QUIZZES[researchId];
+  if (!RESEARCH[researchId] || !questionBank) return { ok: false, reason: 'unknown_research' };
   if (!state.research.jobs[researchId]) return { ok: false, reason: 'research_not_active' };
+  const creditedIds = new Set(state.research.quizCreditQuestionIds?.[researchId] || []);
+  const questions = questionBank.filter(({ id }) => !creditedIds.has(id));
+  if (!questions.length) {
+    return { ok: false, reason: 'no_questions_remaining', researchId };
+  }
   return {
     ok: true,
     ...startSession(state, {

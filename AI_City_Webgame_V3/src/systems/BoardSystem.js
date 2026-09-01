@@ -3,8 +3,12 @@ import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
 import { formatCredits } from '../core/Money.js';
-import { QUESTS } from '../core/QuestDefinitions.js';
+import { QUESTS, questForState } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import {
+  levelThreeUnlockQuestForFacility,
+  upgradePermitLevelForFacility,
+} from '../core/CampaignProgression.js';
 import { getFacilityPermit, validateDemolitionPermit, validateGridFacilityDependencies } from './FacilityPermitSystem.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 import { calculateEnvironmentalOperations, facilityLevelStats } from './FacilityOperationSystem.js';
@@ -18,6 +22,7 @@ import {
 import {
   activateExpansionSide,
   constructionCostForCell,
+  energySiteBenefit,
   isExpansionCellActive,
 } from './ZoneSystem.js';
 import {
@@ -99,13 +104,18 @@ export const PARTNER_RULES = {
 };
 
 // 독에서 시설을 선택했을 때, 빈 칸 중 어디가 인접 보너스(good)/갈등(bad)을 받는지 계산한다.
-export function placementPreview(facilityKey, grid, coords = getBoardCoordinates()) {
-  const rule = PARTNER_RULES[facilityKey];
+export function placementPreview(facilityKey, grid, coords = getBoardCoordinates(), state = gameState) {
+  const rule = PARTNER_RULES[facilityKey] || { good: [], bad: [] };
   const good = new Set();
   const bad = new Set();
-  if (!rule) return { good, bad };
+  const siteBenefits = new Map();
   grid.forEach((cell, i) => {
     if (cell) return;
+    const siteBenefit = energySiteBenefit(state, i, facilityKey);
+    if (siteBenefit) {
+      good.add(i);
+      siteBenefits.set(i, siteBenefit);
+    }
     const ns = neighborIndices(i, coords);
     const hasGood = ns.some((n) => {
       if (!grid[n] || !rule.good.includes(grid[n].type)) return false;
@@ -117,7 +127,7 @@ export function placementPreview(facilityKey, grid, coords = getBoardCoordinates
     if (hasGood) good.add(i);
     if (ns.some((n) => grid[n] && rule.bad.includes(grid[n].type))) bad.add(i);
   });
-  return { good, bad };
+  return { good, bad, siteBenefits };
 }
 
 export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContext = null) {
@@ -210,8 +220,10 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
   };
 }
 
-export function stageLevelCap() {
-  return gameState.upgradePermitLevel;
+export function stageLevelCap(facilityType = null) {
+  return facilityType
+    ? upgradePermitLevelForFacility(gameState, facilityType)
+    : gameState.upgradePermitLevel;
 }
 
 export function upgradeCost(cell) {
@@ -251,7 +263,7 @@ const PLACEMENT_MESSAGES = Object.freeze({
   locked_research: '연구를 완료해야 해금됩니다.',
   outer_ring_only: '조력발전은 현재 도시의 최외곽 육각에만 건설할 수 있습니다.',
   facility_limit: '현재 퀘스트의 시설 건설 허가 한도에 도달했습니다.',
-  thermal_reserve_required: '핵발전을 건설하려면 화력발전 1기가 필요합니다. 저탄소 저장 허브 완료 후에는 배터리로 대체할 수 있습니다.',
+  thermal_reserve_required: '핵발전을 건설하려면 화력발전 1기가 필요합니다. 폭염 경보 퀘스트 완료 후에는 배터리로 대체할 수 있습니다.',
   insufficient_credits: '건설 크레딧이 부족합니다.',
 });
 
@@ -309,7 +321,15 @@ export function validateUpgrade(state, index) {
   const facility = FACILITIES[cell.type];
   if (cell.level >= facility.maxLevel) return { ok: false, reason: 'max_level', facility };
   const nextLevel = cell.level + 1;
-  if (nextLevel > state.upgradePermitLevel) return { ok: false, reason: 'city_permit_required', requiredLevel: nextLevel, facility };
+  if (nextLevel > upgradePermitLevelForFacility(state, cell.type)) {
+    return {
+      ok: false,
+      reason: 'city_permit_required',
+      requiredLevel: nextLevel,
+      unlockQuestIndex: nextLevel >= 3 ? levelThreeUnlockQuestForFacility(cell.type) : 7,
+      facility,
+    };
+  }
   if (['solar', 'wind', 'battery', 'green'].includes(cell.type)
     && nextLevel > (state.research?.techLevels?.[cell.type] || 0)) {
     return { ok: false, reason: 'technology_required', requiredLevel: nextLevel, facility };
@@ -330,7 +350,8 @@ export function validateUpgrade(state, index) {
 export function upgradeRequirementMessage(state, validation) {
   if (validation.ok) return '강화할 수 있습니다.';
   if (validation.reason === 'city_permit_required') {
-    const quest = validation.requiredLevel === 2 ? QUESTS[6] : QUESTS[12];
+    const questIndex = validation.requiredLevel === 2 ? 7 : validation.unlockQuestIndex;
+    const quest = QUESTS[questIndex - 1];
     return `퀘스트 ${quest.index} ‘${quest.title}’를 완료하면 Lv.${validation.requiredLevel} 강화 허가가 열립니다.`;
   }
   if (validation.reason === 'technology_required') {
@@ -360,7 +381,9 @@ export function facilityUnlockMessage(state, facilityKey) {
   if (facilityKey === 'tidal' && (state.research?.techLevels?.tidal || 0) < 1) {
     return `${RESEARCH.tidal1.name} 연구를 완료하면 해금됩니다.`;
   }
-  const quest = QUESTS.find((item) => item.reward.unlockFacilities.includes(facilityKey));
+  const quest = QUESTS
+    .map((item) => questForState(state, item.index))
+    .find((item) => item.reward.unlockFacilities.includes(facilityKey));
   if (quest && !state.unlockedFacilities.has(facilityKey)) {
     return `퀘스트 ${quest.index} ‘${quest.title}’ 완료 보상으로 해금됩니다.`;
   }

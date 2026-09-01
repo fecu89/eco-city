@@ -9,6 +9,7 @@ import {
   cityModifierForClimate,
   facilityModifierForClimate,
 } from './ClimateModifierSystem.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 
 function rotatedDeck(deck, seed) {
   const offset = Math.abs(Math.trunc(Number(seed) || 0)) % deck.length;
@@ -40,8 +41,8 @@ function completedIds(state) {
 }
 
 function campaignOwnsSchedule(state) {
-  return state.questIndex >= 7
-    && state.questIndex <= 14
+  return state.questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START
+    && state.questIndex <= CAMPAIGN_QUEST_INDEXES.CLIMATE_END
     && ['briefing', 'preparation', 'active', 'result'].includes(state.climateCampaign?.status);
 }
 

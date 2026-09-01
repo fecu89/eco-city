@@ -1,4 +1,4 @@
-import { QUESTS, QUEST_COUNT } from '../core/QuestDefinitions.js';
+import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { FACILITIES, QUEST_REQUIREMENTS, RESEARCH_RULES } from '../core/Constants.js';
@@ -17,13 +17,14 @@ import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { clearObjectivePanelMode } from './ObjectiveView.js';
-import { STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import {
   acknowledgeClimateBriefing,
   currentClimateQuestEvaluation,
   isClimateQuestActive,
   retryClimateQuest,
 } from '../systems/ClimateQuestSystem.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 
 let els;
 let onChanged = () => {};
@@ -68,14 +69,15 @@ export function initQuestView(elements, changed) {
       renderQuestQuizModal();
       return;
     }
-    const completed = QUESTS[gameState.questIndex - 1];
+    const completed = questForState(gameState);
     const result = claimCurrentQuest(gameState);
     if (!result.ok) return;
     if (result.expandGrid) expandGrid();
+    if (result.expandSecondGrid && result.secondExpansionSide) expandGrid(result.secondExpansionSide);
     detailsExpanded = false;
     onChanged({ phase: 'claimed', quest: completed, result });
     if (result.nextQuest) {
-      eventBus.emit(Events.QUEST_STARTED, { quest: QUESTS[result.nextQuest - 1], silentAlert: true });
+      eventBus.emit(Events.QUEST_STARTED, { quest: questForState(gameState, result.nextQuest), silentAlert: true });
     }
   }));
   const mapButtons = Array.isArray(els.map) ? els.map : [els.map];
@@ -83,7 +85,10 @@ export function initQuestView(elements, changed) {
   eventBus.on(Events.RESEARCH_QUIZ_REQUESTED, ({ researchId, dataCenterIndex }) => {
     const result = startResearchQuiz(gameState, researchId);
     if (!result.ok) {
-      eventBus.emit(Events.TOAST_SHOW, { title: '연구 퀴즈를 열 수 없습니다.', text: result.reason });
+      const text = result.reason === 'no_questions_remaining'
+        ? '이 연구의 가속 퀴즈는 모두 맞혔습니다. 남은 연구 시간은 게임 시간으로 진행됩니다.'
+        : '진행 중인 연구에서만 가속 퀴즈를 풀 수 있습니다.';
+      eventBus.emit(Events.TOAST_SHOW, { title: '연구 퀴즈를 열 수 없습니다.', text });
       return;
     }
     researchQuizReturnIndex = dataCenterIndex;
@@ -111,6 +116,12 @@ function rewardText(quest) {
   if (quest.reward.unlockResearch?.length) {
     parts.push(`${quest.reward.unlockResearch.map((id) => RESEARCH[id]?.name || id).join('·')} 해금`);
   }
+  if (quest.reward.upgradePermitFacilities?.length) {
+    const names = quest.reward.upgradePermitFacilities
+      .map((facility) => FACILITIES[facility]?.name || facility)
+      .join('·');
+    parts.push(`${names} Lv.3 강화 허가`);
+  }
   if (quest.reward.upgradePermitLevel) parts.push(`Lv.${quest.reward.upgradePermitLevel} 강화 허가`);
   return `보상 ${parts.join(' · ') || '최종 성적표'}`;
 }
@@ -119,20 +130,67 @@ function progressForCurrent() {
   if (gameState.questStatus === 'ready_to_claim' || gameState.questStatus === 'claimed') return 100;
   if (isClimateQuestActive(gameState)) {
     const evaluation = currentClimateQuestEvaluation(gameState);
-    return Math.min(100, (evaluation.consecutiveDays || 0) / evaluation.quest.targetDays * 100);
+    return Math.min(100, (evaluation.bestConsecutiveDays || evaluation.consecutiveDays || 0) / evaluation.quest.targetDays * 100);
   }
   if (gameState.questIndex === 1) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'residential').length * 50);
   if (gameState.questIndex === 3) return Math.min(100, gameState.grid.filter((cell) => cell?.type === 'green').length * 100);
-  if (gameState.questIndex === 9) {
-    const days = Math.min(1, (gameState.questProgress.consecutiveDays || 0) / 3);
-    const energy = Math.min(1, (gameState.questProgress.hubEnergy || 0) / 8);
-    return Math.min(days, energy) * 100;
-  }
   const days = gameState.questProgress.consecutiveDays || 0;
-  const required = [2, 4, 5, 6, 7].includes(gameState.questIndex)
+  const required = [2, 4, 5, 6, 9, 10].includes(gameState.questIndex)
     ? QUEST_REQUIREMENTS.OPERATING_DAYS
-    : gameState.questIndex === 14 ? 4 : 3;
+    : 3;
   return Math.min(100, days / required * 100);
+}
+
+function oneDecimal(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(1) : '—';
+}
+
+function liveClimateConditions(evaluation) {
+  const quest = evaluation.quest;
+  const summary = gameState.lastTickSummary || {};
+  const lines = [`최고 연속 달성 ${evaluation.bestConsecutiveDays || evaluation.consecutiveDays || 0} / ${quest.targetDays}일`];
+  const essential = `필수시설 전력 ${oneDecimal(summary.essentialSupplyPercent)}% / 90%`;
+  if (['essential', 'battery', 'diversity', 'cleanAir', 'tidal'].includes(quest.objective)) lines.push(essential);
+  if (quest.objective === 'battery') {
+    lines.push(`배터리 실제 방전 ${oneDecimal(evaluation.batteryEnergy)} / ${quest.batteryTarget}E`);
+    lines.push(`또는 장마 최저 예비력 ${oneDecimal(evaluation.batteryReserveMinimum)} / ${quest.batteryReserveTarget}E`);
+  }
+  if (quest.objective === 'diversity') {
+    const types = Object.values(summary.generationDeliveredByType || {}).filter((delivered) => Number(delivered) >= 0.1).length;
+    lines.push(`실제 공급 발전원 ${types} / ${quest.generationTypeTarget}종`);
+  }
+  if (quest.objective === 'winter') {
+    const residentialRatios = Object.entries(summary.facilityPower || {})
+      .filter(([index]) => gameState.grid[Number(index)]?.type === 'residential')
+      .map(([, power]) => Number(power.ratio) * 100);
+    lines.push(`주거 최저 전력 ${oneDecimal(residentialRatios.length ? Math.min(...residentialRatios) : NaN)}% / 90%`);
+    lines.push(`도시 순수익 ${oneDecimal(summary.netCredits)} 💰/일 / 0 초과`);
+  }
+  if (quest.objective === 'water') {
+    lines.push(`물 사용 ${oneDecimal(summary.dailyWater)} / ${oneDecimal(summary.waterLimit)}/일`);
+  }
+  if (['cleanAir', 'wildfire'].includes(quest.objective)) {
+    lines.push(`CO₂ ${oneDecimal(summary.dailyCarbon)} / ${quest.carbonTarget}/일 이하`);
+  }
+  if (quest.objective === 'wildfire') {
+    lines.push(`도시 순수익 ${oneDecimal(summary.netCredits)} 💰/일 / 0 초과`);
+  }
+  if (quest.objective === 'tidal') {
+    lines.push(`조력 실제 공급 ${oneDecimal(evaluation.tidalEnergy)} / ${quest.tidalEnergyTarget}E`);
+  }
+  return lines;
+}
+
+function climateDetailsMarkup(evaluation, quest) {
+  const definition = CITY_EVENTS[evaluation.quest.eventType];
+  return `
+    <strong>현재 조건</strong>
+    <ul>${liveClimateConditions(evaluation).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>
+    <div><span>기후 영향</span><b>${escapeHtml(definition?.description || '')}</b></div>
+    <div><span>대비 권장</span><b>${escapeHtml(definition?.preparation || '')}</b></div>
+    <strong>완료 조건</strong>
+    <ul>${quest.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join('')}</ul>
+    <div><span>퀘스트 보상</span><b>${escapeHtml(rewardText(quest))}</b></div>`;
 }
 
 export function renderQuest() {
@@ -140,8 +198,8 @@ export function renderQuest() {
   clearObjectivePanelMode(els);
   if (renderStressTestPanel()) return;
   const evaluation = evaluateCurrentQuest(gameState);
-  const quest = QUESTS[gameState.questIndex - 1];
-  const climatePosition = gameState.questIndex - 6;
+  const quest = questForState(gameState);
+  const climatePosition = gameState.questIndex - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1;
   eachNode(els.level, (node) => {
     node.textContent = isClimateQuestActive(gameState)
       ? `기후 대응 ${climatePosition} / 8`
@@ -176,10 +234,12 @@ export function renderQuest() {
     node.classList.add('hidden');
   });
   if (els.details) {
-    els.details.innerHTML = `
-      <strong>완료 조건</strong>
-      <ul>${quest.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join('')}</ul>
-      <div><span>퀘스트 보상</span><b>${escapeHtml(rewardText(quest))}</b></div>`;
+    els.details.innerHTML = isClimateQuestActive(gameState)
+      ? climateDetailsMarkup(currentClimateQuestEvaluation(gameState), quest)
+      : `
+        <strong>완료 조건</strong>
+        <ul>${quest.details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join('')}</ul>
+        <div><span>퀘스트 보상</span><b>${escapeHtml(rewardText(quest))}</b></div>`;
     els.details.classList.toggle('hidden', !detailsExpanded);
   }
   if (els.expand) {
@@ -244,7 +304,7 @@ function renderQuestQuizModal() {
   const research = gameState.quizResearchId ? RESEARCH[gameState.quizResearchId] : null;
   const accelerationDays = research ? research.durationDays / RESEARCH_RULES.QUIZ_QUESTION_COUNT : 0;
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow">${research ? 'RESEARCH ACCELERATION' : 'CLIMATE QUIZ'}</span><h2>${research ? `${escapeHtml(research.name)} · ` : ''}${escapeHtml(question.title)}</h2></div></div>
+    <div class="modal-head"><div><span class="eyebrow">${research ? 'RESEARCH ACCELERATION' : 'CLIMATE QUIZ'}</span><h2>${research ? `${escapeHtml(research.name)} · ` : ''}${escapeHtml(question.title)}</h2></div><button class="icon-btn" type="button" data-quiz-close aria-label="퀴즈 닫기"><i data-lucide="x"></i></button></div>
     <div class="quiz-count">${gameState.quizIndex + 1} / ${gameState.quizPool.length} · ${research ? `정답마다 ${accelerationDays}일 단축` : `통과 ${gameState.quizPassThreshold}문항`}</div>
     <div class="quiz-question">
       <h3>${escapeHtml(question.prompt)}</h3>
@@ -253,6 +313,11 @@ function renderQuestQuizModal() {
     </div>
     <div class="modal-actions"><button class="btn primary" id="questQuizNext" disabled>${gameState.quizIndex === gameState.quizPool.length - 1 ? '결과 보기' : '다음'}</button></div>
   `, { id: 'quiz', pausesSimulation: true });
+  $modal('[data-quiz-close]').addEventListener('click', () => {
+    researchQuizReturnIndex = null;
+    closeModal();
+    onChanged();
+  });
   $$modal('#questQuizOptions .quiz-option').forEach((button) => {
     button.addEventListener('click', () => {
       const result = answerQuestQuiz(gameState, Number(button.dataset.index));
@@ -332,7 +397,10 @@ function renderQuestQuizResultModal(result) {
 export function openQuestMap() {
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUEST MAP</span><h2>기후 생존 퀘스트</h2></div><button class="icon-btn" id="questMapClose">×</button></div>
-    <div class="quest-map-list">${QUESTS.map((quest) => `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`).join('')}</div>
+    <div class="quest-map-list">${QUESTS.map((baseQuest) => {
+      const quest = questForState(gameState, baseQuest.index);
+      return `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`;
+    }).join('')}</div>
     ${gameState.credits <= 1 ? `<button class="btn secondary full" id="emergencyCreditBtn">긴급지원 ${formatCredits(4)}</button>` : ''}
   `);
   $modal('#questMapClose').addEventListener('click', closeModal);

@@ -8,10 +8,16 @@ import {
 } from '../../../src/core/ClimateCampaignDefinitions.js';
 import { QUESTS, QUEST_COUNT } from '../../../src/core/QuestDefinitions.js';
 
-test('campaign contains six foundations, eight Korean climates, and one final test', () => {
-  expect(QUEST_COUNT).toBe(15);
-  expect(QUESTS).toHaveLength(15);
-  expect(CLIMATE_QUEST_ORDER).toEqual([7, 8, 9, 10, 11, 12, 13, 14]);
+test('campaign contains six foundations, four preparation quests, eight Korean climates, and one final test', () => {
+  expect(QUEST_COUNT).toBe(19);
+  expect(QUESTS).toHaveLength(19);
+  expect(QUESTS.slice(6, 10).map(({ index, id }) => [index, id])).toEqual([
+    [7, 'solar-research-foundation'],
+    [8, 'data-center-modernization'],
+    [9, 'wind-pilot-grid'],
+    [10, 'tidal-coast-pilot'],
+  ]);
+  expect(CLIMATE_QUEST_ORDER).toEqual([11, 12, 13, 14, 15, 16, 17, 18]);
   expect(CLIMATE_QUEST_ORDER.map((index) => CLIMATE_QUESTS[index].eventType)).toEqual([
     'heatwave', 'monsoon', 'typhoon', 'coldWave',
     'drought', 'stagnantAir', 'dryWildfire', 'stormSurge',
@@ -25,20 +31,34 @@ test('campaign contains six foundations, eight Korean climates, and one final te
 
 test('climate quest lookup rejects foundations and returns late campaign definitions', () => {
   expect(climateQuestByIndex(6)).toBeNull();
-  expect(climateQuestByIndex(7)).toBe(CLIMATE_QUESTS[7]);
-  expect(climateQuestByIndex(14)).toBe(CLIMATE_QUESTS[14]);
-  expect(climateQuestByIndex(15)).toBeNull();
+  expect(climateQuestByIndex(10)).toBeNull();
+  expect(climateQuestByIndex(11)).toBe(CLIMATE_QUESTS[11]);
+  expect(climateQuestByIndex(18)).toBe(CLIMATE_QUESTS[18]);
+  expect(climateQuestByIndex(19)).toBeNull();
 });
 
-test('tidal and green unlocks are explicit campaign rewards', () => {
-  expect(CLIMATE_QUESTS[7].reward).toMatchObject({
+test('preparation rewards stage level-three permits before monsoon and open every path by quest thirteen', () => {
+  expect(QUESTS[6].reward).toMatchObject({
     unlockFacilities: ['battery'],
-    unlockResearch: ['green2'],
     upgradePermitLevel: 2,
   });
-  expect(CLIMATE_QUESTS[12].reward).toMatchObject({ unlockResearch: ['tidal1'] });
-  expect(CLIMATE_QUESTS[13].reward).toMatchObject({ unlockResearch: ['green3'], upgradePermitLevel: 3 });
-  expect(CLIMATE_QUESTS[14].entry).toMatchObject({ facility: 'tidal', research: 'tidal1' });
+  expect(QUESTS[7].reward).toMatchObject({ unlockFacilities: ['wind'] });
+  expect(QUESTS[8].reward).toMatchObject({ unlockResearch: ['tidal1'] });
+  expect(QUESTS[9].reward).toMatchObject({ upgradePermitFacilities: ['thermal', 'nuclear', 'wind'] });
+  expect(CLIMATE_QUESTS[11].reward).toMatchObject({
+    unlockFacilities: [],
+    unlockResearch: ['green2'],
+    upgradePermitLevel: null,
+    upgradePermitFacilities: ['solar', 'tidal'],
+  });
+  expect(CLIMATE_QUESTS[12].reward).toMatchObject({
+    unlockFacilities: [],
+    unlockResearch: ['green3'],
+    upgradePermitLevel: 3,
+  });
+  expect(CLIMATE_QUESTS[16].reward).toMatchObject({ unlockResearch: [] });
+  expect(CLIMATE_QUESTS[17].reward).toMatchObject({ unlockResearch: [], upgradePermitLevel: null });
+  expect(CLIMATE_QUESTS[18].entry).toMatchObject({ facility: 'tidal', research: 'tidal1' });
 });
 
 test('climate durations and final phase durations match the approved campaign', () => {

@@ -41,7 +41,7 @@ test('current round trip preserves concurrent build and upgrade progress with ba
   const payload = state.serialize();
   const restored = new GameState();
 
-  expect(SAVE_VERSION).toBe(8);
+  expect(SAVE_VERSION).toBe(9);
   expect(restored.hydrate(payload)).toBe(true);
   expect(restored.grid[0]).toMatchObject({
     batteryStoredLowCarbon: 6,
@@ -58,7 +58,7 @@ test('current round trip preserves concurrent build and upgrade progress with ba
 
 test('malformed build projects clear only their construction site', () => {
   const payload = saveShapedState();
-  payload.v = 8;
+  payload.v = SAVE_VERSION;
   payload.grid[0] = {
     type: 'factory',
     level: 1,
@@ -74,7 +74,7 @@ test('malformed build projects clear only their construction site', () => {
 
 test('malformed upgrade projects restore the previous level and suspended mode without refund', () => {
   const payload = saveShapedState();
-  payload.v = 8;
+  payload.v = SAVE_VERSION;
   payload.credits = 3;
   payload.grid[0] = {
     type: 'thermal',
@@ -97,8 +97,8 @@ test('malformed upgrade projects restore the previous level and suspended mode w
   expect(restored.credits).toBe(3);
 });
 
-test('the full migration chain ends at v8', () => {
+test('the full migration chain ends at v9', () => {
   const v6 = saveShapedState();
   v6.v = 6;
-  expect(migrateSaveData(v6).v).toBe(8);
+  expect(migrateSaveData(v6).v).toBe(9);
 });

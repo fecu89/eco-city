@@ -47,6 +47,15 @@
       "sha256": "99a09ff148056678c0c3b7977ad9dbce55d2f243e06fbfc7c28642accef4dd9e"
     },
     {
+      "id": "kenney-industrial2",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "anchorUrl": "https://kenney.nl/assets/city-kit-industrial",
+      "finalUrl": "https://kenney.nl/assets/city-kit-industrial",
+      "archive": "assets-source/archives/kenney_city-kit-industrial_2.0.zip",
+      "bytes": 5045077,
+      "sha256": "5b381164e5760f3830a2dbee43b972deee38b2a695d091b56e238ab2910c96d2"
+    },
+    {
       "id": "kenney-nature",
       "officialPage": "https://kenney.nl/assets/nature-kit",
       "anchorUrl": "https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip",
@@ -63,6 +72,15 @@
       "archive": "assets-source/archives/kenney-car-kenney_car-kit.zip",
       "bytes": 4814237,
       "sha256": "fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4"
+    },
+    {
+      "id": "kaylousberg-space-bits",
+      "officialPage": "https://kaylousberg.itch.io/space-bits",
+      "anchorUrl": "https://kaylousberg.itch.io/space-bits",
+      "finalUrl": "https://kaylousberg.itch.io/space-bits",
+      "archive": "assets-source/archives/Space Bits.undefined-glb.zip",
+      "bytes": 1096397,
+      "sha256": "fcaba27d84801797fada4c1b60943ca059877fd75895d37864e8e1955e8a6dce"
     },
     {
       "id": "kenney-people",

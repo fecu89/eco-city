@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/game-test.js';
 
-test('24-hour forecast pauses 4x play for preparation, then becomes active and ends with a non-blocking result', async ({ gamePage: page }) => {
+test('24-day preparation keeps 4x play running and shows the strip only while the disaster is active', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(4);
     const state = window.__GAME_STATE__;
@@ -12,13 +12,9 @@ test('24-hour forecast pauses 4x play for preparation, then becomes active and e
     window.__settleSimulationDay();
   });
 
-  await expect(page.locator('#forecastStrip')).toContainText('23시간 후 폭염');
-  await expect(page.locator('#modalCard')).toContainText('폭염 대비 시간');
-  await expect(page.locator('#modalCard')).toContainText('자동으로 일시정지');
-  expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(0);
-  await page.locator('#eventPreparationCloseBtn').click();
+  await expect(page.locator('#forecastStrip')).toBeHidden();
   await expect(page.locator('#modal')).toBeHidden();
-  expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(0);
+  expect(await page.evaluate(() => window.__GAME_STATE__.timeScale)).toBe(4);
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;

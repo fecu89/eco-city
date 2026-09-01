@@ -20,6 +20,7 @@ import {
 } from '../systems/BoardSystem.js';
 import { handleResearchFacilityRemoved } from '../systems/ResearchSystem.js';
 import { bindResearchPanel, refreshResearchPanelLive, researchPanelMarkup } from './ResearchView.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import * as Report from '../systems/ReportSystem.js';
 import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
 import { BATTERY_POLICIES, OPERATION_MODES, availableOperationModes } from '../core/OperationDefinitions.js';
@@ -92,14 +93,14 @@ export function openExpansionChoiceModal() {
   }).join('');
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">CITY EXPANSION</span><h2>첫 확장 방향을 선택하세요</h2></div></div>
-    <p class="expansion-choice-intro">선택한 9칸만 먼저 개방됩니다. 각 지역은 이점과 부담이 함께 있으며, 기후 대응 단계에서 반대편도 순차 개방됩니다.</p>
+    <p class="expansion-choice-intro">선택한 9칸과 해당 재생에너지가 먼저 열립니다. 8단계 데이터센터 현대화를 마치면 반대편 9칸도 개방됩니다.</p>
     <div class="expansion-choice-grid">
       ${Object.values(EXPANSION_SIDES).map((side) => `<button type="button" class="expansion-choice-card" data-expansion-side="${side.id}">
         <span class="expansion-direction">${side.id === 'east' ? 'EAST · 동부' : 'WEST · 서부'}</span>
         <strong>${side.label}</strong>
         <p>${side.description}</p>
         <ul>${traitMarkup(side.id)}</ul>
-        <b>9칸 개방 · 유지비 +1.00 💰/일</b>
+        <b>9칸 개방 · ${FACILITIES[side.facility].name} 해금 · 유지비 +1.00 💰/일</b>
       </button>`).join('')}
     </div>
   `, { id: 'expansion-choice', pausesSimulation: true, dismissible: false });
@@ -111,7 +112,7 @@ export function openExpansionChoiceModal() {
     refreshAll();
     eventBus.emit(Events.TOAST_SHOW, {
       title: `${EXPANSION_SIDES[result.side].label} 완료`,
-      text: '새 대지 9칸 개방 · 도시 유지비 +1.00 💰/일',
+      text: `새 대지 9칸 · ${FACILITIES[result.unlockedFacility].name} 해금 · 도시 유지비 +1.00 💰/일`,
       priority: true,
     });
   }));
@@ -170,37 +171,20 @@ export function openHelpModal() {
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY · 15~30 MIN</span><h2>기후 생존 도시 · 4개 챕터</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
     <div class="help-grid">
-      <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 반투명 계획으로 올린 뒤, 하단의 N개 확정을 눌러 한꺼번에 건설합니다.</p></article>
+      <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 원하는 칸에 반투명 계획으로 올린 뒤, 하단의 건설 확정을 눌러 한꺼번에 착공합니다. 미리보기의 X로 계획 전체를 취소할 수 있습니다.</p></article>
       <article><span>02</span><h3>운영</h3><p>1배속에서 1초마다 1일이 흐르며 수입·전력·탄소·물이 정산됩니다. 화면에는 날짜만 표시됩니다.</p></article>
       <article><span>03</span><h3>전력망</h3><p>거리가 멀수록 송전 손실이 커지고 저장장치는 중심과 인접한 6방향의 손실을 줄입니다.</p></article>
       <article><span>04</span><h3>기후 퀘스트</h3><p>6개 기초 임무 뒤에는 폭염·장마·태풍·한파 등 8개 기후에 각각 24일 동안 대비합니다.</p></article>
-      <article><span>05</span><h3>기후 대응</h3><p>기상이변은 ${EVENT_FORECAST_DAYS}일 전에 예보되며 첫 예보 때 자동 일시정지됩니다. 일일 탄소 ${CARBON_CRISIS.SAFE_DAILY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_DAYS}일이 지나면 도시가 중단됩니다.</p></article>
+      <article><span>05</span><h3>기후 대응</h3><p>기상이변 퀘스트를 시작하면 ${EVENT_FORECAST_DAYS}일 대비 기간이 바로 흐르며 자동으로 일시정지하지 않습니다. 일일 탄소 ${CARBON_CRISIS.SAFE_DAILY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_DAYS}일이 지나면 도시가 중단됩니다.</p></article>
       <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 50%입니다.</p></article>
     </div>
     <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → 8개 한국형 기후 대응 → 41일 복합기후 시험 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
-    <div class="callout"><strong>시설 허가</strong><p>퀘스트 레벨마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 저탄소 저장 허브 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
+    <div class="callout"><strong>시설 허가</strong><p>퀘스트 레벨마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 폭염 경보 퀘스트 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
     <div class="callout"><strong>인구와 필요 인력</strong><p>주거지는 전체 인구를 늘리고, 발전소·공장·데이터센터 같은 운영 시설은 인력을 사용합니다. 계획 전체의 필요 인력이 인구를 넘으면 건설을 확정할 수 없습니다.</p></div>
     <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_DAYS.CAPSTONE / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 4문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
     <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값이며, 조력발전은 섬의 현재 최외곽에만 배치할 수 있습니다.</p></div>
   `);
   $modal('.close-modal').addEventListener('click', closeModal);
-}
-
-export function openEventPreparationModal(cityEvent) {
-  const definition = CITY_EVENTS[cityEvent?.type];
-  if (!definition) return false;
-  setModal(`
-    <div class="modal-head"><div><span class="eyebrow">${EVENT_FORECAST_DAYS}D EARLY WARNING · PAUSED</span><h2>${definition.label} 대비 기간</h2></div></div>
-    <div class="demolition-warning event-preparation-warning">
-      <strong>기상이변이 시작되기 전에 도시 시간을 자동으로 일시정지했습니다.</strong>
-      <p>창을 닫아도 시간은 멈춰 있습니다. 건설·운영 모드·전력 우선순위·배터리 정책을 조정한 뒤 상단 재생 버튼을 누르세요.</p>
-    </div>
-    <div class="callout"><strong>예상 영향 · ${definition.durationDays}일 지속</strong><p>${definition.description}</p></div>
-    <div class="callout"><strong>권장 대비</strong><p>${definition.preparation}</p></div>
-    <div class="modal-actions"><button class="btn primary" id="eventPreparationCloseBtn">준비 시작</button></div>
-  `, { id: 'event-preparation', dismissible: false });
-  $modal('#eventPreparationCloseBtn').addEventListener('click', closeModal);
-  return true;
 }
 
 function activePressure() {
@@ -308,7 +292,7 @@ export function openFacilityInspectorModal(index) {
   const modifierContext = buildCityModifierContext(gameState);
   const stats = cellStats(cell, facilityModifierAt(modifierContext, index));
   const spatial = getCellSpatial(gameState.grid, index, getBoardCoordinates(gameState));
-  const cap = Math.min(facility.maxLevel, stageLevelCap());
+  const cap = Math.min(facility.maxLevel, stageLevelCap(cell.type));
   const nextCost = upgradeCost(cell);
   const canLevel = cell.level < cap;
   const upgradeValidation = validateUpgrade(gameState, index);
@@ -316,7 +300,8 @@ export function openFacilityInspectorModal(index) {
   const investment = investedCost(cell);
   const refund = demolitionRefund(cell);
   const loss = investment - refund;
-  const priorityUnlocked = gameState.questIndex >= 11 || gameState.claimedQuestIds.has('living-neighborhood');
+  const priorityUnlocked = gameState.questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START
+    || gameState.claimedQuestIds.has('living-neighborhood');
   const positive = spatial.positive.length
     ? spatial.positive.map((item) => `<span class="spatial-tag good">🔗 ${item}</span>`).join('')
     : '<span class="spatial-tag neutral">연결 보너스 없음</span>';
@@ -517,16 +502,17 @@ function openUpgradeForecastModal(index, validation) {
     }[warning] || warning)).join(' · ')}`
     : '예측 구간에 즉시 감지된 운영 위험이 없습니다.';
   const snapshots = [
-    ['현재', forecast.current],
-    ['공사 중', forecast.during],
-    ['완공 후', forecast.completed],
+    ['current', '현재', forecast.current],
+    ['during', '공사 중', forecast.during],
+    ['completed', '완공 후', forecast.completed],
   ];
+  const generator = Number(facility.supply) > 0;
   setModal(`
     <div data-upgrade-forecast>
       <div class="modal-head"><div><span class="eyebrow">UPGRADE FORECAST</span><h2>${facility.icon} ${facility.name} Lv.${cell.level} → Lv.${validation.nextLevel}</h2></div><button class="icon-btn close-modal" aria-label="강화 예측 닫기"><i data-lucide="x"></i></button></div>
       <p class="muted">${forecast.horizonDays}게임일 동안 기존 시설은 제한 가동되며, 완공 틱부터 새 레벨 성능으로 정산됩니다.</p>
       <div class="upgrade-forecast-grid">
-        ${snapshots.map(([label, snapshot]) => `<section><strong>${label}</strong><span>전력 ${forecastValue(snapshot, 'deliveredPower', 'E')} / ${forecastValue(snapshot, 'demand', 'E')}</span><span>순수익 ${forecastValue(snapshot, 'netCredits', ' 💰/일')}</span><span>CO₂ ${forecastValue(snapshot, 'dailyCarbon', '/일')}</span><span>물 ${forecastValue(snapshot, 'dailyWater', '/일')}</span></section>`).join('')}
+        ${snapshots.map(([id, label, snapshot]) => `<section><strong>${label}</strong>${generator ? `<span data-upgrade-capacity="${id}">발전 가능량 ${forecastValue(snapshot, 'facilityGenerationAvailable', 'E')}</span><span>도시 공급 ${forecastValue(snapshot, 'deliveredPower', 'E')} / 수요 ${forecastValue(snapshot, 'demand', 'E')}</span>` : `<span>전력 ${forecastValue(snapshot, 'deliveredPower', 'E')} / ${forecastValue(snapshot, 'demand', 'E')}</span>`}<span>순수익 ${forecastValue(snapshot, 'netCredits', ' 💰/일')}</span><span>CO₂ ${forecastValue(snapshot, 'dailyCarbon', '/일')}</span><span>물 ${forecastValue(snapshot, 'dailyWater', '/일')}</span></section>`).join('')}
       </div>
       <div class="callout ${worst?.warnings?.length ? 'danger-callout' : ''}"><strong>가장 위험한 예측 구간</strong><p>${escapeHtml(warningText)}${eventDay ? ` · 기상이변이 ${eventDay}일 뒤 공사 중 시작됩니다.` : ''}</p></div>
       <div class="modal-actions"><button class="btn secondary" id="cancelUpgradeProjectBtn">돌아가기</button><button class="btn primary" id="confirmUpgradeProjectBtn">${formatCredits(validation.cost)} 지불 · 강화 착공</button></div>
@@ -765,8 +751,12 @@ export function openStressResultModal(result, { onReport = null, onClose = null 
       <div class="summary-card"><span>평균 순수익</span><strong>${formatCredits(result.averageNetIncome)}/일</strong></div>
       <div class="summary-card"><span>연속 파산 최대</span><strong>${result.maxConsecutiveBankruptcyDays}일</strong></div>
       <div class="summary-card"><span>배터리 사용</span><strong>${round1(result.batteryEnergyUsed)}E</strong></div>
-      <div class="summary-card"><span>탄소 위험</span><strong>${result.carbonRiskDays}일</strong></div>
+      <div class="summary-card"><span>CO₂ 평균</span><strong>${round1(result.averageCarbon)} / 8/일</strong></div>
+      <div class="summary-card"><span>CO₂ 안전일</span><strong>${result.daysAtOrBelowEight} / 41일</strong></div>
+      <div class="summary-card"><span>CO₂ 10 초과</span><strong>${result.daysAboveTen} / 3일</strong></div>
       <div class="summary-card"><span>물 초과</span><strong>${result.waterViolationDays}일</strong></div>
+      <div class="summary-card"><span>조력 공급</span><strong>${round1(result.tidalEnergyDelivered)} / 8E</strong></div>
+      <div class="summary-card"><span>복구 달성</span><strong>${Number.isFinite(result.recoveryAchievedAtDay) ? `${result.recoveryAchievedAtDay}일` : '미달'}</strong></div>
     </div>
     <div class="modal-actions"><button class="btn ${result.passed ? 'secondary' : 'primary'}" id="stressResultClose">${result.passed ? '도시 계속 보기' : '도시 보완하기'}</button>${result.passed ? '<button class="btn primary" id="stressResultReport">최종 운영 보고서</button>' : ''}</div>
   `, { id: 'stress-test-result', pausesSimulation: true });

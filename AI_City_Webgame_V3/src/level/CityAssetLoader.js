@@ -6,10 +6,21 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { createFacilityFallbackGeometry, disposeFacilityFallbacks } from './FacilityGeometryFactory.js';
 import * as THREE from 'three';
 
+// 지오메트리/머티리얼은 시설 타입이 아니라 실제 에셋 id로 캐시한다. 한 타입 안에서
+// 레벨마다 다른 에셋을 쓸 수 있고(예: 화력발전 1~3단계), 반대로 여러 레벨이 같은 에셋을
+// 공유하면(예: 대부분의 시설) 자연히 한 번만 로드된다.
 const primaryGeometries = new Map();
 const primaryMaterials = new Map();
+const typeFallbackGeometries = new Map();
 let initPromise = null;
 let status = { state: 'idle', loaded: [], fallbacks: [], errors: [] };
+
+function levelAssetId(type, level = 1) {
+  const ids = FACILITY_ASSET_IDS[type];
+  if (!ids?.length) return null;
+  const index = Math.max(0, Math.min(ids.length - 1, Math.trunc(level) - 1));
+  return ids[index] || ids[0];
+}
 
 export function configurePaletteMaterial(material, assetId) {
   if (!material) return material;
@@ -29,9 +40,7 @@ export function configurePaletteMaterial(material, assetId) {
   return material;
 }
 
-async function loadFacility(type, definition) {
-  const assetId = FACILITY_ASSET_IDS[type]?.[0];
-  if (!assetId) throw new Error(`No registered asset for ${type}`);
+async function loadFacilityAsset(assetId, definition) {
   const primitives = await assetLoader.getPrimitives(assetId);
   if (!primitives.length) throw new Error(`Registered asset ${assetId} is procedural`);
   const primitive = primitives[0];
@@ -54,26 +63,42 @@ export function initCityAssets(onProgress = () => {}) {
   if (initPromise) return initPromise;
   const definitions = Object.entries(CITY_ASSETS);
   status = { state: 'loading', loaded: [], fallbacks: [], errors: [] };
-  definitions.forEach(([type]) => primaryGeometries.set(type, createFacilityFallbackGeometry(type)));
+  definitions.forEach(([type]) => typeFallbackGeometries.set(type, createFacilityFallbackGeometry(type)));
+
+  // 한 시설 타입이 레벨마다 서로 다른 에셋을 참조할 수 있으므로, 전체 타입에서 실제로
+  // 쓰이는 고유 에셋 id를 모아 한 번씩만 로드한다(같은 id를 쓰는 레벨/타입은 캐시를
+  // 공유한다 — 예: 순환냉각과 조력이 둘 다 storageTank를 1레벨로 쓰는 경우).
+  const definitionByAssetId = new Map();
+  definitions.forEach(([type, definition]) => {
+    (FACILITY_ASSET_IDS[type] || []).forEach((assetId) => {
+      if (!assetId || definitionByAssetId.has(assetId)) return;
+      definitionByAssetId.set(assetId, definition);
+    });
+  });
+  const jobs = [...definitionByAssetId.entries()].map(([assetId, definition]) => ({ assetId, definition }));
 
   let completed = 0;
-  initPromise = Promise.all(definitions.map(async ([type, definition]) => {
+  initPromise = Promise.all(jobs.map(async ({ assetId, definition }) => {
     try {
-      const { geometry, material } = await loadFacility(type, definition);
-      primaryGeometries.set(type, geometry);
-      if (material) primaryMaterials.set(type, material);
-      status.loaded.push(type);
+      const { geometry, material } = await loadFacilityAsset(assetId, definition);
+      primaryGeometries.set(assetId, geometry);
+      if (material) primaryMaterials.set(assetId, material);
     } catch (error) {
-      status.fallbacks.push(type);
       // Quaternius energy downloads need manual acquisition, so code geometry is expected.
-      if (!FACILITY_ASSET_IDS[type]?.[0]?.startsWith('energy.')) {
-        status.errors.push(`${type}: ${error?.message || error}`);
+      if (!assetId.startsWith('energy.')) {
+        status.errors.push(`${assetId}: ${error?.message || error}`);
       }
     } finally {
       completed += 1;
-      onProgress(completed, definitions.length);
+      onProgress(completed, jobs.length);
     }
   })).then(() => {
+    // 로딩 자체는 에셋 id 단위로 한 번씩만 하지만, 성공/폴백 보고는 타입 단위로 따로 집계한다 —
+    // 여러 타입이 같은 1레벨 에셋을 공유해도(예: 순환냉각·조력) 모든 타입이 각자 보고된다.
+    definitions.forEach(([type]) => {
+      const primaryAssetId = FACILITY_ASSET_IDS[type]?.[0];
+      (primaryAssetId && primaryGeometries.has(primaryAssetId) ? status.loaded : status.fallbacks).push(type);
+    });
     status.loaded.sort();
     status.fallbacks.sort();
     status.state = 'ready';
@@ -84,12 +109,15 @@ export function initCityAssets(onProgress = () => {}) {
   return initPromise;
 }
 
-export function getFacilityGeometry(type) {
-  return primaryGeometries.get(type) || createFacilityFallbackGeometry(type);
+export function getFacilityGeometry(type, level = 1) {
+  const assetId = levelAssetId(type, level);
+  const geometry = assetId && primaryGeometries.get(assetId);
+  return geometry || typeFallbackGeometries.get(type) || createFacilityFallbackGeometry(type);
 }
 
-export function getFacilityMaterial(type) {
-  return primaryMaterials.get(type) || null;
+export function getFacilityMaterial(type, level = 1) {
+  const assetId = levelAssetId(type, level);
+  return (assetId && primaryMaterials.get(assetId)) || null;
 }
 
 export function getSupplementGeometry() {
@@ -106,27 +134,34 @@ export function getAssetStatus() {
     loaded: [...status.loaded],
     fallbacks: [...status.fallbacks],
     errors: [...status.errors],
-    materials: Object.fromEntries([...primaryMaterials.entries()].map(([type, material]) => [type, {
-      assetId: material.userData?.assetId || null,
-      paletteSampling: material.userData?.paletteSampling || null,
-      paletteBlackLift: Boolean(material.userData?.paletteBlackLift),
-      minFilter: material.map?.minFilter ?? null,
-      magFilter: material.map?.magFilter ?? null,
-      generateMipmaps: material.map?.generateMipmaps ?? null,
-      materialUuid: material.uuid,
-      textureUuid: material.map?.uuid || null,
-    }])),
+    // 타입당 대표(1레벨) 머티리얼만 보고한다 — 상위 레벨에서 실제로 다른 에셋을
+    // 쓰더라도, 이 상태 리포트는 항상 타입 하나에 항목 하나를 유지한다.
+    materials: Object.fromEntries(Object.keys(CITY_ASSETS).map((type) => {
+      const material = getFacilityMaterial(type, 1);
+      if (!material) return null;
+      return [type, {
+        assetId: material.userData?.assetId || null,
+        paletteSampling: material.userData?.paletteSampling || null,
+        paletteBlackLift: Boolean(material.userData?.paletteBlackLift),
+        minFilter: material.map?.minFilter ?? null,
+        magFilter: material.map?.magFilter ?? null,
+        generateMipmaps: material.map?.generateMipmaps ?? null,
+        materialUuid: material.uuid,
+        textureUuid: material.map?.uuid || null,
+      }];
+    }).filter(Boolean)),
     cache: assetLoader.getStatus(),
   };
 }
 
 export function disposeCityAssets() {
-  primaryGeometries.forEach((geometry, type) => {
-    if (status.loaded.includes(type)) geometry.dispose();
-  });
+  // primaryGeometries/primaryMaterials는 성공적으로 불러온 실제 에셋만 담는다(폴백은
+  // typeFallbackGeometries의 별도 캐시가 FacilityGeometryFactory에서 자체 관리한다).
+  primaryGeometries.forEach((geometry) => geometry.dispose());
   primaryMaterials.forEach((material) => material.dispose());
   primaryGeometries.clear();
   primaryMaterials.clear();
+  typeFallbackGeometries.clear();
   assetLoader.dispose();
   initPromise = null;
   status = { state: 'idle', loaded: [], fallbacks: [], errors: [] };

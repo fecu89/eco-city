@@ -40,7 +40,7 @@ test('v7 save preserves its displayed date and real remaining durations', () => 
 
   const migrated = migrateSaveData(old);
 
-  expect(migrated).toMatchObject({ v: 8, elapsedGameDays: 5, workforceRebalanceGraceDays: 24 });
+  expect(migrated).toMatchObject({ v: 9, elapsedGameDays: 5, workforceRebalanceGraceDays: 24 });
   expect(migrated.grid[0].project).toMatchObject({ durationDays: 8, elapsedDays: 3 });
   expect(migrated.research.jobs.solar2).toMatchObject({ durationDays: 120, elapsedEffectiveDays: 30 });
   expect(migrated.research.techLevels.green).toBe(1);
@@ -56,9 +56,9 @@ test('v7 post-tutorial save starts quest seven without losing its city', () => {
     unlockedFacilities: ['residential', 'nuclear'],
   }));
 
-  expect(migrated).toMatchObject({ v: 8, questIndex: 7, credits: 31 });
+  expect(migrated).toMatchObject({ v: 9, questIndex: 7, credits: 31 });
   expect(migrated.grid[0]).toMatchObject({ type: 'nuclear', level: 2 });
-  expect(migrated.climateCampaign).toMatchObject({ status: 'briefing', completedEventTypes: [] });
+  expect(migrated.climateCampaign).toMatchObject({ status: 'locked', completedEventTypes: [] });
 });
 
 test('completed v7 campaign remains complete and fresh v8 state uses daily fields only', () => {
@@ -67,7 +67,7 @@ test('completed v7 campaign remains complete and fresh v8 state uses daily field
 
   const fresh = new GameState();
   const serialized = fresh.serialize();
-  expect(SAVE_VERSION).toBe(8);
+  expect(SAVE_VERSION).toBe(9);
   expect(serialized.elapsedGameDays).toBe(0);
   expect(serialized.simulationTotals.days).toBe(0);
   expect(serialized.research.techLevels.green).toBe(1);

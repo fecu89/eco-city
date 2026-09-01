@@ -81,6 +81,14 @@ async function atomicWrite(path, bytes) {
   await rename(temporary, path);
 }
 
+export function synthesizeLicenseNote(source) {
+  return `${source.pack} — ${source.creator}\n`
+    + `License: ${source.license}\n`
+    + `Official page: ${source.officialPage}\n\n`
+    + 'This archive did not bundle an original License.txt; this note was generated from '
+    + 'assets-source/manifest.json at selection time based on user-provided attribution.\n';
+}
+
 export async function run() {
   const [selection, acquisition, manualAcquisition, manifest] = await Promise.all([
     readFile(join(SOURCE_ROOT, 'selection.json'), 'utf8').then(JSON.parse),
@@ -144,8 +152,11 @@ export async function run() {
   for (const sourceId of usedSources) {
     const archive = archives.get(sourceId);
     const licenseMember = inventories.get(archive).find((member) => /(^|\/)license\.txt$/i.test(member));
-    if (!licenseMember) throw new Error(`${sourceId}: original License.txt is missing`);
-    const license = archiveMember(archive, licenseMember);
+    // Kenney zips bundle an original License.txt; some other CC0 packs (e.g. itch.io "Bits"
+    // series) ship without one. Synthesize one from the manifest instead of failing the build.
+    const license = licenseMember
+      ? archiveMember(archive, licenseMember)
+      : Buffer.from(synthesizeLicenseNote(sourceDefinitions.get(sourceId)), 'utf8');
     await atomicWrite(join(SOURCE_ROOT, 'licenses', `${sourceId}-License.txt`), license);
     await atomicWrite(join(PUBLIC_ROOT, 'licenses', `${sourceId}-License.txt`), license);
   }

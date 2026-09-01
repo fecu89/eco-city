@@ -4,6 +4,7 @@ import { gameState } from '../core/GameState.js';
 import { roundCredits } from '../core/Money.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { axialToWorld, createHexCoordinates, hexDistance } from './HexGridSystem.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 
 let saveTimer = null;
 let simulationSaveTimer = null;
@@ -529,6 +530,70 @@ export function migrateV7ToV8(data) {
   return migrated;
 }
 
+function resetClimateStateForPreparation(data) {
+  return {
+    climateCampaign: {
+      status: 'locked',
+      eventType: null,
+      attempt: 0,
+      scheduledEventId: null,
+      progress: {},
+      lastResult: null,
+      completedEventTypes: [],
+    },
+    events: {
+      ...(data.events || {}),
+      schedule: [],
+      activeId: null,
+      forecastAcknowledgedIds: [],
+      currentMetrics: null,
+      lastResult: null,
+    },
+  };
+}
+
+export function migrateV8ToV9(data) {
+  const oldQuestIndex = Math.max(1, Math.min(15, Math.trunc(Number(data.questIndex) || 1)));
+  const campaignComplete = Boolean(data.campaignComplete);
+  const completedClimateEvents = [...(data.climateCampaign?.completedEventTypes || [])];
+  const unfinishedFirstClimate = !campaignComplete
+    && oldQuestIndex > 6
+    && oldQuestIndex < 15
+    && completedClimateEvents.length === 0;
+  const questIndex = campaignComplete || oldQuestIndex >= 15
+    ? CAMPAIGN_QUEST_INDEXES.FINAL_TEST
+    : oldQuestIndex <= CAMPAIGN_QUEST_INDEXES.FOUNDATION_END
+      ? oldQuestIndex
+      : unfinishedFirstClimate
+        ? CAMPAIGN_QUEST_INDEXES.PREPARATION_START
+        : Math.min(CAMPAIGN_QUEST_INDEXES.CLIMATE_END, oldQuestIndex + 4);
+  const resetClimate = unfinishedFirstClimate ? resetClimateStateForPreparation(data) : null;
+  const progression = {
+    ...(data.progression || {}),
+    chapter: questIndex <= CAMPAIGN_QUEST_INDEXES.FOUNDATION_END
+      ? data.progression?.chapter ?? 1
+      : questIndex <= CAMPAIGN_QUEST_INDEXES.PREPARATION_END
+        ? 2
+        : questIndex <= CAMPAIGN_QUEST_INDEXES.CLIMATE_END ? 3 : 4,
+    objectiveSetId: questIndex <= CAMPAIGN_QUEST_INDEXES.FOUNDATION_END
+      ? data.progression?.objectiveSetId ?? null
+      : null,
+    objectiveProgress: questIndex <= CAMPAIGN_QUEST_INDEXES.FOUNDATION_END
+      ? { ...(data.progression?.objectiveProgress || {}) }
+      : {},
+  };
+
+  return {
+    ...data,
+    v: 9,
+    questIndex,
+    questStatus: unfinishedFirstClimate ? 'active' : data.questStatus || 'active',
+    questProgress: unfinishedFirstClimate ? {} : { ...(data.questProgress || {}) },
+    progression,
+    ...(resetClimate || {}),
+  };
+}
+
 export function migrateSaveData(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid save payload');
   let migrated = structuredClone(data);
@@ -539,6 +604,7 @@ export function migrateSaveData(data) {
   if (migrated.v === 5) migrated = migrateV5ToV6(migrated);
   if (migrated.v === 6) migrated = migrateV6ToV7(migrated);
   if (migrated.v === 7) migrated = migrateV7ToV8(migrated);
+  if (migrated.v === 8) migrated = migrateV8ToV9(migrated);
   if (migrated.v !== SAVE_VERSION) throw new Error(`Unsupported save version: ${migrated.v}`);
   return stripObsoleteState(migrated);
 }

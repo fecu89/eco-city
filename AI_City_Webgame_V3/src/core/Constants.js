@@ -156,14 +156,18 @@ export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   5: Object.freeze({ nuclear: 1 }),
   6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2, green: 2 }),
   7: Object.freeze({ residential: 7, solar: 2, battery: 2 }),
-  8: Object.freeze({ solar: 3, wind: 2 }),
-  9: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2, green: 3 }),
-  10: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3 }),
-  11: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
-  12: Object.freeze({ factory: 5, data: 4, cooling: 4, solar: 5, wind: 4, tidal: 2 }),
-  13: Object.freeze({ residential: 10, battery: 4, green: 6 }),
-  14: Object.freeze({ cooling: 5, solar: 6, wind: 5, green: 7, tidal: 3 }),
-  15: Object.freeze({}),
+  8: Object.freeze({ data: 2, solar: 3, wind: 2 }),
+  9: Object.freeze({ data: 3, wind: 3, green: 3 }),
+  10: Object.freeze({ residential: 8, tidal: 1, battery: 3 }),
+  11: Object.freeze({ residential: 7, solar: 2, battery: 2 }),
+  12: Object.freeze({ solar: 3, wind: 2 }),
+  13: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2, green: 3 }),
+  14: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3 }),
+  15: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
+  16: Object.freeze({ factory: 5, data: 4, cooling: 4, solar: 5, wind: 4, tidal: 2 }),
+  17: Object.freeze({ residential: 10, battery: 4, green: 6 }),
+  18: Object.freeze({ cooling: 5, solar: 6, wind: 5, green: 7, tidal: 3 }),
+  19: Object.freeze({}),
 });
 
 // Q6 이후 새 목표 세트는 legacy questIndex를 올리지 않으므로 별도 누적 허가표를 사용한다.
@@ -229,7 +233,7 @@ export const POWER_RULES = Object.freeze({
 });
 
 export const GRID_RESERVE_RULES = Object.freeze({
-  BATTERY_SUBSTITUTE_QUEST_ID: 'storage-hub',
+  BATTERY_SUBSTITUTE_QUEST_ID: 'extreme-heat',
 });
 
 export const STRESS_TEST_RULES = Object.freeze({
@@ -353,6 +357,31 @@ export const CITY_AMBIENT = {
     bird: 0xf1fbff,
   },
 };
+
+const greenVisualItem = (kind, x, z, radius, height, rotation = 0) => Object.freeze({
+  kind, x, z, radius, height, rotation,
+});
+
+export const GREEN_VISUAL_LAYOUTS = Object.freeze({
+  1: Object.freeze([
+    greenVisualItem('tree', -0.18, -0.08, 0.105, 0.22, 0.2),
+    greenVisualItem('tree', 0.16, 0.1, 0.09, 0.18, -0.35),
+  ]),
+  2: Object.freeze([
+    greenVisualItem('tree', -0.2, -0.09, 0.105, 0.23, 0.25),
+    greenVisualItem('tree', 0.17, -0.08, 0.095, 0.2, -0.2),
+    greenVisualItem('tree', 0.02, 0.19, 0.085, 0.18, 0.55),
+    greenVisualItem('bush', -0.2, 0.17, 0.09, 0.09, 0.1),
+  ]),
+  3: Object.freeze([
+    greenVisualItem('tree', -0.21, -0.11, 0.105, 0.24, 0.25),
+    greenVisualItem('tree', 0.2, -0.1, 0.1, 0.22, -0.2),
+    greenVisualItem('tree', -0.05, 0.21, 0.095, 0.21, 0.55),
+    greenVisualItem('tree', 0.05, -0.02, 0.08, 0.18, -0.6),
+    greenVisualItem('bush', -0.23, 0.18, 0.1, 0.095, 0.1),
+    greenVisualItem('bush', 0.23, 0.15, 0.085, 0.08, -0.45),
+  ]),
+});
 
 export const CITY_AMBIENT_MOTION = Object.freeze({
   MIN_DELAY_MS: 2500,

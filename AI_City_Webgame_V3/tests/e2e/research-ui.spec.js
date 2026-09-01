@@ -24,15 +24,16 @@ test('two data centers run independent research without pausing the city', async
   await expect(page.locator('#upgradeBtn')).toBeVisible();
   await expect(page.locator('.research-panel')).toContainText('데이터센터 #0 연구');
   await expect(page.locator('.facility-console-scroll')).toHaveCSS('overflow-y', 'auto');
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const solarCard = page.locator('[data-research-start="solar2"]');
   await expect(solarCard.locator('svg')).toHaveCount(1);
   await expect(solarCard).toContainText('고효율 태양전지');
   await expect(solarCard).toContainText('10.00 💰 · 2분');
-  await expect(solarCard).not.toContainText('120시간');
+  await expect(solarCard).not.toContainText('120일');
   await page.locator('[data-research-start="solar2"]').click();
   await expect(page.locator('[data-research-job="solar2"]')).toContainText('데이터센터 #0');
+  await expect(page.locator('.research-card[data-research-id="solar2"]')).toHaveCount(0);
   await page.locator('.modal-card .close-modal').click();
   await page.evaluate(() => window.__clickCell(1));
   await expect(page.locator('.research-elsewhere')).toContainText('고효율 태양전지 (#0)');
@@ -55,7 +56,7 @@ test('two data centers run independent research without pausing the city', async
     window.__EVENT_BUS__.emit(window.__EVENTS__.SIMULATION_TICKED, { summary: state.lastTickSummary, power: { routes: [] } });
   });
   await expect(page.locator('[data-research-live-status]')).toContainText('전력 부족');
-  await expect(page.locator('[data-research-live-hours]')).toContainText('10 / 120시간');
+  await expect(page.locator('[data-research-live-days]')).toContainText('10 / 120일');
   await page.locator('[data-research-cancel="wind2"]').click();
   expect(await page.evaluate(() => ({ credits: window.__GAME_STATE__.credits, jobs: Object.keys(window.__GAME_STATE__.research.jobs) })))
     .toEqual({ credits: 25, jobs: ['solar2'] });
@@ -114,7 +115,7 @@ for (const viewport of [
   const focused = page.locator('[data-operation-mode="research"]');
   await expect(focused).toBeVisible();
   await focused.click();
-  await expect(page.locator('#modeChangeForecast')).toContainText('9.9 → 14.9 E/h');
+  await expect(page.locator('#modeChangeForecast')).toContainText('9.9 → 14.9 E/일');
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].operationMode)).toBe('normal');
   await page.locator('#confirmOperationMode').click();
   expect(await page.evaluate(() => ({
@@ -152,6 +153,88 @@ test('research acceleration opens its assigned four-question quiz and affects on
   }))).toEqual({ solar: 30, wind: 0 });
 });
 
+test('research quiz has a top-right close button that exits without consuming the current question', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(1);
+    const state = window.__GAME_STATE__;
+    state.questIndex = 8;
+    state.stage = 5;
+    state.researchMenuUnlocked = true;
+    state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+    state.research.jobs.solar2 = {
+      id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 0, status: 'running', paidCost: 10,
+    };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await page.locator('[data-research-accelerate="solar2"]').click();
+  const close = page.locator('.modal-head [aria-label="퀴즈 닫기"]');
+  await expect(close).toBeVisible();
+  expect(await page.evaluate(() => window.__getSimulationState().pauseReasons)).toContain('quiz');
+
+  await close.click();
+
+  await expect(page.locator('#modal')).toBeHidden();
+  expect(await page.evaluate(() => ({
+    quizIndex: window.__GAME_STATE__.quizIndex,
+    quizAnswered: window.__GAME_STATE__.quizAnswered,
+    researchId: window.__GAME_STATE__.quizResearchId,
+    elapsed: window.__GAME_STATE__.research.jobs.solar2.elapsedEffectiveDays,
+    pauseReasons: window.__getSimulationState().pauseReasons,
+  }))).toEqual({
+    quizIndex: 0,
+    quizAnswered: false,
+    researchId: 'solar2',
+    elapsed: 0,
+    pauseReasons: [],
+  });
+});
+
+test('research completion alert shows the localized title instead of the internal demandResponse id', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__EVENT_BUS__.emit(window.__EVENTS__.RESEARCH_COMPLETED, {
+      researchId: 'demandResponse',
+    });
+  });
+
+  const alert = page.locator('.toast').filter({ hasText: '연구 완료' }).last();
+  await expect(alert).toContainText('수요 반응 시스템');
+  await expect(alert).not.toContainText('demandResponse');
+});
+
+for (const viewport of [
+  { name: 'desktop', width: 1280, height: 720, modalWidth: 1040, modalHeight: 620, promptSize: 24, optionSize: 16, columns: 2 },
+  { name: 'mobile', width: 390, height: 844, modalWidth: 388, modalHeight: 842, promptSize: 19, optionSize: 16, columns: 1 },
+]) test(`${viewport.name} research quiz uses the readable large-screen layout`, async ({ gamePage: page }) => {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.questIndex = 8;
+    state.stage = 5;
+    state.researchMenuUnlocked = true;
+    state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+    state.research.jobs.solar2 = {
+      id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 0, status: 'running', paidCost: 10,
+    };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+  await page.locator('[data-research-accelerate="solar2"]').click();
+
+  const modal = page.locator('#modalCard');
+  const question = page.locator('.quiz-question h3');
+  const option = page.locator('.quiz-option').first();
+  // 모달의 220ms 진입 애니메이션이 끝난 실제 레이아웃 크기를 측정한다.
+  await expect.poll(async () => (await modal.boundingBox()).width).toBeGreaterThanOrEqual(viewport.modalWidth);
+  await expect.poll(async () => (await modal.boundingBox()).height).toBeGreaterThanOrEqual(viewport.modalHeight);
+  expect(parseFloat(await question.evaluate((element) => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(viewport.promptSize);
+  expect(parseFloat(await option.evaluate((element) => getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(viewport.optionSize);
+  expect(await page.locator('.quiz-options').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length))
+    .toBe(viewport.columns);
+});
+
 for (const viewport of [
   { name: 'desktop', width: 1280, height: 720 },
   { name: 'mobile', width: 390, height: 844 },
@@ -169,7 +252,7 @@ for (const viewport of [
     window.__clickCell(0);
   });
 
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const gridBox = await page.locator('.research-grid').boundingBox();
   const modalBox = await page.locator('#modalCard').boundingBox();
@@ -192,12 +275,50 @@ test('locked research explains its exact prerequisite on hover and touch', async
 
   const solar = page.locator('[data-research-id="solar2"]');
   await expect(solar).toHaveAttribute('aria-disabled', 'true');
+  await expect(solar.locator('.research-card-lock')).toContainText('잠김');
+  await expect(solar).toHaveCSS('filter', /grayscale/);
   await solar.hover();
   await expect(solar.locator('.research-lock-tip')).toBeVisible();
   await expect(solar.locator('.research-lock-tip')).toContainText('태양광 해금 필요');
   // aria-disabled는 카드가 연구 실행 대상이 아님을 전달하지만, 터치 안내는 그대로 받아야 한다.
   await solar.click({ force: true });
   await expect(page.locator('.toast', { hasText: '태양광 해금 필요' })).toBeVisible();
+});
+
+test('completed research is removed from the data-center catalog', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    const state = window.__GAME_STATE__;
+    window.__setTimeScale(0);
+    state.questIndex = 10;
+    state.researchMenuUnlocked = true;
+    state.grid[0] = { type: 'data', level: 2, priority: 'normal' };
+    state.research.completedIds.add('solar2');
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await expect(page.locator('.research-card[data-research-id="solar2"]')).toHaveCount(0);
+  await expect(page.locator('.research-grid')).not.toContainText('고효율 태양전지');
+});
+
+test('the catalog shows a completed empty state after every research is finished', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    const state = window.__GAME_STATE__;
+    window.__setTimeScale(0);
+    state.questIndex = 19;
+    state.researchMenuUnlocked = true;
+    state.grid[0] = { type: 'data', level: 3, priority: 'normal' };
+    Object.keys(state.research.jobs).forEach((id) => delete state.research.jobs[id]);
+    [
+      'solar2', 'wind2', 'battery2', 'smartGrid', 'demandResponse', 'tidal1',
+      'green2', 'green3', 'solar3', 'wind3', 'battery3',
+    ].forEach((id) => state.research.completedIds.add(id));
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(0);
+  await expect(page.locator('.research-catalog-empty')).toContainText('모든 연구를 완료했습니다.');
 });
 
 test('battery reserve policy is visible, locked by research, and persisted from the facility console', async ({ gamePage: page }) => {

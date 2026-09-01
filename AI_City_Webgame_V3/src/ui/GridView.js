@@ -2,7 +2,7 @@ import { gameState } from '../core/GameState.js';
 import { FACILITIES } from '../core/Constants.js';
 import { getBoardCoordinates, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { initCityScene3D, renderCityScene3D, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
+import { initCityScene3D, renderCityScene3D, setBuildOxWidget, setBuildPreviewMode, setCellClickHandler } from './CityScene3D.js';
 import { formatCompactNumber, formatCredits, round1 } from './format.js';
 import {
   assessConstructionPlan,
@@ -19,6 +19,7 @@ let sizeChipEl = null;
 let onCellClick = () => {};
 let sceneMounted = false;
 let placementPreviewVisible = false;
+let facilityArmed = false;
 let buildConfirmEls = null;
 
 function signed(value, digits = 1) {
@@ -76,36 +77,64 @@ function syncForecastMetrics(assessment) {
   }
 }
 
+function requestConfirmActivePlan() {
+  const assessment = assessConstructionPlan(gameState);
+  if (!assessment.ok) return syncBuildConfirm();
+  return eventBus.emit(Events.BUILD_PLAN_COMMIT_REQUESTED, assessment);
+}
+
 function clearPlan() {
   const hadItems = gameState.constructionPlan.length > 0;
   const assessment = clearConstructionPlan(gameState);
   buildConfirmEls?.root.classList.add('hidden');
+  setBuildOxWidget(null);
   if (hadItems) eventBus.emit(Events.BUILD_PLAN_CLEARED, assessment);
   return assessment;
 }
 
 function syncBuildConfirm() {
   const assessment = assessConstructionPlan(gameState);
-  if (!buildConfirmEls || !assessment.items.length || !placementPreviewVisible) {
+  if (!assessment.items.length || !placementPreviewVisible) {
     buildConfirmEls?.root.classList.add('hidden');
+    setBuildOxWidget(null);
     return;
   }
+  const pending = assessment.items[0];
+  const facility = FACILITIES[pending.type];
+  setBuildOxWidget({
+    index: pending.index,
+    disabled: !assessment.ok,
+    onConfirm: requestConfirmActivePlan,
+    onCancel: () => {
+      clearPlan();
+      renderGrid();
+    },
+  });
+  if (!buildConfirmEls) return;
   const firstError = assessment.errors[0];
-  buildConfirmEls.text.textContent = `계획 ${assessment.items.length}개`;
+  buildConfirmEls.text.textContent = assessment.items.length > 1
+    ? `건설 계획 ${assessment.items.length}개 · 완공 후 예상`
+    : `${facility.icon} ${facility.name} · 건설 후 예상`;
   buildConfirmEls.cost.textContent = formatCredits(assessment.totalCost, { compact: true });
   buildConfirmEls.balance.textContent = `잔액 ${formatCredits(assessment.projectedCredits, { compact: true })}`;
   buildConfirmEls.error.textContent = firstError?.message || '';
   buildConfirmEls.error.classList.toggle('hidden', !firstError);
-  buildConfirmEls.confirm.textContent = `${assessment.items.length}개 건설 확정`;
-  buildConfirmEls.confirm.disabled = !assessment.ok;
   syncForecastMetrics(assessment);
   buildConfirmEls.root.classList.remove('hidden');
 }
 
 function handleSceneCellClick(index) {
   const occupied = Boolean(gameState.grid[index]);
-  if (!placementPreviewVisible || occupied) {
+  if (!placementPreviewVisible || !facilityArmed || occupied) {
     onCellClick(index);
+    return;
+  }
+  const pending = gameState.constructionPlan[0];
+  if (pending && pending.index !== index) {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: '건설 대기 중',
+      text: '먼저 현재 건물을 확정(O)하거나 취소(X)한 뒤 다른 위치를 선택하세요.',
+    });
     return;
   }
   const assessment = upsertPlannedFacility(gameState, gameState.selectedFacility, index);
@@ -133,23 +162,21 @@ export function initGridView(gridElement, sizeChipElement, clickHandler, confirm
   }
   // 독에서 시설을 바꿔 고르면(같은 시설 다시 클릭해도) 미리보기가 즉시 갱신되도록 한다.
   eventBus.on(Events.BOARD_FACILITY_SELECTED, () => {
+    facilityArmed = true;
     if (gameState.isEditable) renderGrid();
   });
   eventBus.on(Events.HUD_PANEL_CHANGED, ({ activePanel }) => {
     const nextVisible = activePanel === 'build';
     if (placementPreviewVisible === nextVisible) return;
     placementPreviewVisible = nextVisible;
+    facilityArmed = nextVisible;
     if (!nextVisible) clearPlan();
     if (gameState.isEditable) renderGrid();
   });
-  buildConfirmEls?.cancel.addEventListener('click', () => {
-    clearPlan();
-    renderGrid();
-  });
-  buildConfirmEls?.confirm.addEventListener('click', () => {
-    const assessment = assessConstructionPlan(gameState);
-    if (!assessment.ok) return syncBuildConfirm();
-    eventBus.emit(Events.BUILD_PLAN_COMMIT_REQUESTED, assessment);
+  // 건설을 확정하고 나면 다음 건물을 지으려면 독에서 다시 골라야 한다 — 확정 직후
+  // 계속 무장 상태로 남아 마우스만 올려도 새 건설이 시작되는 것을 막는다.
+  eventBus.on(Events.BUILD_PLAN_COMMITTED, () => {
+    facilityArmed = false;
   });
 }
 
@@ -161,7 +188,7 @@ function buildCellConfigs() {
   const coords = getBoardCoordinates(gameState);
   const assessment = assessConstructionPlan(gameState);
   const planByIndex = new Map(assessment.items.map((item) => [item.index, item]));
-  const preview = gameState.isEditable && placementPreviewVisible
+  const preview = gameState.isEditable && placementPreviewVisible && facilityArmed
     ? placementPreview(selectedFacility, assessment.projectedGrid, coords)
     : null;
 
@@ -216,7 +243,7 @@ export function renderGrid() {
   sizeChipEl.textContent = `사용 가능 ${gameState.expansion.activeCellIndices.length}/${gameState.grid.length}칸`;
   renderCityScene3D(buildCellConfigs(), gameState.boardRadius);
   setBuildPreviewMode({
-    enabled: gameState.isEditable && placementPreviewVisible,
+    enabled: gameState.isEditable && placementPreviewVisible && facilityArmed,
     type: gameState.selectedFacility,
     candidateIndex: null,
     plannedItems: gameState.constructionPlan,

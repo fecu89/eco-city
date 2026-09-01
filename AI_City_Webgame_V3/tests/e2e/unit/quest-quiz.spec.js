@@ -26,6 +26,26 @@ test('the final council is the only quest quiz while every research owns four qu
   expect(new Set(ids).size).toBe(44);
 });
 
+test('research quiz choices do not reveal the answer through sentence length', () => {
+  const contentLength = (text) => text.replace(/[\s\p{P}\p{S}]/gu, '').length;
+
+  Object.values(RESEARCH_QUIZZES).flat().forEach((question) => {
+    const correct = question.options.find((option) => option.correct);
+    const distractors = question.options.filter((option) => !option.correct);
+    const correctLength = contentLength(correct.text);
+    const similarlySized = distractors.filter((option) => (
+      Math.abs(contentLength(option.text) - correctLength) / correctLength <= 0.25
+    ));
+    const optionLengths = question.options.map((option) => contentLength(option.text));
+    const longest = Math.max(...optionLengths);
+    const correctIsUniquelyLongest = correctLength === longest
+      && optionLengths.filter((length) => length === longest).length === 1;
+
+    expect(similarlySized.length, `${question.id}: at least two distractors must be similarly sized`).toBeGreaterThanOrEqual(2);
+    expect(correctIsUniquelyLongest, `${question.id}: correct answer must not be uniquely longest`).toBe(false);
+  });
+});
+
 test('answer options are shuffled per session without changing the correct answer or source bank', () => {
   const original = RESEARCH_QUIZZES.solar2[0].options.map(({ text, correct }) => ({ text, correct }));
   const first = new GameState();
@@ -114,4 +134,29 @@ test('a research question grants acceleration only once across retries', () => {
   const repeated = answerQuestQuiz(state, correctIndex);
   expect(repeated.acceleration).toMatchObject({ days: 0, reason: 'question_already_credited' });
   expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(30);
+});
+
+test('research quiz excludes every question that already granted acceleration', () => {
+  const state = new GameState();
+  const questions = RESEARCH_QUIZZES.solar2;
+  state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveDays: 0 };
+  state.research.quizCreditQuestionIds.solar2 = questions.slice(0, 3).map(({ id }) => id);
+
+  const result = startResearchQuiz(state, 'solar2', () => 0.5);
+
+  expect(result).toMatchObject({ ok: true, total: 1, researchId: 'solar2' });
+  expect(state.quizPool.map(({ id }) => id)).toEqual([questions[3].id]);
+});
+
+test('research quiz reports a clear terminal result when every question was answered correctly', () => {
+  const state = new GameState();
+  state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 1, elapsedEffectiveDays: 0 };
+  state.research.quizCreditQuestionIds.solar2 = RESEARCH_QUIZZES.solar2.map(({ id }) => id);
+
+  expect(startResearchQuiz(state, 'solar2', () => 0.5)).toEqual({
+    ok: false,
+    reason: 'no_questions_remaining',
+    researchId: 'solar2',
+  });
+  expect(state.quizPool).toEqual([]);
 });

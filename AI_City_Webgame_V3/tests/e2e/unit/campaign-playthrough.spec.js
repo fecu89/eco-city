@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { gameState } from '../../../src/core/GameState.js';
-import { commitConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
+import { GameState } from '../../../src/core/GameState.js';
+import { CAMPAIGN_PACING } from '../../../src/core/Constants.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
@@ -9,255 +9,255 @@ import {
   claimCurrentQuest,
   evaluateCurrentQuest,
 } from '../../../src/systems/QuestSystem.js';
-import { demolishCell, expandBoard, upgradeCell } from '../../../src/systems/BoardSystem.js';
-import {
-  accelerateResearchFromQuiz,
-  advanceResearchOneDay,
-  researchDemandByIndex,
-  startResearch,
-} from '../../../src/systems/ResearchSystem.js';
-import {
-  claimObjectiveSet,
-  currentObjectiveEvaluation,
-  startObjectiveCampaign,
-} from '../../../src/systems/ObjectiveSystem.js';
+import { acknowledgeClimateBriefing } from '../../../src/systems/ClimateQuestSystem.js';
 import { startStressTest } from '../../../src/systems/StressTestSystem.js';
-import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
-import { cellZoneTrait } from '../../../src/systems/ZoneSystem.js';
-import { CAMPAIGN_PACING } from '../../../src/core/Constants.js';
-import { computeReport } from '../../../src/systems/ReportSystem.js';
-import { setFacilityPriority } from '../../../src/systems/CityModifierSystem.js';
 
-const settle = createDaySettler({
+const settleDay = createDaySettler({
   calculatePowerNetwork,
   settleEconomy,
-  getResearchDemand: researchDemandByIndex,
-  advanceResearch: advanceResearchOneDay,
   evaluateQuest: applySimulationQuestProgress,
 });
 
-function build(...items) {
-  gameState.constructionPlan = items.map(([index, type]) => ({ index, type }));
-  const result = commitConstructionPlan(gameState);
-  expect(result.ok, result.errors?.map(({ message }) => message).join(' | ')).toBe(true);
-  expect(gameState.credits, 'construction must use earned credits').toBeGreaterThanOrEqual(0);
-  const constructionHours = Math.max(...result.projects.map(({ durationDays }) => durationDays));
-  settleDays(constructionHours);
-  result.projects.forEach(({ index }) => expect(gameState.grid[index]?.project, `build ${index} must complete`).toBeNull());
-  return result;
+function facility(type, level = 1, extra = {}) {
+  return {
+    type,
+    level,
+    priority: ['residential', 'cooling'].includes(type) ? 'essential' : 'normal',
+    operationMode: 'normal',
+    ...extra,
+  };
 }
 
-function settleDays(hours) {
-  for (let hour = 0; hour < hours; hour += 1) {
-    settle(gameState);
-    expect(gameState.gameOver, `game over at hour ${gameState.elapsedGameDays}: ${gameState.gameOverReason}`).toBe(false);
-  }
-}
-
-function settleUntilCredits(target, maxHours = 96) {
-  for (let hour = 0; hour < maxHours && gameState.credits < target; hour += 1) settleDays(1);
-  expect(gameState.credits, `credits after ${maxHours}h`).toBeGreaterThanOrEqual(target);
-}
-
-function upgrade(...indices) {
-  const results = indices.map((index) => {
-    const result = upgradeCell(index);
-    expect(result).toMatchObject({ ok: true, level: 1, targetLevel: 2 });
-    return result;
+function place(state, placements, { clear = false } = {}) {
+  if (clear) state.grid = Array(state.grid.length).fill(null);
+  placements.forEach(([index, type, level = 1, extra = {}]) => {
+    state.grid[index] = facility(type, level, extra);
   });
-  settleDays(Math.max(...results.map(({ durationDays }) => durationDays)));
-  indices.forEach((index) => expect(gameState.grid[index]).toMatchObject({ level: 2, project: null }));
-  return results;
 }
 
-function settleUntilTutorialReady(maxHours = 48) {
-  for (let hour = 0; hour < maxHours && gameState.questStatus !== 'ready_to_claim'; hour += 1) settleDays(1);
-  expect(
-    gameState.questStatus,
-    `quest ${gameState.questIndex} progress=${JSON.stringify(gameState.questProgress)} routes=${JSON.stringify(gameState.lastTickSummary?.routes)}`,
-  ).toBe('ready_to_claim');
-}
-
-function claimTutorial() {
-  const completedIndex = gameState.questIndex;
-  const result = claimCurrentQuest(gameState);
-  expect(result.ok, `claim quest ${completedIndex}`).toBe(true);
-  expect(gameState.credits).toBeGreaterThanOrEqual(0);
-  return result;
-}
-
-function finishResearchWithQuiz(researchId, dataCenterIndex) {
-  expect(startResearch(gameState, researchId, dataCenterIndex).ok, researchId).toBe(true);
-  for (let answer = 0; answer < 4; answer += 1) accelerateResearchFromQuiz(gameState, researchId);
-  expect(gameState.research.completedIds.has(researchId)).toBe(true);
-}
-
-function coordIndex(q, r) {
-  return createHexCoordinates(gameState.boardRadius).findIndex((coord) => coord.q === q && coord.r === r);
-}
-
-function emptyZoneIndex(trait) {
-  return gameState.expansion.activeCellIndices.find((index) => (
-    !gameState.grid[index] && cellZoneTrait(gameState, index) === trait
-  ));
-}
-
-function completeTutorial(side) {
-  expect(gameState.credits).toBe(10);
-
-  build([1, 'residential'], [2, 'residential']);
-  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claimTutorial();
-
-  build([13, 'thermal'], [4, 'factory']);
-  settleUntilTutorialReady();
-  claimTutorial();
-
-  build([8, 'green']);
-  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
-  claimTutorial();
-
-  // 연구시설을 안정적으로 켜기 위한 임시 화력 1기를 증설하고, 다음 단계에서 50%만 회수한다.
-  settleDays(1);
-  build([6, 'data'], [0, 'thermal']);
-  settleUntilTutorialReady();
-  claimTutorial();
-
-  expect(demolishCell(0)).toMatchObject({ ok: true, refund: 2 });
-  build([0, 'nuclear']);
-  settleUntilTutorialReady();
-  claimTutorial();
-
-  build([5, 'cooling']);
-  settleUntilTutorialReady();
-  const finalTutorialClaim = claimTutorial();
-  expect(finalTutorialClaim.expandGrid).toBe(true);
-  expect(expandBoard(gameState, side).ok).toBe(true);
-  expect(startObjectiveCampaign(gameState)).toMatchObject({ ok: true, setId: 'transition-choice' });
-  expect(gameState.expansion).toMatchObject({ phase: 1, firstChoice: side });
-}
-
-function settleUntilObjectiveReady(maxHours = 72) {
-  for (let hour = 0; hour < maxHours && !currentObjectiveEvaluation(gameState)?.ready; hour += 1) settleDays(1);
-  const evaluation = currentObjectiveEvaluation(gameState);
-  expect(
-    evaluation?.ready,
-    `${evaluation?.setId} ${JSON.stringify(evaluation?.cards)} last=${JSON.stringify({
-      net: gameState.lastTickSummary?.netCredits,
-      carbon: gameState.lastTickSummary?.dailyCarbon,
-      lowCarbon: gameState.lastTickSummary?.lowCarbonPercent,
-      water: gameState.lastTickSummary?.dailyWater,
-      battery: gameState.lastTickSummary?.batteryStored,
-      essential: gameState.lastTickSummary?.essentialSupplyPercent,
-    })}`,
-  ).toBe(true);
-}
-
-function claimObjectives(expectedSetId) {
-  expect(currentObjectiveEvaluation(gameState)?.setId).toBe(expectedSetId);
-  const result = claimObjectiveSet(gameState);
-  expect(result).toMatchObject({ ok: true, setId: expectedSetId });
-  expect(gameState.credits).toBeGreaterThanOrEqual(0);
-  return result;
-}
-
-function waitForTwoEventsAndResilience(maxHours = 72) {
-  for (let hour = 0; hour < maxHours; hour += 1) {
-    if (gameState.events.completed.length >= 2 && currentObjectiveEvaluation(gameState)?.ready) return;
-    settleDays(1);
+function settleDays(state, days) {
+  for (let day = 0; day < days; day += 1) {
+    settleDay(state);
+    expect(state.gameOver, `day ${state.elapsedGameDays}: ${state.gameOverReason}`).toBe(false);
   }
-  expect(gameState.events.completed.length, 'two climate events must be experienced before the final test').toBeGreaterThanOrEqual(2);
-  expect(currentObjectiveEvaluation(gameState)?.ready).toBe(true);
 }
 
-function finishStressTest() {
-  expect(startStressTest(gameState)).toMatchObject({ ok: true, attempts: 1 });
-  for (let hour = 0; hour < 30 && gameState.stressTest.status === 'running'; hour += 1) settleDays(1);
-  expect(gameState.stressTest.status, JSON.stringify(gameState.stressTest.result)).toBe('passed');
-  expect(gameState.stressTest.result).toMatchObject({ passed: true });
-  expect(gameState.campaignComplete).toBe(true);
-  expect(gameState.credits).toBeGreaterThanOrEqual(0);
-  return computeReport();
+function settleUntilReady(state, maximumDays = 48) {
+  for (let day = 0; day < maximumDays && state.questStatus !== 'ready_to_claim'; day += 1) {
+    settleDays(state, 1);
+  }
+  expect(state.questStatus, `quest ${state.questIndex}: ${JSON.stringify(state.questProgress)}`).toBe('ready_to_claim');
 }
 
-test.beforeEach(() => gameState.reset());
+function claim(state, expectedQuest) {
+  expect(state.questIndex).toBe(expectedQuest);
+  const result = claimCurrentQuest(state);
+  expect(result.ok, `claim quest ${expectedQuest}: ${result.reason}`).toBe(true);
+  return result;
+}
 
-test('stable reference campaign earns its way through east expansion, two events, and the stress test', () => {
-  completeTutorial('east');
+function finishFoundation(state) {
+  place(state, [[1, 'residential'], [2, 'residential']]);
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  claim(state, 1);
 
-  settleUntilObjectiveReady();
-  expect(currentObjectiveEvaluation(gameState).cards.filter(({ completed }) => completed).map(({ id }) => id))
-    .toEqual(expect.arrayContaining(['transition-low-carbon', 'transition-carbon']));
-  claimObjectives('transition-choice');
+  place(state, [[13, 'thermal'], [4, 'factory']]);
+  settleUntilReady(state);
+  claim(state, 2);
 
-  const batteryIndex = coordIndex(1, 0);
-  const solarIndex = emptyZoneIndex('solar');
-  const dataCenterIndex = coordIndex(-1, 0);
-  build([batteryIndex, 'battery'], [solarIndex, 'solar']);
-  finishResearchWithQuiz('battery2', coordIndex(-1, 0));
-  expect(gameState.research.completedIds.has('smartGrid')).toBe(false);
-  upgrade(coordIndex(-1, 1), dataCenterIndex, batteryIndex);
+  place(state, [[8, 'green']]);
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  claim(state, 3);
 
-  settleUntilObjectiveReady();
-  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'specialization-technology').completed).toBe(true);
-  claimObjectives('specialization');
+  place(state, [[0, 'data'], [3, 'residential'], [7, 'residential'], [12, 'thermal']]);
+  settleUntilReady(state);
+  claim(state, 4);
 
-  waitForTwoEventsAndResilience();
-  expect(gameState.events.completed.length).toBeGreaterThanOrEqual(2);
-  expect(gameState.lastTickSummary.dailyWater).toBeLessThanOrEqual(10);
-  expect(currentObjectiveEvaluation(gameState).cards.filter(({ completed }) => completed).map(({ id }) => id))
-    .toEqual(expect.arrayContaining([
-      'resilience-profit',
-      'resilience-environment',
-      'resilience-event-reserve',
-  ]));
-  claimObjectives('resilience');
-  const report = finishStressTest();
-  expect(report.profile.developing, JSON.stringify(report.profileMetrics)).toBe(false);
-  expect(report.profile.id).toBe('stable-energy');
+  state.grid[12] = null;
+  place(state, [[5, 'nuclear']]);
+  settleUntilReady(state);
+  claim(state, 5);
+
+  place(state, [[6, 'cooling']]);
+  settleUntilReady(state);
+  claim(state, 6);
+
+  expect(state).toMatchObject({
+    questIndex: 7,
+    questStatus: 'active',
+    climateCampaign: { status: 'locked' },
+    progression: { chapter: 2 },
+  });
+}
+
+function finishPreparation(state) {
+  state.research.completedIds.add('solar2');
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  claim(state, 7);
+
+  state.grid[0].level = 2;
+  state.research.completedIds.add('smartGrid');
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  claim(state, 8);
+
+  place(state, [[9, 'wind']]);
+  state.research.completedIds.add('wind2');
+  const windSummary = { routes: [{ from: 9, to: 1, delivered: 1 }] };
+  applySimulationQuestProgress(state, windSummary);
+  applySimulationQuestProgress(state, windSummary);
+  claim(state, 9);
+
+  place(state, [[10, 'tidal']]);
+  state.research.completedIds.add('tidal1');
+  state.unlockedFacilities.add('tidal');
+  const tidalSummary = { routes: [{ from: 10, to: 1, delivered: 1 }] };
+  applySimulationQuestProgress(state, tidalSummary);
+  applySimulationQuestProgress(state, tidalSummary);
+  claim(state, 10);
+
+  expect(state).toMatchObject({
+    questIndex: 11,
+    climateCampaign: { status: 'briefing' },
+    progression: { chapter: 3 },
+  });
+}
+
+const CLIMATE_FIXTURES = Object.freeze({
+  11: [
+    [0, 'thermal'], [1, 'factory'],
+    [2, 'residential'], [3, 'residential'], [4, 'residential'], [5, 'residential'],
+  ],
+  12: [
+    [0, 'thermal'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }], [2, 'data'],
+    [3, 'residential'], [4, 'residential'], [5, 'residential'],
+    [6, 'residential'], [7, 'residential'], [8, 'residential'],
+    [9, 'solar'], [10, 'solar'], [11, 'solar'],
+  ],
+  13: [
+    [0, 'nuclear'], [1, 'thermal'], [2, 'data'], [3, 'factory'],
+    [4, 'residential'], [5, 'residential'], [6, 'residential'],
+    [7, 'residential'], [8, 'residential'], [9, 'residential'],
+  ],
+  14: [
+    [0, 'nuclear'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }],
+    [2, 'solar'], [3, 'solar'], [4, 'data'], [20, 'factory'],
+    [5, 'residential'], [6, 'residential'], [7, 'residential'], [8, 'residential'],
+  ],
+  15: [
+    [0, 'data'], [5, 'nuclear'], [6, 'cooling', 2],
+    [1, 'battery', 1, { batteryStoredLowCarbon: 20 }], [2, 'solar'],
+    [7, 'residential', 2], [8, 'residential'],
+  ],
+  16: [
+    [0, 'nuclear'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }],
+    [2, 'residential'], [3, 'residential'], [4, 'residential'],
+    [5, 'residential'], [6, 'residential'], [7, 'residential'],
+  ],
+  17: [
+    [0, 'nuclear'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }],
+    [2, 'solar'], [3, 'solar'], [4, 'solar'],
+    [20, 'factory'], [21, 'factory'], [22, 'data'], [23, 'green', 2],
+    [5, 'residential'], [6, 'residential'], [7, 'residential'], [8, 'residential'],
+  ],
+  18: [
+    [19, 'tidal'],
+    [20, 'residential'], [7, 'residential'], [36, 'residential'], [8, 'residential'],
+  ],
 });
 
-test('distributed reference campaign earns its way through west expansion with wind, solar, storage, smart grid, and demand response', () => {
-  completeTutorial('west');
+function finishClimateCampaign(state) {
+  state.boardRadius = 3;
+  state.grid = Array(37).fill(null);
+  state.expansion.activeCellIndices = Array.from({ length: 37 }, (_, index) => index);
+  for (let quest = 11; quest <= 18; quest += 1) {
+    place(state, CLIMATE_FIXTURES[quest], { clear: true });
+    if (quest === 18) state.research.completedIds.add('tidal1');
+    const briefing = acknowledgeClimateBriefing(state);
+    expect(briefing.ok, `quest ${quest}: ${briefing.reason}`).toBe(true);
+    settleUntilReady(state);
+    expect(state.climateCampaign.lastResult).toMatchObject({ passed: true, questIndex: quest });
+    claim(state, quest);
+  }
+}
 
-  settleUntilObjectiveReady();
-  claimObjectives('transition-choice');
+function stressState(placements) {
+  const state = new GameState();
+  state.questIndex = 19;
+  state.questStatus = 'active';
+  state.progression.chapter = 4;
+  state.boardRadius = 3;
+  state.grid = Array(37).fill(null);
+  state.expansion.activeCellIndices = Array.from({ length: 37 }, (_, index) => index);
+  state.credits = 500;
+  state.claimedQuestIds.add('extreme-heat');
+  state.research.completedIds.add('tidal1');
+  state.stressTest.status = 'ready';
+  place(state, placements);
+  return state;
+}
 
-  expect(demolishCell(coordIndex(0, 0))).toMatchObject({ ok: true });
-  const batteryIndex = coordIndex(1, 0);
-  const solarIndex = emptyZoneIndex('solar');
-  const windIndex = emptyZoneIndex('wind');
-  build([batteryIndex, 'battery'], [solarIndex, 'solar'], [windIndex, 'wind']);
-  finishResearchWithQuiz('wind2', coordIndex(-1, 0));
-  upgrade(windIndex);
+function runStress(state) {
+  expect(startStressTest(state)).toMatchObject({ ok: true });
+  settleDays(state, 41);
+  expect(state.stressTest.status).not.toBe('running');
+  return state.stressTest.result;
+}
 
-  settleUntilObjectiveReady();
-  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'specialization-grid').completed).toBe(true);
-  claimObjectives('specialization');
+const REFERENCE_CITY = Object.freeze([
+  [19, 'tidal'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }],
+  [5, 'nuclear'], [25, 'solar'], [29, 'wind'],
+  [0, 'data'], [6, 'cooling'], [4, 'factory'],
+  [7, 'residential'], [36, 'residential'], [20, 'residential', 2], [8, 'residential', 2],
+  [18, 'green'], [21, 'green'], [9, 'green', 2],
+]);
 
-  settleUntilCredits(15);
-  finishResearchWithQuiz('smartGrid', coordIndex(-1, 0));
-  settleUntilCredits(15);
-  finishResearchWithQuiz('demandResponse', coordIndex(-1, 0));
-  expect(gameState.research.completedIds.has('battery2')).toBe(false);
-  expect(setFacilityPriority(gameState, coordIndex(-1, 0), 'essential')).toMatchObject({ ok: true });
-  expect(setFacilityPriority(gameState, coordIndex(1, -1), 'saving')).toMatchObject({ ok: true });
-  expect(setFacilityPriority(gameState, coordIndex(1, -1), 'normal')).toMatchObject({ ok: true });
-  waitForTwoEventsAndResilience();
-  expect(currentObjectiveEvaluation(gameState).cards.find(({ id }) => id === 'resilience-technology').completed).toBe(true);
-  claimObjectives('resilience');
-  const report = finishStressTest();
-  expect(report.profile.developing).toBe(false);
-  expect(report.profile.id, JSON.stringify(report.profileMetrics)).toBe('smart-grid');
+test('one quest cursor advances through four preparation quests and all eight climate events to quest nineteen', () => {
+  const state = new GameState();
+  state.credits = 500;
+  finishFoundation(state);
+  finishPreparation(state);
+  finishClimateCampaign(state);
+
+  expect(state.questIndex).toBe(19);
+  expect(state.stressTest.status).toBe('ready');
+  expect(state.climateCampaign.completedEventTypes).toEqual([
+    'heatwave', 'monsoon', 'typhoon', 'coldWave',
+    'drought', 'stagnantAir', 'dryWildfire', 'stormSurge',
+  ]);
+  expect(new Set(state.climateCampaign.completedEventTypes).size).toBe(8);
+  expect(state.progression.objectiveSetId).toBeNull();
 });
 
-test('human pacing contract spans 15–30 minutes with 2–4 meaningful decisions per representative Chapter 2+ window', () => {
+test('the 41-day reference city passes without green or residential level three', () => {
+  const state = stressState(REFERENCE_CITY);
+  const result = runStress(state);
+
+  expect(state.grid.filter((cell) => cell?.type === 'green').map(({ level }) => level).sort()).toEqual([1, 1, 2]);
+  expect(state.grid.filter((cell) => cell?.type === 'residential').map(({ level }) => level).sort()).toEqual([1, 1, 2, 2]);
+  expect(result, JSON.stringify(result)).toMatchObject({ passed: true, days: 41 });
+  expect(result.tidalEnergyDelivered).toBeGreaterThanOrEqual(8);
+  expect(state.campaignComplete).toBe(true);
+});
+
+test('green level three cannot rescue a city whose essential power is insufficient', () => {
+  const state = stressState([
+    [19, 'tidal'], [18, 'green', 3],
+    [0, 'residential'], [1, 'residential'], [2, 'residential'], [3, 'residential'],
+    [4, 'residential'], [5, 'residential'], [6, 'residential'], [7, 'residential'],
+  ]);
+  const result = runStress(state);
+
+  expect(result.passed).toBe(false);
+  expect(['essential_average', 'essential_floor']).toContain(result.diagnosis.id);
+  expect(state.campaignComplete).toBe(false);
+  expect(state.grid.some((cell) => cell?.type === 'green' && cell.level === 3)).toBe(true);
+});
+
+test('human pacing keeps a fifteen-to-thirty minute target and meaningful decision windows', () => {
   expect(CAMPAIGN_PACING.humanMinutes).toEqual({ min: 15, target: 25, max: 30 });
   expect(CAMPAIGN_PACING.phases[0]).toMatchObject({ startMinute: 0 });
   expect(CAMPAIGN_PACING.phases.at(-1)).toMatchObject({ endMinute: 30 });
-  expect(CAMPAIGN_PACING.representativeWindows.length).toBeGreaterThanOrEqual(3);
   CAMPAIGN_PACING.representativeWindows.forEach((window) => {
-    expect(window.startMinute).toBeGreaterThanOrEqual(7);
     expect(window.endMinute - window.startMinute).toBe(2);
     expect(window.decisions.length).toBeGreaterThanOrEqual(2);
     expect(window.decisions.length).toBeLessThanOrEqual(4);

@@ -1,6 +1,12 @@
 import { CLIMATE_QUESTS, CLIMATE_QUEST_ORDER } from './ClimateCampaignDefinitions.js';
 
-function quest(id, title, goal, credits, unlockFacilities, progressKind, details, quizKind = null) {
+function quest(id, title, goal, credits, unlockFacilities, progressKind, details, {
+  quizKind = null,
+  unlockResearch = [],
+  upgradePermitLevel = null,
+  upgradePermitFacilities = [],
+  stressTest = false,
+} = {}) {
   const unlocks = Array.isArray(unlockFacilities)
     ? unlockFacilities
     : unlockFacilities ? [unlockFacilities] : [];
@@ -15,6 +21,10 @@ function quest(id, title, goal, credits, unlockFacilities, progressKind, details
       credits,
       unlockFacility: unlocks[0] || null,
       unlockFacilities: Object.freeze([...unlocks]),
+      unlockResearch: Object.freeze([...unlockResearch]),
+      upgradePermitLevel,
+      upgradePermitFacilities: Object.freeze([...upgradePermitFacilities]),
+      stressTest,
     }),
   });
 }
@@ -34,6 +44,7 @@ function campaignQuest(definition) {
       unlockFacilities,
       unlockResearch: definition.reward.unlockResearch,
       upgradePermitLevel: definition.reward.upgradePermitLevel,
+      upgradePermitFacilities: definition.reward.upgradePermitFacilities,
       stressTest: definition.reward.stressTest,
     }),
   });
@@ -46,7 +57,7 @@ const RAW_QUESTS = [
   ]),
   quest('power-on', '생산 기반을 함께 켜라', '공장과 화력발전을 인접 배치하고 공장을 흑자로 2일 가동하세요.', 5, ['green'], 'days', [
     '공장 1개와 화력발전 1개가 필요합니다.',
-    '두 시설을 같은 건설 계획에 올린 뒤 한꺼번에 확정하면 운영비 손실을 피할 수 있습니다.',
+    '화력발전을 먼저 짓고 완공을 기다린 뒤 공장을 이어서 지으면 운영비 손실을 줄일 수 있습니다.',
     '두 시설은 육각형 한 칸 거리로 인접해야 합니다.',
     '공장 전력 공급률과 가동률을 50% 이상으로 유지해 실제 수입을 2일 연속 발생시키세요.',
     '완료하면 LEVEL 3부터 첫 녹지 1칸을 조성할 수 있습니다.',
@@ -68,11 +79,33 @@ const RAW_QUESTS = [
     '일일 CO₂ 12 이하와 순수익 0 초과를 2일 연속 유지하세요.',
     'CO₂ 12는 전환 단계 목표이며 도시의 장기 안전 기준은 10입니다.',
   ]),
-  quest('water-cycle', '도시 물순환', '데이터센터와 순환냉각을 연결하고 물 사용을 기준 이하로 2일 유지하세요.', 14, 'solar', 'days', [
+  quest('water-cycle', '도시 물순환', '데이터센터와 순환냉각을 연결하고 물 사용을 기준 이하로 2일 유지하세요.', 14, null, 'days', [
     '데이터센터와 순환냉각을 서로 인접하게 배치하세요.',
     '두 시설의 전력 공급률을 각각 90% 이상으로 유지하세요.',
     '일일 물 사용량이 기준 도시보다 높지 않은 상태를 2일 유지하세요.',
+    '완료 후 첫 확장 방향을 고르면 동부는 태양광, 서부는 풍력이 해금됩니다.',
   ]),
+  quest('solar-research-foundation', '태양광 연구 기초', '고효율 태양전지 연구를 완료하세요.', 10, 'battery', 'research', [
+    '태양광을 해금한 뒤 데이터센터에서 고효율 태양전지 연구를 시작하세요.',
+    '데이터센터 전력 공급률 90% 이상을 유지하면 연구가 진행됩니다.',
+    '아직 맞히지 않은 전용 퀴즈로 남은 연구 시간을 줄일 수 있습니다.',
+  ], { upgradePermitLevel: 2 }),
+  quest('data-center-modernization', '데이터센터 현대화', '데이터센터 Lv.2와 스마트 전력망 연구를 완성하세요.', 12, 'wind', 'modernization', [
+    '가동 가능한 데이터센터 한 곳을 Lv.2로 강화하세요.',
+    '데이터센터에서 스마트 전력망 연구를 완료하세요.',
+    '공사 중인 데이터센터는 강화 완료 조건에 포함되지 않습니다.',
+    '완료하면 반대편 외곽 9칸과 그 지역의 재생에너지가 함께 열립니다.',
+  ]),
+  quest('wind-pilot-grid', '풍력 실증망', '풍력 예측 제어를 연구하고 풍력 전력을 2일 연속 공급하세요.', 12, null, 'days', [
+    '풍력발전을 건설한 뒤 풍력 예측 제어 연구를 완료하세요.',
+    '풍력발전에서 소비시설로 실제 전력이 전달되어야 합니다.',
+    '두 조건을 같은 날 2일 연속 유지하세요.',
+  ], { unlockResearch: ['tidal1'] }),
+  quest('tidal-coast-pilot', '해안 조력 실증', '조력 연구와 발전소를 완성하고 조력 전력을 2일 연속 공급하세요.', 15, null, 'days', [
+    '조력 발전 실증 연구를 완료하면 조력발전이 해금됩니다.',
+    '활성화된 외곽 대지에 조력발전을 완공하세요.',
+    '조력발전에서 소비시설로 실제 전력이 전달되는 날을 2일 연속 만드세요.',
+  ], { upgradePermitFacilities: ['thermal', 'nuclear', 'wind'] }),
   ...CLIMATE_QUEST_ORDER.map((index) => campaignQuest(CLIMATE_QUESTS[index])),
   quest('national-climate-test', '대한민국 복합기후 시험', '41일 복합 기후 스트레스 테스트를 통과하세요.', 0, null, 'stress', [
     '8개 구간을 연속 운용하며 전력·경제·탄소·물 기준을 모두 지키세요.',
@@ -87,3 +120,43 @@ export const QUESTS = Object.freeze(RAW_QUESTS.map((definition, index) => Object
 })));
 
 export const QUEST_COUNT = QUESTS.length;
+
+const WEST_BRANCH_QUESTS = Object.freeze({
+  7: Object.freeze({
+    ...QUESTS[6],
+    title: '풍력 연구 기초',
+    goal: '풍력 예측 제어 연구를 완료하세요.',
+    details: Object.freeze([
+      '서부 확장에서 해금된 풍력발전을 건설하세요.',
+      '데이터센터에서 풍력 예측 제어 연구를 시작하세요.',
+      '데이터센터 전력 공급률 90% 이상을 유지하면 연구가 진행됩니다.',
+      '아직 맞히지 않은 전용 퀴즈로 남은 연구 시간을 줄일 수 있습니다.',
+    ]),
+  }),
+  8: Object.freeze({
+    ...QUESTS[7],
+    reward: Object.freeze({
+      ...QUESTS[7].reward,
+      unlockFacility: 'solar',
+      unlockFacilities: Object.freeze(['solar']),
+    }),
+  }),
+  9: Object.freeze({
+    ...QUESTS[8],
+    title: '태양광 실증망',
+    goal: '고효율 태양전지를 연구하고 태양광 전력을 2일 연속 공급하세요.',
+    details: Object.freeze([
+      '2차 동부 확장에서 해금된 태양광발전을 건설하세요.',
+      '고효율 태양전지 연구를 완료하세요.',
+      '태양광발전에서 소비시설로 실제 전력이 전달되는 날을 2일 연속 만드세요.',
+    ]),
+  }),
+});
+
+export function questForState(state, index = state?.questIndex) {
+  const questIndex = Math.trunc(Number(index));
+  if (state?.expansion?.firstChoice === 'west' && WEST_BRANCH_QUESTS[questIndex]) {
+    return WEST_BRANCH_QUESTS[questIndex];
+  }
+  return QUESTS[questIndex - 1] || null;
+}

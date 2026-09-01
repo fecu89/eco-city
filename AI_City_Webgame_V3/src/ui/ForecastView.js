@@ -1,27 +1,35 @@
-import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import { gameState } from '../core/GameState.js';
 
 let root = null;
+
+const UNKNOWN_EVENT = Object.freeze({
+  label: '기후 이벤트',
+  description: '이전 저장에서 불러온 기후 일정입니다.',
+  durationDays: 0,
+  icon: 'cloud',
+});
+
+function eventDefinition(type) {
+  return CITY_EVENTS[type] || UNKNOWN_EVENT;
+}
 
 export function initForecastView(element) {
   root = element;
 }
 
-function nextEvent() {
-  const completed = new Set((gameState.events.completed || []).map((item) => typeof item === 'string' ? item : item.id));
-  return gameState.events.schedule.find((item) => !completed.has(item.id) && item.endAt > gameState.elapsedGameDays) || null;
-}
-
 export function renderForecast() {
   if (!root) return;
   const active = gameState.events.schedule.find(({ id }) => id === gameState.events.activeId);
-  const next = nextEvent();
+  const stressRunning = gameState.stressTest?.status === 'running';
+  root.hidden = !active && !stressRunning;
   root.classList.toggle('active', Boolean(active));
-  root.classList.toggle('forecasting', !active && Boolean(next));
+  root.classList.remove('forecasting');
+  if (root.hidden) return;
   const icon = root.querySelector('svg, i');
   const small = root.querySelector('small');
   const label = root.querySelector('b');
-  if (gameState.stressTest?.status === 'running') {
+  if (stressRunning) {
     const phase = STRESS_PHASES[gameState.stressTest.phaseIndex];
     const remaining = Math.max(0, phase.durationDays - gameState.stressTest.phaseDay);
     root.classList.add('active');
@@ -32,14 +40,8 @@ export function renderForecast() {
     icon?.setAttribute?.('data-lucide', phase.icon);
     return;
   }
-  if ((gameState.progression?.chapter || 1) < 3) {
-    small.textContent = '도시 기후 예보';
-    label.textContent = 'CH.3에서 활성화';
-    root.title = '도시 전문화 목표 완료 후 기후 이벤트가 시작됩니다.';
-    return;
-  }
   if (active) {
-    const definition = CITY_EVENTS[active.type];
+    const definition = eventDefinition(active.type);
     const remaining = Math.max(0, active.endAt - gameState.elapsedGameDays);
     small.textContent = '현재 이벤트';
     label.textContent = `${definition.label} · ${remaining}일 남음`;
@@ -47,15 +49,4 @@ export function renderForecast() {
     icon?.setAttribute?.('data-lucide', definition.icon);
     return;
   }
-  if (next) {
-    const definition = CITY_EVENTS[next.type];
-    const until = Math.max(0, next.startAt - gameState.elapsedGameDays);
-    small.textContent = until <= EVENT_FORECAST_DAYS ? `${EVENT_FORECAST_DAYS}일 기후 예보` : '다음 이벤트';
-    label.textContent = `${until}일 후 ${definition.label}`;
-    root.title = `${definition.description} · ${definition.durationDays}일 지속`;
-    icon?.setAttribute?.('data-lucide', definition.icon);
-    return;
-  }
-  small.textContent = '도시 기후 예보';
-  label.textContent = '새 예보 계산 중';
 }

@@ -8,13 +8,15 @@ import { getFacilityPermit } from '../systems/FacilityPermitSystem.js';
 
 let dockEl = null;
 let detailEl = null;
+let panelEl = null;
 let detailFacilityKey = null;
 
 const FACILITY_DISPLAY_ORDER = new Map(FACILITY_BUILD_ORDER.map((facility, index) => [facility, index]));
 
-export function initDockView(el, sharedDetailEl = null) {
+export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   dockEl = el;
   detailEl = sharedDetailEl;
+  panelEl = sharedPanelEl;
   eventBus.on(Events.BUILD_PLAN_CHANGED, renderDock);
   eventBus.on(Events.BUILD_PLAN_CLEARED, renderDock);
   eventBus.on(Events.BUILD_PLAN_COMMITTED, renderDock);
@@ -97,6 +99,12 @@ function orderedFacilities() {
 }
 
 export function renderDock() {
+  const pending = gameState.constructionPlan.length > 0;
+  // 건설 위치를 정하면 독 패널 자체(배경까지)를 완전히 접어, 3D 보드 위 미리보기와
+  // O/X 위젯만 보이게 한다. 확정·취소하면 패널이 다시 미끄러져 나온다.
+  panelEl?.classList.toggle('build-panel--collapsed', pending);
+  if (pending) return;
+
   const existingButtons = new Map([...dockEl.querySelectorAll('[data-facility]')]
     .map((button) => [button.dataset.facility, button]));
   orderedFacilities().forEach(([key, f]) => {

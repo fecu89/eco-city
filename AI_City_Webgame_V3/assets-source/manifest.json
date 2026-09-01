@@ -42,6 +42,14 @@
       "strategy": "kenney-page"
     },
     {
+      "id": "kenney-industrial2",
+      "creator": "Kenney",
+      "pack": "City Kit Industrial 2.0",
+      "officialPage": "https://kenney.nl/assets/city-kit-industrial",
+      "license": "CC0-1.0",
+      "strategy": "kenney-page"
+    },
+    {
       "id": "kenney-nature",
       "creator": "Kenney",
       "pack": "Nature Kit",
@@ -56,6 +64,14 @@
       "officialPage": "https://kenney.nl/assets/car-kit",
       "license": "CC0-1.0",
       "strategy": "kenney-page"
+    },
+    {
+      "id": "kaylousberg-space-bits",
+      "creator": "Kay Lousberg",
+      "pack": "Space Bits",
+      "officialPage": "https://kaylousberg.itch.io/space-bits",
+      "license": "CC0-1.0",
+      "strategy": "itch-io-page"
     },
     {
       "id": "kenney-people",

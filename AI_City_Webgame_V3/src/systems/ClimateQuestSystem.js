@@ -1,4 +1,5 @@
 import { climateQuestByIndex } from '../core/ClimateCampaignDefinitions.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { CITY_EVENTS } from '../core/EventDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
@@ -6,8 +7,8 @@ import { STAGES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
 import { isOperationalCell } from './ConstructionProjectSystem.js';
 
-const CLIMATE_QUEST_MIN = 7;
-const CLIMATE_QUEST_MAX = 14;
+const CLIMATE_QUEST_MIN = CAMPAIGN_QUEST_INDEXES.CLIMATE_START;
+const CLIMATE_QUEST_MAX = CAMPAIGN_QUEST_INDEXES.CLIMATE_END;
 const SUPPLY_TARGET = 90;
 const DELIVERY_EPSILON = 0.1;
 
@@ -50,8 +51,10 @@ function resetEventAttempt(state) {
 function initialProgress() {
   return {
     consecutiveDays: 0,
+    bestConsecutiveDays: 0,
     qualifiedDays: 0,
     batteryEnergy: 0,
+    batteryReserveMinimum: null,
     tidalEnergy: 0,
     generationTypeDays: 0,
   };
@@ -92,7 +95,13 @@ function allFacilityRatiosAtLeast(state, summary, types, minimum, { requireEachT
   const ratiosByType = new Map(types.map((type) => [type, []]));
   state.grid.forEach((cell, index) => {
     if (!isOperationalCell(cell) || !types.includes(cell.type)) return;
-    ratiosByType.get(cell.type).push(Number(summary?.facilityPower?.[index]?.ratio) || 0);
+    const consumerRatio = Number(summary?.facilityPower?.[index]?.ratio);
+    const generationRatio = ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(cell.type)
+      ? Number((summary?.routes || []).some((route) => (
+        route.from === index && Number(route.delivered) >= DELIVERY_EPSILON
+      )))
+      : 0;
+    ratiosByType.get(cell.type).push(Number.isFinite(consumerRatio) ? consumerRatio : generationRatio);
   });
   if (requireEachType && [...ratiosByType.values()].some((ratios) => ratios.length === 0)) return false;
   const ratios = [...ratiosByType.values()].flat();
@@ -128,8 +137,18 @@ function dayQualifies(state, quest, summary) {
 }
 
 function attemptPassed(quest, progress) {
-  if ((progress.consecutiveDays || 0) < quest.targetDays) return false;
-  if (quest.objective === 'battery') return (progress.batteryEnergy || 0) >= quest.batteryTarget;
+  const bestConsecutiveDays = Math.max(
+    Number(progress.bestConsecutiveDays) || 0,
+    Number(progress.consecutiveDays) || 0,
+  );
+  if (bestConsecutiveDays < quest.targetDays) return false;
+  if (quest.objective === 'battery') {
+    const dischargedEnough = (progress.batteryEnergy || 0) >= quest.batteryTarget;
+    const reserveMaintained = quest.batteryReserveTarget != null
+      && progress.batteryReserveMinimum != null
+      && Number(progress.batteryReserveMinimum) >= quest.batteryReserveTarget;
+    return dischargedEnough || reserveMaintained;
+  }
   if (quest.objective === 'tidal') return (progress.tidalEnergy || 0) >= quest.tidalEnergyTarget;
   return true;
 }
@@ -210,8 +229,13 @@ export function currentClimateQuestEvaluation(state) {
     startsInDays: event ? Math.max(0, event.startAt - state.elapsedGameDays) : null,
     remainingDays: event ? Math.max(0, event.endAt - state.elapsedGameDays) : null,
     consecutiveDays: progress.consecutiveDays || 0,
+    bestConsecutiveDays: Math.max(progress.bestConsecutiveDays || 0, progress.consecutiveDays || 0),
     qualifiedDays: progress.qualifiedDays || 0,
     batteryEnergy: progress.batteryEnergy || 0,
+    batteryReserveMinimum: Number.isFinite(Number(progress.batteryReserveMinimum))
+      && progress.batteryReserveMinimum != null
+      ? Number(progress.batteryReserveMinimum)
+      : null,
     tidalEnergy: progress.tidalEnergy || 0,
     progress,
     result: campaign.lastResult,
@@ -223,7 +247,8 @@ export function advanceClimateQuest(state, summary = null, eventTransition = {})
   const quest = climateQuestByIndex(state.questIndex);
   const campaign = campaignState(state);
   if (eventMatches(campaign, eventTransition.started)
-    || state.events?.activeId === campaign.scheduledEventId) campaign.status = 'active';
+    || (campaign.scheduledEventId != null
+      && state.events?.activeId === campaign.scheduledEventId)) campaign.status = 'active';
 
   const ended = eventMatches(campaign, eventTransition.ended)
     ? eventTransition.ended
@@ -232,9 +257,21 @@ export function advanceClimateQuest(state, summary = null, eventTransition = {})
     const progress = campaign.progress;
     const qualifies = dayQualifies(state, quest, summary);
     progress.consecutiveDays = qualifies ? (progress.consecutiveDays || 0) + 1 : 0;
+    progress.bestConsecutiveDays = Math.max(
+      progress.bestConsecutiveDays || 0,
+      progress.consecutiveDays,
+    );
     if (qualifies) progress.qualifiedDays = (progress.qualifiedDays || 0) + 1;
     if (quest.objective === 'battery') {
       progress.batteryEnergy = (progress.batteryEnergy || 0) + batteryDischarged(summary);
+      const stored = Number(summary?.batteryStored);
+      if (Number.isFinite(stored)) {
+        const previousMinimum = Number(progress.batteryReserveMinimum);
+        progress.batteryReserveMinimum = progress.batteryReserveMinimum == null
+          || !Number.isFinite(previousMinimum)
+          ? stored
+          : Math.min(previousMinimum, stored);
+      }
     }
     if (quest.objective === 'diversity' && qualifies) {
       progress.generationTypeDays = (progress.generationTypeDays || 0) + 1;
@@ -300,6 +337,7 @@ export function claimClimateQuest(state) {
     unlockedFacilities: [...quest.reward.unlockFacilities],
     unlockedResearch: [...quest.reward.unlockResearch],
     upgradePermitLevel: quest.reward.upgradePermitLevel,
+    upgradePermitFacilities: [...quest.reward.upgradePermitFacilities],
     stressTest: quest.reward.stressTest,
     nextQuest: quest.index + 1,
   };

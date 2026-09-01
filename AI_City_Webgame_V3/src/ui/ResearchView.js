@@ -80,6 +80,7 @@ function researchCardMarkup(item, centerJob) {
       <span class="research-card-icon" aria-hidden="true"><i data-lucide="${item.icon}"></i></span>
       <strong class="research-card-title">${escapeHtml(item.name)}</strong>
       <span class="research-card-meta">${formatCredits(item.cost)} · ${realDurationLabel(item.durationDays)}</span>
+      ${canStart ? '' : '<span class="research-card-lock" aria-hidden="true"><i data-lucide="lock-keyhole"></i> 잠김</span>'}
       <span class="sr-only">${status}</span>
       ${lockReason ? `<span class="research-lock-tip" id="${tooltipId}" role="tooltip">${escapeHtml(lockReason)}</span>` : ''}
     </button>`;
@@ -91,6 +92,10 @@ export function researchPanelMarkup(dataCenterIndex) {
   const unassignedJobs = jobs.filter((job) => job.dataCenterIndex == null);
   const elsewhereJobs = jobs.filter((job) => job.dataCenterIndex != null && job.dataCenterIndex !== dataCenterIndex);
   const availability = listResearchAvailability(gameState);
+  const catalog = availability
+    .filter((item) => !item.completed && !item.active)
+    .sort((a, b) => Number(b.available) - Number(a.available));
+  const allResearchCompleted = availability.every((item) => item.completed);
   return `
     <section class="research-panel" aria-label="재생에너지 연구" data-center-index="${dataCenterIndex}">
       <div class="research-head"><div><span>RESEARCH GRID</span><h3>데이터센터 #${dataCenterIndex} 연구</h3></div><b>진행 중 추가 수요 +2E</b></div>
@@ -99,7 +104,9 @@ export function researchPanelMarkup(dataCenterIndex) {
       ${unassignedJobs.length ? `<div class="research-unassigned"><strong>재배정 대기</strong>${unassignedJobs.map((job) => activeJobMarkup(job, dataCenterIndex)).join('')}</div>` : ''}
       ${elsewhereJobs.length ? `<p class="research-elsewhere">다른 센터 진행: ${elsewhereJobs.map((job) => `${RESEARCH[job.id].name} (#${job.dataCenterIndex})`).join(' · ')}</p>` : ''}
       <div class="research-grid">
-        ${availability.map((item) => researchCardMarkup(item, centerJob)).join('')}
+        ${catalog.length
+          ? catalog.map((item) => researchCardMarkup(item, centerJob)).join('')
+          : `<div class="research-catalog-empty"><strong>${allResearchCompleted ? '모든 연구를 완료했습니다.' : '시작할 연구가 없습니다.'}</strong><span>${allResearchCompleted ? '도시의 모든 연구 효과가 적용 중입니다.' : '진행 중인 연구를 완료하거나 다음 연구를 해금하세요.'}</span></div>`}
       </div>
     </section>`;
 }

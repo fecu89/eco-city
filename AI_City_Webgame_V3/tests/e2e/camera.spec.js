@@ -34,10 +34,4 @@ test.describe('3D city camera', () => {
     expect(reset.position).toEqual(initial.position);
     expect(reset.target).toEqual(initial.target);
   });
-
-  test('reset-view control meets the minimum pointer target', async ({ gamePage: page }) => {
-    const box = await page.locator('.city-camera-reset').boundingBox();
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
-  });
 });

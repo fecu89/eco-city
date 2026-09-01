@@ -1,4 +1,11 @@
 import { test, expect } from '../fixtures/game-test.js';
+import { GREEN_VISUAL_LAYOUTS } from '../../src/ui/CityScene3D.js';
+
+test('green levels use progressively richer but bounded shared geometry', () => {
+  expect(Object.fromEntries(
+    Object.entries(GREEN_VISUAL_LAYOUTS).map(([level, items]) => [level, items.length]),
+  )).toEqual({ 1: 2, 2: 4, 3: 6 });
+});
 
 test.describe('City Kit asset pipeline', () => {
   test('all facilities resolve to selected low-poly GLBs without runtime fallbacks', async ({ gamePage: page }) => {
@@ -11,7 +18,7 @@ test.describe('City Kit asset pipeline', () => {
     expect(status.fallbacks).toEqual([]);
     expect(status.errors).toEqual([]);
     expect(status.materials.factory.assetId).toBe('industrial.factorySmall');
-    expect(status.materials.thermal.assetId).toBe('industrial.chimney');
+    expect(status.materials.thermal.assetId).toBe('industrial.thermalSmall');
   });
 
   test('level visuals provide distinct color, scale, and segment encodings', async ({ gamePage: page }) => {
@@ -52,6 +59,19 @@ test.describe('City Kit asset pipeline', () => {
     for (const type of ['thermal', 'solar', 'wind', 'battery', 'cooling', 'tidal']) {
       expect(samples[type].every((sample) => sample.rotationY === 0)).toBe(true);
     }
+  });
+
+  test('green visual detail instances follow the level layouts without per-cell animation', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.grid = [{ type: 'green', level: 1 }, { type: 'green', level: 2 }, { type: 'green', level: 3 }];
+      while (state.grid.length < 19) state.grid.push(null);
+      window.__renderCityForTest();
+    });
+
+    const stats = await page.evaluate(() => window.__getCityRendererStats());
+    expect(stats.greenDetailInstances).toBe(12);
+    expect(stats.greenDetailCountsByLevel).toEqual({ 1: 2, 2: 4, 3: 6 });
   });
 
   test('idle environment loads the fixed island without runtime roads', async ({ gamePage: page }) => {

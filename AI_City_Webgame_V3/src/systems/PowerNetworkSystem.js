@@ -135,6 +135,9 @@ export function calculatePowerNetwork({
     });
   });
   const generationAvailable = sourceDefinitions.reduce((sum, source) => sum + source.available, 0);
+  const generationAvailableByIndex = Object.fromEntries(sourceDefinitions.map(({ index, available }) => (
+    [index, round2(available)]
+  )));
 
   const hasThermalReserve = sourceDefinitions.some(({ type }) => type === 'thermal');
   const hasStoredBatteryReserve = batteryReserveUnlocked && batteries.some(({ lowCarbon, fossil }) => lowCarbon + fossil > 0);
@@ -330,6 +333,7 @@ export function calculatePowerNetwork({
     loss: round2(Math.max(0, demandTotal - deliveredTotal)),
     lowCarbonDelivered: round2(lowCarbonDelivered),
     generationAvailable: round2(generationAvailable),
+    generationAvailableByIndex,
     lowCarbonSurplus: round2(sources
       .filter(({ lowCarbon }) => lowCarbon)
       .reduce((sum, source) => sum + Math.max(0, source.available), 0)),

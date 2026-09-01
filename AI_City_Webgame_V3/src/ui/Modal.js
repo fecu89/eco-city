@@ -98,6 +98,7 @@ export function initModal(modal, card) {
 export function setModal(html, { id = 'panel', pausesSimulation = false, dismissible = true } = {}) {
   if (activeModal) eventBus.emit(Events.MODAL_CLOSE, activeModal);
   activeModal = { id, pausesSimulation, pauseReason: id, dismissible };
+  cardEl.dataset.modalId = id;
   cardEl.innerHTML = html;
   modalEl.classList.remove('hidden');
   eventBus.emit(Events.MODAL_OPEN, activeModal);
@@ -109,6 +110,7 @@ export function closeModal() {
   const closing = activeModal;
   activeModal = null;
   modalEl.classList.add('hidden');
+  delete cardEl.dataset.modalId;
   cardEl.innerHTML = '';
   if (closing) eventBus.emit(Events.MODAL_CLOSE, closing);
 }

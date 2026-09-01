@@ -45,6 +45,21 @@ test('an upgrade completing on a tick settles at the new level instead of the co
   expect(result.power.generationAvailable).toBe(19.24);
 });
 
+test('settlement summary exposes available generation separately from demand-limited delivery', () => {
+  const state = new GameState();
+  state.grid[0] = { type: 'tidal', level: 2, operationMode: 'normal' };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+
+  const result = realSettler()(state);
+
+  expect(result.summary).toMatchObject({
+    generationAvailable: 14.8,
+    generationAvailableByIndex: { 0: 14.8 },
+    deliveredPower: 2,
+    demand: 2,
+  });
+});
+
 test('an event beginning on the new game day changes that day power demand', () => {
   const state = new GameState();
   state.progression.chapter = 3;

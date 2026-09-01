@@ -1,5 +1,11 @@
 import { BOARD, ECONOMY_RULES, FACILITIES } from '../core/Constants.js';
-import { EXPANSION_UPKEEP } from '../core/ZoneDefinitions.js';
+import {
+  ENERGY_SITE_LABELS,
+  ENERGY_SITE_OUTPUT_MULTIPLIER,
+  EXPANSION_SIDES,
+  EXPANSION_UPKEEP,
+  TIDAL_SITE_COORDINATES,
+} from '../core/ZoneDefinitions.js';
 import { roundCredits } from '../core/Money.js';
 import { createHexCoordinates, expandHexGrid, hexDistance } from './HexGridSystem.js';
 
@@ -43,9 +49,11 @@ export function activateExpansionSide(state, side) {
     firstChoice: state.expansion.firstChoice || side,
     activeCellIndices,
   };
+  const unlockedFacility = EXPANSION_SIDES[side].facility;
+  state.unlockedFacilities?.add?.(unlockedFacility);
   const addedIndices = activeCellIndices.filter((index) => !previousActive.has(index));
   state.expandedCells = new Set(addedIndices);
-  return { ok: true, side, phase, addedIndices, activeCellIndices };
+  return { ok: true, side, phase, unlockedFacility, addedIndices, activeCellIndices };
 }
 
 export function cellZoneTrait(state, index) {
@@ -57,10 +65,27 @@ export function cellZoneTrait(state, index) {
   return coord.r >= 0 ? 'wind' : 'industrial';
 }
 
+export function energySiteBenefit(state, index, facilityType) {
+  if (!['solar', 'wind', 'tidal'].includes(facilityType) || !isExpansionCellActive(state, index)) return null;
+  const coord = createHexCoordinates(BOARD.EXPANDED_RADIUS)[index];
+  if (!coord) return null;
+  const trait = cellZoneTrait(state, index);
+  const matchesRegionalSite = (facilityType === 'solar' && trait === 'solar')
+    || (facilityType === 'wind' && trait === 'wind');
+  const matchesTidalSite = facilityType === 'tidal'
+    && TIDAL_SITE_COORDINATES.some(({ q, r }) => coord.q === q && coord.r === r);
+  if (!matchesRegionalSite && !matchesTidalSite) return null;
+  return {
+    type: facilityType,
+    label: ENERGY_SITE_LABELS[facilityType],
+    supply: ENERGY_SITE_OUTPUT_MULTIPLIER,
+  };
+}
+
 export function zoneModifierForCell(state, index, facilityType) {
   const trait = cellZoneTrait(state, index);
-  if (trait === 'solar' && facilityType === 'solar') return { supply: 1.2 };
-  if (trait === 'wind' && facilityType === 'wind') return { supply: 1.2 };
+  const energySite = energySiteBenefit(state, index, facilityType);
+  if (energySite) return { supply: energySite.supply };
   if (trait === 'residential') {
     if (facilityType === 'residential') return { income: 1.15 };
     if (['factory', 'thermal'].includes(facilityType)) {

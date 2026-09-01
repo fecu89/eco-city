@@ -10,14 +10,18 @@ const {
   validateGridFacilityDependencies,
 } = Permits;
 
-test('facility limits expose the approved cumulative capacity through all fifteen quests', () => {
+test('facility limits expose preparation capacity and never regress through all nineteen quests', () => {
   expect(getFacilityLimits(1)).toMatchObject({ residential: 2 });
   expect(getFacilityLimits(3)).toMatchObject({ green: 1 });
   expect(getFacilityLimits(6)).toMatchObject({ green: 2 });
-  expect(getFacilityLimits(9)).toMatchObject({ green: 3 });
+  expect(getFacilityLimits(7)).toMatchObject({ residential: 7, solar: 2, battery: 2 });
+  expect(getFacilityLimits(8)).toMatchObject({ data: 2, solar: 3, wind: 2 });
+  expect(getFacilityLimits(9)).toMatchObject({ data: 3, wind: 3, green: 3 });
+  expect(getFacilityLimits(10)).toMatchObject({ residential: 8, battery: 3, tidal: 1 });
+  expect(getFacilityLimits(11)).toMatchObject({ residential: 8, solar: 3, battery: 3, wind: 3, tidal: 1 });
   expect(getFacilityLimits(5)).toMatchObject({ residential: 5, thermal: 2, nuclear: 1 });
-  expect(getFacilityLimits(10)).toMatchObject({ nuclear: 2, solar: 4, battery: 3, green: 3 });
-  expect(getFacilityLimits(15)).toMatchObject({ residential: 10, nuclear: 2, solar: 6, tidal: 3 });
+  expect(getFacilityLimits(14)).toMatchObject({ nuclear: 2, solar: 4, battery: 3, green: 3 });
+  expect(getFacilityLimits(19)).toMatchObject({ residential: 10, nuclear: 2, solar: 6, tidal: 3 });
 });
 
 test('legacy objective state cannot override the single quest-based permit cursor', () => {
@@ -32,9 +36,9 @@ test('legacy objective state cannot override the single quest-based permit curso
   expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: false, limit: 0 });
 });
 
-test('final test permits come from quest fifteen even if legacy objective state is present', () => {
+test('final test permits come from quest nineteen even if legacy objective state is present', () => {
   const state = new GameState();
-  state.questIndex = 15;
+  state.questIndex = 19;
   state.progression.objectiveSetId = 'resilience';
   state.progression.completedObjectiveSetIds = ['transition-choice', 'specialization'];
   state.stressTest.status = 'ready';
@@ -63,9 +67,9 @@ test('a capped facility explains the next quest that expands its permit', () => 
   expect(getFacilityPermit(state, 'nuclear')).toMatchObject({
     ok: false,
     limit: 1,
-    nextIncreaseQuest: 10,
+    nextIncreaseQuest: 14,
   });
-  expect(getFacilityPermit(state, 'nuclear').message).toContain('퀘스트 10');
+  expect(getFacilityPermit(state, 'nuclear').message).toContain('퀘스트 14');
 });
 
 test('existing over-cap saves retain buildings but cannot place another one', () => {
@@ -94,7 +98,7 @@ test('nuclear needs thermal reserve and the last supporting thermal cannot be de
   expect(validateDemolitionPermit(state, 1)).toMatchObject({ ok: true });
 });
 
-test('claiming the storage-hub quest lets a battery replace the last thermal reserve', () => {
+test('claiming the heatwave quest lets a battery replace the last thermal reserve', () => {
   const state = new GameState();
   state.questIndex = 10;
   state.grid[0] = { type: 'thermal', level: 1 };
@@ -106,7 +110,7 @@ test('claiming the storage-hub quest lets a battery replace the last thermal res
     reason: 'last_thermal_supports_nuclear',
   });
 
-  state.claimedQuestIds.add('storage-hub');
+  state.claimedQuestIds.add('extreme-heat');
   expect(validateGridFacilityDependencies(
     state.grid.map((cell, index) => index === 0 ? null : cell),
     state,
@@ -114,10 +118,10 @@ test('claiming the storage-hub quest lets a battery replace the last thermal res
   expect(validateDemolitionPermit(state, 0)).toMatchObject({ ok: true });
 });
 
-test('storage-hub completion without a remaining battery does not waive nuclear reserve', () => {
+test('heatwave completion without a remaining battery does not waive nuclear reserve', () => {
   const state = new GameState();
   state.questIndex = 10;
-  state.claimedQuestIds.add('storage-hub');
+  state.claimedQuestIds.add('extreme-heat');
   state.grid[0] = { type: 'thermal', level: 1 };
   state.grid[1] = { type: 'nuclear', level: 1 };
 
@@ -130,7 +134,7 @@ test('storage-hub completion without a remaining battery does not waive nuclear 
 test('the last battery reserve cannot be demolished from a coal-free nuclear grid', () => {
   const state = new GameState();
   state.questIndex = 10;
-  state.claimedQuestIds.add('storage-hub');
+  state.claimedQuestIds.add('extreme-heat');
   state.grid[0] = { type: 'battery', level: 1 };
   state.grid[1] = { type: 'nuclear', level: 1 };
 

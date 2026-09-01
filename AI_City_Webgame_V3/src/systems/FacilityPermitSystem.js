@@ -3,9 +3,10 @@ import {
   FACILITY_LIMITS_BY_QUEST,
   GRID_RESERVE_RULES,
 } from '../core/Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 
-const LAST_QUEST = 15;
+const LAST_QUEST = CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
 
 function countType(grid, type) {
   return (grid || []).reduce((count, cell) => count + Number(cell?.type === type), 0);
@@ -15,7 +16,9 @@ export function getFacilityLimits(questIndex = 1) {
   const throughQuest = Math.max(1, Math.min(LAST_QUEST, Math.trunc(Number(questIndex) || 1)));
   const limits = {};
   for (let quest = 1; quest <= throughQuest; quest += 1) {
-    Object.assign(limits, FACILITY_LIMITS_BY_QUEST[quest] || {});
+    Object.entries(FACILITY_LIMITS_BY_QUEST[quest] || {}).forEach(([type, limit]) => {
+      limits[type] = Math.max(limits[type] ?? 0, limit);
+    });
   }
   return limits;
 }
@@ -86,7 +89,7 @@ export function validateGridFacilityDependencies(grid, state = null) {
     ok: false,
     reason: 'thermal_reserve_required',
     reserveType: null,
-    message: '핵발전을 운영하려면 화력발전 1기가 필요합니다. 저탄소 저장 허브 완료 후에는 에너지저장 시설로 대체할 수 있습니다.',
+    message: '핵발전을 운영하려면 화력발전 1기가 필요합니다. 폭염 경보 퀘스트 완료 후에는 에너지저장 시설로 대체할 수 있습니다.',
   };
 }
 
@@ -104,10 +107,10 @@ export function validateDemolitionPermit(state, index) {
         reason: batteryReserve ? 'last_battery_supports_nuclear' : 'last_thermal_supports_nuclear',
         message: batteryReserve
           ? '화력 없는 핵발전망의 마지막 에너지저장 시설은 철거할 수 없습니다.'
-          : '핵발전이 남아 있어 마지막 화력발전 예비력은 철거할 수 없습니다. 저탄소 저장 허브 완료 후 배터리로 대체할 수 있습니다.',
+          : '핵발전이 남아 있어 마지막 화력발전 예비력은 철거할 수 없습니다. 폭염 경보 퀘스트 완료 후 배터리로 대체할 수 있습니다.',
         resolution: batteryReserve
           ? '화력발전 예비력을 다시 확보하거나 핵발전을 먼저 철거하세요.'
-          : '저탄소 저장 허브를 완료하고 에너지저장 시설을 유지하거나 핵발전을 먼저 철거하세요.',
+          : '폭염 경보를 완료하고 에너지저장 시설을 유지하거나 핵발전을 먼저 철거하세요.',
       };
     }
   }

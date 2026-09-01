@@ -568,3 +568,104 @@
 - [x] HUD는 실제 진행 상태에 따라 `복구 퀘스트 1–6 / 6`, `운영 챕터 2 / 4`, `운영 챕터 3 / 4`, `최종 시험 준비·진행·재도전`, `도시 복구 완료`를 구분해 표시한다.
 - [x] `회복탄력 도시` 목표 보상을 받으면 `stressTest=ready`와 함께 내부 `chapter=4`, `chapterChanged=true`가 적용되도록 수정했다.
 - [x] 실제 10크레딧 시작에서 `기초 1–6 → 챕터 2 → 챕터 3 → 최종 시험 → 보고서`까지 이동하는 진행 회귀를 포함한 관련 14개 테스트를 통과했다.
+
+## 36차 수정 — 건축 1건씩 짓기 + 카메라 리셋 버튼 제거
+
+원본 요청: "지금 여러 건물을 한번에 짓는 식인데, 하나당 하나씩 짓도록 바꾸고 싶어. 건축에서 건물 클릭 -> 건축탭 내려감 -> 건축후 예상 탭 -> 건축 미리보기 위에 o, x 위젯 뜸 -> o 클릭시 건설, x 클릭시 건설취소 -> 건설탭 복귀 이런 식으로. city-camera-reset button은 제거해라."
+
+- [x] 건설 확정 방식을 "여러 건물을 계획에 담아 한 번에 확정"에서 "한 번에 하나씩: 위치 클릭 → 건축후 예상 미리보기 → O/X로 확정·취소"로 바꿨다. 시스템 레벨(`ConstructionPlanSystem.js`)의 다중 항목 지원 자체는 그대로 두고, UI 레벨(`GridView.js`의 `handleSceneCellClick`)에서만 게이트를 걸었다 — 확정 이후에는 기존처럼 여러 건물이 동시에 공사 진행될 수 있다(선택 흐름만 바뀐 것이고 게임 규칙은 그대로).
+- [x] O/X 확정 위젯은 처음엔 하단 고정 바에 넣었다가, 사용자 피드백으로 3D 보드 위 미리보기 유령 모형 바로 위에 뜨는 월드 앵커 오버레이로 바꿨다(`CityScene3D.js`의 `setBuildOxWidget`/`syncBuildOxWidget`, 기존 공사 진행 배지 `world-construction-progress`와 같은 화면 좌표 투영 기법을 재사용). 가장자리 칸에서 투영 좌표가 컨테이너 밖으로 나가 위젯이 화면 밖에 숨어버리는 문제가 있어 컨테이너 안쪽으로 좌표를 clamp했다. 하단 바는 시설명·비용·잔액·예상 지표·완공 타임라인만 보여주는 정보 패널로 남았다.
+- [x] 건물을 클릭해 위치를 정하면 건축 독(facility dock)이 접히고 안내 문구가 뜨며, O 확정 또는 X 취소 후 독이 복귀한다(`DockView.js`).
+- [x] 확정(O) 직후 배치 무장 상태를 해제해, 다음 건물을 지으려면 독에서 시설을 다시 골라야 한다 — 확정 후에도 커서를 올리면 미리보기가 계속 뜨고 클릭하면 바로 다음 건설이 시작되던 문제를 고쳤다(`facilityArmed` 상태, `GridView.js`).
+- [x] `city-camera-reset` 버튼(3D 시점 초기화 아이콘)을 생성 코드·이벤트 바인딩·정리 코드·CSS·전용 테스트까지 전부 제거했다. 카메라 초기화 자체(`window.__resetCityCamera`, 보드 확장 시 자동 리셋)는 버튼과 무관하게 남아 있다.
+- [x] O/X 버튼을 반투명 아웃라인에서 불투명 빨강/초록 원형 버튼으로 바꿔 3D 배경 위에서도 잘 보이게 했다.
+- [x] 건설 위험 확인 모달·도움말 텍스트·퀘스트 힌트 문구 중 "여러 시설을 계획에 담아 한꺼번에 확정" 전제로 쓰여 있던 문구를 새 흐름(하나씩 확정)에 맞게 고쳤다.
+
+### 최종 검증
+
+- `npx playwright test`: 전체 회귀에서 이번 변경과 직접 관련된 파일(`build-preview`, `camera`, `construction-progress`, `perf`, `hud`, `game`, `visual`, `construction-plan` 단위 테스트 등)은 모두 통과했다. 다중 배치를 가정하던 기존 테스트·공용 헬퍼(`tests/helpers/playthrough.js`)도 새 흐름(칸마다 확정)에 맞게 갱신했다.
+- 전체 회귀 중 이번 작업과 무관한 기존 실패 10건을 발견했다 — 게임 시각 단위를 시(hour)에서 일(day) 기준으로 옮기는 리팩터링이 이미 별도로 진행 중인 것으로 보이며(`calendar`/`carbon-crisis`/`climate` 단위 테스트가 `hour`/`dayIndex` 스키마 불일치로 실패), 그 외 인구·연구 카드 개수 등 밸런스 수치 변경(`hud.spec.js`, `visual.spec.js`)과 `objectiveSetId` 진행 상태(`hex-scene.spec.js`)도 이번 변경과 무관하게 이미 깨져 있었다. 건드리지 않았다.
+- OX 위젯의 위치·투명도·건축 독 접힘·확정 후 무장 해제는 스크린샷으로 직접 확인했다.
+- 저장소 안전: git add/commit/push, 배포, 원격 변경을 전혀 수행하지 않고 로컬 변경만 보존했다.
+
+### 추가 수정 — 독 접힘 애니메이션이 중간에 멈춰 "껍데기"가 남는 문제
+
+- [x] 건축 독을 감싼 `#buildPanel` 전체(배경 포함)를 접도록 바꿨다 — 이전에는 독 목록/상세만 숨기고 패널 배경과 안내 문구(`#buildPendingNote`)가 남아 있어 "껍데기"처럼 보였다. 안내 문구는 제거하고 패널 자체를 여닫을 때 쓰던 것과 같은 슬라이드 기법(`build-panel--collapsed` 클래스, `opacity/visibility/transform`)으로 완전히 감춘다.
+- [x] 패널을 연 직후 곧바로 칸을 클릭하면(사람이 실제로 하는 타이밍과 가깝다) `opacity`가 0.09 근처에서, `visibility`가 `visible`인 채로 멈춰 화면에 흐릿한 독 카드가 계속 보이는 경우를 재현했다 — 열림 전환과 접힘 전환이 겹치며 CSS 트랜지션이 끝까지 진행되지 않는 문제였다. 접힘 상태에 `transition:none`을 줘서 트랜지션에 기대지 않고 즉시 완전히 사라지도록 고쳤다.
+- [x] `getComputedStyle`로 값을 직접 확인하고 스크린샷으로 재현·수정을 검증했다. 관련 회귀(`build-preview`, `hud`, `mobile`, `camera`) 재통과.
+
+## 37차 수정 — 시설 레벨별 실제 3D 모델 교체 (kenney_city-kit-industrial 2.0)
+
+원본 요청: "assets-source > archives에 kenney_city-kit-industrial_2.0 다운받아 둠. 각 단계마다 모델이 바뀌었으면 함" — 화력발전(building-n→m→i), 태양광(solar-panel-portrait→landscape→landscape-group), 원자력발전(chimney-small→medium→large), 순환냉각(detail-tank×1→×2 스케일→detail-tank-large), 데이터센터(skyscraper-a→c→e). 이후 대화 중 에너지저장(building-p→t→q)과 풍력(windmill-low→windmill-low 스케일업→windmill)도 같은 방식으로 추가 요청받았다.
+
+- [x] **기존 구조 확인**: `FACILITY_ASSET_IDS[type]`에는 원래도 레벨별 3개 항목이 있었지만 렌더러(`CityAssetLoader.getFacilityGeometry`)가 항상 `[0]`만 읽어 레벨 2·3은 스케일만 키운 같은 모델이었다. `residential`/`factory`/`tidal`은 서로 다른 id가 이미 들어 있었지만 실제로 쓰인 적이 없었던 것도 확인했다 — 이번 요청 대상이 아니므로 겉모습이 바뀌지 않게 `[0]`을 3번 반복하도록 의도적으로 맞췄다(`assetRegistry.js` 주석 참고).
+- [x] **에셋 파이프라인**: `assets-source/acquisition.json`·`manifest.json`에 `kenney-industrial2` 소스(이미 받아둔 `kenney_city-kit-industrial_2.0.zip`)를 등록하고, `selection.json`에 요청받은 GLB 17개(화력 3·원자력 3·태양광 3·순환냉각 1·에너지저장 3·풍력 2·데이터센터 2)를 추가해 `select-3d-assets.mjs` → `assets:optimize` → `assets:audit`를 정식으로 통과시켰다(총 45 → 62개 선별 GLB). `public/assets/licenses/ASSET_LICENSES.md`에 출처·레벨 매핑을 기록했다.
+- [x] **레벨별 실제 지오메트리 로딩**: `CityAssetLoader.js`의 캐시 키를 시설 타입에서 실제 에셋 id로 바꿔, 한 타입이 레벨마다 다른 에셋을 참조해도(또는 여러 타입이 같은 에셋을 공유해도) 한 번만 로드하고 자연히 캐시를 공유하게 했다. `getFacilityGeometry(type, level)`/`getFacilityMaterial(type, level)`로 레벨을 받되 기본값 1이라 기존 호출부는 대부분 그대로 뒀다.
+- [x] **레벨별 인스턴싱**: `CityScene3D.js`의 `facilityMeshes`(타입당 InstancedMesh 1개, 기존 그대로 유지)에 더해, 레벨의 실제 에셋이 1레벨과 다를 때만 `${type}:${level}` 보조 메시를 지연 생성하는 `extraLevelMeshes`를 추가했다. 보드에 없는 조합은 만들지 않는다. 고스트 미리보기·머티리얼 팔레트·통계(`materials.factory` 등 타입 단위 리포트)는 항상 1레벨(대표) 버킷을 그대로 참조해 기존 계약을 건드리지 않았다.
+- [x] **드로우콜 예산 초과 발견 및 처리**: 37칸 대표 도시(모든 타입×모든 레벨) 최악의 경우 실측 24 → 33 → (풍력 추가 후) 35 draw calls. `docs/superpowers/plans/2026-08-30-cc0-asset-pipeline.md`가 명시적으로 `Map<type:level, InstancedMesh>` 방식을 draw-call 이유로 보류했던 과거 결정을 발견해 사용자에게 그대로 알리고, 예산을 24 → 36으로 올리는 것으로 최종 확인받았다(`docs/architectural-decisions/0003-...md`에 갱신 기록). 실기기 체감 저하 여부는 스크린샷·플레이로 별도 확인은 안 했고, 33~35 draw calls 자체가 여전히 가벼운 수준이라는 판단으로 진행했다.
+- [x] **순환냉각·풍력의 "1·2단계 스케일만" 처리**: 순환냉각은 요청, 풍력은 사용자가 드로우콜 절감 목적으로 직접 제안해 채택 — 두 시설 모두 1·2단계는 같은 자산을 공유(스케일만 차등), 3단계만 실제로 다른 모델을 쓴다. 별도 다중 인스턴스/geometry 합성 없이 기존 매커니즘 그대로 처리된다.
+- [x] **풍력 로터 정렬 확인**: 풍력은 회전 블레이드(`windRotorMesh`)가 기단 모델과 별도 레이어로 얹히는데, Y 오프셋이 `0.78 * level.scale`로 고정돼 있어 기단 모델이 바뀌면 위치가 어긋날 위험이 있었다. 스크린샷으로 직접 확인한 결과 `windmill-low`/`windmill` 모두 허브 위치가 잘 맞아 별도 보정 없이 그대로 뒀다.
+- [x] `CityAssetLoader.initCityAssets`의 타입-성공/실패 집계 버그를 하나 발견해 고쳤다: 같은 1레벨 에셋을 공유하는 타입이 2개 이상이면(예: 순환냉각·조력 모두 `storageTank`) 로드 작업을 에셋 id로만 중복 제거하다 보니 먼저 순회된 타입에만 성공이 귀속되고 나머지 타입은 `status.loaded`에서 누락됐다. 로드는 에셋 id 단위로, 성공/실패 집계는 타입 단위로 완전히 분리해 해결했다.
+
+### 최종 검증
+
+- 직접 관련된 테스트(`asset-registry` 단위 23개, `perf` 27개, `assets` 9개, `motion` 8개, `build-preview` 10개, `visual` — 스냅샷 갱신 후 재확인)는 전부 통과했다. 스크린샷으로 레벨별 실제 모델 교체(화력·원자력·태양광·순환냉각·데이터센터·에너지저장·풍력)와 풍력 로터 정렬을 직접 눈으로 확인했다.
+- 전체 회귀에서 이번 작업과 무관한 실패를 다시 확인했다: 이전에 이미 발견한 시(hour)→일(day) 리팩터링 관련 실패에 더해, 이번 세션 도중 `QuestDefinitions.js`가 실시간으로 바뀌는 것을 직접 목격했다(디스크 변경 알림) — 퀘스트/캠페인 시스템이 세션 중에도 계속 바뀌고 있어 `climate-quests`/`campaign-playthrough`/`objectives-ui` 등 대규모 회귀 실패가 새로 나타났다. `perf.spec.js`의 "rapid sequential facility placement" 테스트도 `questIndex=15`를 "허가 상한이 충분히 높은 퀘스트"로 가정했는데, 진행 중인 퀘스트 개편으로 permit 표가 바뀌며 도중에 허가가 막히는 것을 확인했다(9/9, "퀘스트 17" 언급 — 이 저장소의 현재 퀘스트 수 15개를 넘어섬). 이 부분은 손대지 않았다 — 진행 중인 다른 작업과 충돌하는 것으로 보이며, 무엇이 "충분히 높은 퀘스트"인지가 계속 바뀌는 상태라 지금 고쳐도 다시 깨질 가능성이 높다.
+- 저장소 안전: git add/commit/push, 배포, 원격 변경을 전혀 수행하지 않고 로컬 변경만 보존했다.
+
+## 38차 수정 — 연구 준비 4단계·퀴즈 재출제 방지·19단계 캠페인
+
+- [x] 6개 기초 퀘스트와 8개 기후 퀘스트 사이에 `태양광 연구 기초 → 데이터센터 현대화 → 풍력 실증망 → 해안 조력 실증` 4단계를 추가했다. 기후 대응은 11~18, 41일 최종시험은 19단계로 이동했다.
+- [x] 풍력·조력 준비 퀘스트는 발전량 표시가 아니라 소비시설로 실제 전달된 전력 경로를 2일 연속 확인한다. 공사 중인 데이터센터·조력 시설은 완료 조건에서 제외한다.
+- [x] 이미 맞혀 연구 가속을 받은 문항은 다음 퀴즈에서 제외한다. 틀린 문항은 남고, 전 문항을 맞히면 명확한 완료 안내를 표시한다.
+- [x] 11개 연구의 44개 퀴즈 선택지를 교정하고, 정답이 문장 길이만으로 드러나지 않는지 자동 검증한다.
+- [x] 데이터센터 연구 목록에서 완료·진행 중 중복 카드를 제거했다. 시작 가능한 연구를 먼저 정렬하고 잠긴 연구에는 저채도·잠금 라벨·해금 조건을 표시하며, 전 연구 완료 빈 상태를 추가했다.
+- [x] 시설 누적 허가를 19단계로 확장하고 이전 단계보다 한도가 낮아지지 않도록 최대값으로 병합한다. V8 저장은 V9로 마이그레이션해 도시·공사·연구·배터리를 보존하면서 새 퀘스트 번호로 이동한다.
+
+### 최종 검증 (2026-09-02, 퀘스트 범위 한정)
+
+- 사용자가 전체 회귀 비용을 줄이도록 요청해 건설·3D·시각·성능 전체 회귀는 실행하지 않았다.
+- 퀘스트·연구·기후·시설 허가·V2~V9 저장 마이그레이션 단위 회귀 **115/115 통과**.
+- 연구창·퀘스트창·기후 캠페인 브라우저 회귀 **30/30 통과**.
+- `npm run build` 성공. 기존 Vite 단일 청크 크기 경고만 남아 있으며 빌드 오류는 없다.
+- git add/commit/push, 배포, 원격 변경은 수행하지 않았다.
+
+## 39차 수정 — 첫 확장 재생에너지 분기와 8단계 2차 확장
+
+- [x] 첫 확장 선택을 실제 준비 퀘스트에 연결했다. 동부를 고르면 태양광, 서부를 고르면 풍력이 즉시 해금되고 7단계 연구 목표도 각각 `고효율 태양전지` / `풍력 예측 제어`로 바뀐다.
+- [x] 8단계 `데이터센터 현대화`를 완료하면 첫 선택의 반대편 외곽 9칸과 반대 재생에너지가 함께 열린다. 동부 선행은 서부·풍력, 서부 선행은 동부·태양광으로 이어지며 보드는 28칸에서 37칸으로 확장된다.
+- [x] 9단계 실증망도 두 경로를 대칭화했다. 첫 선택이 동부면 풍력 연구·실제 송전을, 서부면 태양광 연구·실제 송전을 2일 연속 검증한다.
+- [x] 퀘스트 카드·퀘스트 전체 목록·상단 미션·보상 알림·시설 잠금 안내가 저장된 `expansion.firstChoice`를 기준으로 같은 분기 문구를 사용한다.
+- [x] 첫 확장 모달에 선택 발전시설 해금과 8단계의 반대편 개방 시점을 명시했다.
+
+### 최종 검증 (2026-09-02, 퀘스트 범위 한정)
+
+- 퀘스트 분기 단위·실제 UI 회귀와 기존 1~19단계 퀘스트·기후 캠페인 회귀 **48/48 통과**.
+- 보상 클릭 테스트는 실시간 일일 정산이 중간에 개입하지 않도록 해당 테스트에서만 Game Clock을 일시정지해 원자성을 고정했다.
+- `npm run build` 성공. 기존 Vite 단일 청크 크기 경고만 남는다.
+- 전체 게임 회귀는 사용자 요청에 따라 실행하지 않았고, git add/commit/push·배포·원격 변경도 수행하지 않았다.
+
+## 40차 수정 — 시설 모델 세부 조정과 미사용 에셋 정리
+
+37차에서 만든 레벨별 실제 모델 교체 구조를 계속 쓰면서, 대화 중 세부 매핑을 여러 차례 조정받았다.
+
+- [x] **주거지**: 기존 `building-type-a` 단일 모델(스케일만 차등)에서 실제 레벨별 교체로 바꿨다 — 1단계 `building-type-a` → 2단계 `building-type-c`(이미 선별돼 있던 `residential.house3`를 재사용) → 3단계 `building-type-f`(신규 선별, `residential.house4`).
+- [x] **조력발전**: 기존 산업 킷 저장탱크 재사용에서 사용자가 새로 준비해 둔 "Space Bits"(Kay Lousberg, itch.io, CC0) 팩의 `Cargo.glb → Cargo Depot A.glb → Cargo Depot-cRtW9KaGs0.glb`로 교체했다. 이 아카이브는 원본 `License.txt`가 없어 `select-3d-assets.mjs`가 실패했다 — 사용자에게 출처를 확인받은 뒤(Kay Lousberg / CC0-1.0), 원본 라이선스가 없는 소스는 `manifest.json` 정보로 라이선스 노트를 생성해 대신 보존하도록 파이프라인 스크립트에 `synthesizeLicenseNote` 폴백을 추가했다(Kenney 외 출처를 쓰는 향후 팩에도 재사용 가능).
+- [x] **공장**: 레벨별 실제 모델 교체 여부를 별도로 요청받지 않아 처음부터 단일 모델(스케일만 차등)로 유지하되, 모델 자체는 industrial 2.0 kit의 `building-s.glb`로 바꿨다(기존 1.0 kit `building-b.glb`에서 교체, id/타깃 파일명은 유지).
+- [x] **에너지저장**: 처음에는 요청대로 `building-p → building-t → building-q` 레벨별 실제 교체로 구현했으나, 이후 사용자가 드로우콜 절감을 위해 `shipping-container-b` 단일 모델(스케일만 차등)로 되돌리도록 정정했다. 레벨별 교체용으로 선별했던 3개 GLB는 이번 정리 대상에 포함했다.
+- [x] **미사용 에셋 정리**: 이번 세션의 레벨별 교체 이전부터 이미 아무 시설도 참조하지 않던 것(주거지 house2/apartment1-2, 상업 shop1-2/medium2)과, 레벨별 교체로 대체되며 새로 미사용이 된 것(공장 factoryMedium/factoryLarge, 화력의 옛 chimney, 에너지저장의 building-p/t/q, Quaternius `energy.solarSmall/solarLarge/windBase`)을 `assets-source/selection.json`·`src/assets/assetRegistry.js`·`public/assets/buildings/`에서 모두 제거했다(60 → 52개 선별 GLB). 더 이상 어떤 모델도 제공하지 않는 Quaternius Ultimate Space Kit·Farm Buildings Pack 항목은 `ASSET_LICENSES.md`에서도 제거하되, 무엇을 왜 정리했는지는 각주로 남겼다.
+- [x] `assets:select`/`assets:optimize`/`assets:audit` 파이프라인을 각 변경마다 다시 통과시켰고, 드로우콜 최악 시나리오가 24 → 36 → 38(실측)로 계속 올라가 예산을 40으로 다시 올렸다(레벨별 실제 교체 대상이 5개에서 주거지·조력·풍력을 더해 8개로 늘고, 에너지저장이 다시 빠지며 net 증가).
+
+### 최종 검증
+
+- `asset-registry` 단위 테스트를 매 변경마다 다시 맞춰 23/23 통과(선별 개수·라이선스 각주·레벨별 스왑 대상 목록 갱신 포함). `perf`·`assets`·`motion`·`build-preview`·`camera` 관련 스위트 재통과, `visual` 스냅샷은 이번 라운드에서는 갱신 없이 그대로 통과했다.
+- 스크린샷으로 주거지·조력·에너지저장·공장의 레벨별(또는 단일) 실루엣을 직접 확인하고, `window.__getCityAssetStatus()`로 11개 시설 전부가 폴백·에러 없이 로드됨을 확인했다.
+- 전체 회귀에서 이번 작업과 무관한 실패가 계속 나타난다 — 동시 진행 중인 퀘스트/캠페인 개편(38~39차, 15 → 19단계)이 원인으로 보이는 `퀘스트 17/19` 언급, `LEVEL 1/19` 등을 직접 확인했다. 손대지 않았다.
+- 저장소 안전: git add/commit/push, 배포, 원격 변경을 전혀 수행하지 않고 로컬 변경만 보존했다.
+
+### 화력발전 3단계 모델 수정 (2026-09-02)
+
+- [x] 40차에서 화력발전 3단계에 `building-i.glb`를 넣었던 것이 사용자가 실제로 요청한 `building-l.glb`와 달라 바로잡았다. `assets-source/selection.json`의 `industrial.thermalLarge`, `src/assets/assetRegistry.js`, `ASSET_LICENSES.md`의 화력발전 레벨 실루엣 문구를 모두 `building-l.glb` / `thermal-l.glb`로 갱신했다.
+- [x] `assets:select` → 기존 `thermal-i.glb` 삭제 → `assets:optimize`(162424 → 49628 bytes) → `assets:audit`(52개 선별 GLB, 그대로) 순서로 파이프라인을 다시 통과시켰다.
+- [x] `asset-registry`·`perf`·`assets` 스위트 재실행 42/1 통과 — 유일한 실패는 이번 변경과 무관한 `퀘스트 17/19` 허가 한도 문구발 `residential` 클릭 타임아웃(동시 진행 중인 퀘스트 개편)이었다.
+- [x] 화력발전 1·2·3단계를 동시에 배치한 스크린샷으로 세 모델이 서로 다른 실루엣임을 직접 확인했다.

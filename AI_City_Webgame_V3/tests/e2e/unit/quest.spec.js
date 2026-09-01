@@ -9,6 +9,8 @@ import {
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
 import { QUESTS } from '../../../src/core/QuestDefinitions.js';
 import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
+import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
+import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 
 const powered = (ratio = 1) => ({ demand: 2, delivered: 2 * ratio, ratio });
 const summary = (overrides = {}) => ({
@@ -141,6 +143,49 @@ test('quest six completes when powered adjacent data and cooling keep water at b
   expect(state.questStatus).toBe('ready_to_claim');
 });
 
+test('quest six accepts every available cooling direction adjacent to data after nuclear adds water', () => {
+  const coords = createHexCoordinates(2);
+  const dataIndex = 0;
+  const nuclearIndex = 1;
+  const thermalIndex = 7;
+  const coolingIndices = neighborIndices(dataIndex, coords).filter((index) => index !== nuclearIndex);
+
+  for (const coolingIndex of coolingIndices) {
+    const state = new GameState();
+    state.questIndex = 6;
+    state.baseline = { dailyWater: 7 };
+    state.grid = Array(19).fill(null);
+    state.grid[dataIndex] = { type: 'data', level: 1, priority: 'normal' };
+    state.grid[nuclearIndex] = { type: 'nuclear', level: 1, priority: 'normal' };
+    state.grid[thermalIndex] = { type: 'thermal', level: 1, priority: 'normal' };
+    state.grid[coolingIndex] = { type: 'cooling', level: 1, priority: 'essential' };
+
+    for (let day = 0; day < 2; day += 1) {
+      const power = calculatePowerNetwork({ grid: state.grid, coords });
+      const economy = settleEconomy({
+        grid: state.grid,
+        coords,
+        facilityPower: power.facilityPower,
+        credits: state.credits,
+      });
+      applySimulationQuestProgress(state, {
+        ...economy,
+        facilityPower: power.facilityPower,
+        routes: power.routes,
+        lowCarbonPercent: power.lowCarbonPercent,
+        deliveredPower: power.delivered,
+        demand: power.demand,
+        batteryStored: 0,
+      });
+    }
+
+    expect(
+      state.questStatus,
+      `cooling index ${coolingIndex} is one hex from data and must not depend on its angle to nuclear`,
+    ).toBe('ready_to_claim');
+  }
+});
+
 test('quest six resets when cooling is separated, underpowered, or above baseline water', () => {
   const state = new GameState();
   const coolingIndex = neighborIndices(0, createHexCoordinates(2))[0];
@@ -165,6 +210,61 @@ test('quest six resets when cooling is separated, underpowered, or above baselin
     facilityPower: { 0: powered(0.95), 18: powered(0.95) },
   }));
   expect(state.questProgress.consecutiveDays).toBe(0);
+});
+
+test('quest seven completes only after high-efficiency solar research', () => {
+  const state = new GameState();
+  state.questIndex = 7;
+  expect(evaluateCurrentQuest(state).ready).toBe(false);
+  state.research.completedIds.add('solar2');
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+});
+
+test('quest eight requires a completed level-two data center and smart-grid research', () => {
+  const state = new GameState();
+  state.questIndex = 8;
+  state.research.completedIds.add('smartGrid');
+  state.grid[0] = {
+    type: 'data',
+    level: 1,
+    project: createBuildProject({ type: 'data', paidCost: 6 }),
+  };
+  expect(evaluateCurrentQuest(state).ready).toBe(false);
+  state.grid[0] = { type: 'data', level: 2 };
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+});
+
+test('quest nine requires completed wind research and real wind delivery for two consecutive days', () => {
+  const state = new GameState();
+  state.questIndex = 9;
+  state.grid[0] = { type: 'wind', level: 1 };
+  const delivered = summary({ routes: [{ from: 0, to: 1, delivered: 0.1 }] });
+
+  applySimulationQuestProgress(state, delivered);
+  expect(state.questProgress.consecutiveDays).toBe(0);
+  state.research.completedIds.add('wind2');
+  applySimulationQuestProgress(state, delivered);
+  applySimulationQuestProgress(state, delivered);
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('quest ten requires completed tidal research, an operational plant, and real delivery for two days', () => {
+  const state = new GameState();
+  state.questIndex = 10;
+  state.research.completedIds.add('tidal1');
+  state.grid[0] = {
+    type: 'tidal',
+    level: 1,
+    project: createBuildProject({ type: 'tidal', paidCost: 7 }),
+  };
+  const delivered = summary({ routes: [{ from: 0, to: 1, delivered: 1 }] });
+
+  applySimulationQuestProgress(state, delivered);
+  expect(state.questProgress.consecutiveDays).toBe(0);
+  state.grid[0] = { type: 'tidal', level: 1 };
+  applySimulationQuestProgress(state, delivered);
+  applySimulationQuestProgress(state, delivered);
+  expect(state.questStatus).toBe('ready_to_claim');
 });
 
 test('emergency support is limited to once per campaign at one credit or less', () => {

@@ -4,8 +4,8 @@ import {
   FINAL_CLIMATE_PHASES,
 } from './ClimateCampaignDefinitions.js';
 
-// 한 게임일이 현실 1초이므로 짧은 수치만으로는 예보가 실제 의사결정 기간을 주지 못한다.
-// 첫 예보 때 자동 일시정지하는 UI와 함께 24일의 운영·재정 준비 구간을 보장한다.
+// 한 게임일이 현실 1초이므로 퀘스트 시작 후 24일의 운영·재정 준비 구간을 보장한다.
+// 준비 구간은 자동으로 일시정지하지 않으며, 실제 재해가 활성화될 때만 상단 상태를 표시한다.
 export const EVENT_FORECAST_DAYS = 24;
 export const EVENT_GAP_DAYS = 3;
 

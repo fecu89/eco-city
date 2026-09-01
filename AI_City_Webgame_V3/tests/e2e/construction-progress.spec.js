@@ -32,7 +32,7 @@ test('confirmed construction remains a zero-effect build site until its completi
   await page.evaluate(() => window.__clickCell(0));
   await expect(page.locator('[data-construction-console]')).toBeVisible();
   await expect(page.locator('[data-project-progress]')).toContainText('0%');
-  await expect(page.locator('[data-project-remaining]')).toContainText('5시간');
+  await expect(page.locator('[data-project-remaining]')).toContainText('5일');
 
   await page.evaluate(() => {
     for (let day = 0; day < 4; day += 1) window.__settleSimulationDay();
@@ -84,10 +84,10 @@ test('world and inspector progress bars advance continuously between settlement 
 test('every simultaneous build project owns a visible world progress bar', async ({ gamePage: page }) => {
   await page.evaluate(() => window.__setTimeScale(0));
   await openBuild(page);
-  await page.evaluate(() => {
-    window.__clickCell(0);
-    window.__clickCell(1);
-  });
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await page.locator('[data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(1));
   await page.locator('#confirmBuildBtn').click();
 
   const visibleBars = page.locator('[data-world-construction-progress]:visible');
@@ -155,7 +155,7 @@ test('a completed factory still uses the normal irreversible demolition flow', a
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0])).toBeNull();
 });
 
-test('upgrade starts an eight-hour limited-operation project and changes level only on completion', async ({ gamePage: page }) => {
+test('upgrade starts an eight-day limited-operation project and changes level only on completion', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(0);
     const state = window.__GAME_STATE__;
@@ -187,4 +187,54 @@ test('upgrade starts an eight-hour limited-operation project and changes level o
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].level)).toBe(1);
   await page.evaluate(() => window.__settleSimulationDay());
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0])).toMatchObject({ level: 2, project: null });
+});
+
+test('tidal upgrade forecast shows distinct current construction and completed generation', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.credits = 100;
+    state.upgradePermitLevel = 3;
+    state.grid[0] = { type: 'tidal', level: 1, priority: 'normal', operationMode: 'normal' };
+    state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await page.locator('#upgradeBtn').click();
+
+  await expect(page.locator('[data-upgrade-capacity="current"]')).toHaveText('발전 가능량 10E');
+  await expect(page.locator('[data-upgrade-capacity="during"]')).toHaveText('발전 가능량 7E');
+  await expect(page.locator('[data-upgrade-capacity="completed"]')).toHaveText('발전 가능량 14.8E');
+});
+
+test('green level-two and level-three upgrades use the shared world progress bars', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.credits = 100;
+    state.upgradePermitLevel = 3;
+    state.research.completedIds.add('green2');
+    state.research.completedIds.add('green3');
+    state.research.techLevels.green = 3;
+    state.grid[0] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
+    state.grid[1] = { type: 'green', level: 2, priority: 'normal', operationMode: 'normal' };
+    window.__refreshGameForTest();
+    window.__clickCell(0);
+  });
+
+  await page.locator('#upgradeBtn').click();
+  await page.locator('#confirmUpgradeProjectBtn').click();
+  await page.evaluate(() => window.__clickCell(1));
+  await page.locator('#upgradeBtn').click();
+  await page.locator('#confirmUpgradeProjectBtn').click();
+
+  const bars = page.locator('[data-world-construction-progress]:visible');
+  await expect(bars).toHaveCount(2);
+  await expect(bars.nth(0)).toContainText('강화 중');
+  await expect(bars.nth(1)).toContainText('강화 중');
+  expect(await page.evaluate(() => window.__GAME_STATE__.grid.slice(0, 2).map((cell) => cell.project))).toMatchObject([
+    { kind: 'upgrade', fromLevel: 1, toLevel: 2, durationDays: 8 },
+    { kind: 'upgrade', fromLevel: 2, toLevel: 3, durationDays: 15 },
+  ]);
 });

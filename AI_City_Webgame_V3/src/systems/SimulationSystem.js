@@ -1,4 +1,4 @@
-import { SIMULATION } from '../core/Constants.js';
+import { GRID_RESERVE_RULES, SIMULATION } from '../core/Constants.js';
 import { createHexCoordinates } from './HexGridSystem.js';
 import { calendarAtElapsedDay } from './CalendarSystem.js';
 import { roundCredits } from '../core/Money.js';
@@ -47,7 +47,7 @@ export function createDaySettler({
       tickIndex: state.tickIndex,
       heatwave: state.climateAlert === 'extreme_heat',
       additionalDemandByIndex,
-      batteryReserveUnlocked: state.claimedQuestIds?.has?.('storage-hub') === true,
+      batteryReserveUnlocked: state.claimedQuestIds?.has?.(GRID_RESERVE_RULES.BATTERY_SUBSTITUTE_QUEST_ID) === true,
       modifierContext,
     });
     Object.entries(power.nextBatteries).forEach(([index, stored]) => {
@@ -77,6 +77,8 @@ export function createDaySettler({
       lowCarbonPercent: power.lowCarbonPercent,
       lowCarbonDelivered: power.lowCarbonDelivered,
       lowCarbonSurplus: power.lowCarbonSurplus,
+      generationAvailable: power.generationAvailable,
+      generationAvailableByIndex: power.generationAvailableByIndex,
       deliveredPower: power.delivered,
       demand: power.demand,
       capacity: economy.labor.capacity,

@@ -1,9 +1,10 @@
-import { QUESTS } from '../core/QuestDefinitions.js';
+import { QUESTS, questForState } from '../core/QuestDefinitions.js';
 import { QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
 import { isOperationalCell } from './ConstructionProjectSystem.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import {
   claimClimateQuest,
   currentClimateQuestEvaluation,
@@ -25,22 +26,28 @@ export function evaluateCurrentQuest(state) {
   let ready = state.questStatus === 'ready_to_claim';
   if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
   if (state.questIndex === 3) ready = facilities(state, 'green').length >= 1;
+  if (state.questIndex === 7) {
+    const researchId = state.expansion?.firstChoice === 'west' ? 'wind2' : 'solar2';
+    ready = state.research.completedIds.has(researchId);
+  }
+  if (state.questIndex === 8) ready = state.research.completedIds.has('smartGrid')
+    && state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2);
   if (ready) {
     state.questStatus = 'ready_to_claim';
-    if (!wasReady) eventBus.emit(Events.QUEST_READY, { quest: QUESTS[state.questIndex - 1] });
+    if (!wasReady) eventBus.emit(Events.QUEST_READY, { quest: questForState(state) });
   }
-  return { ready, quest: QUESTS[state.questIndex - 1], progress: state.questProgress };
+  return { ready, quest: questForState(state), progress: state.questProgress };
 }
 
 function stageForQuest(questIndex) {
   if (questIndex <= 5) return STAGES.EXECUTION;
-  if (questIndex <= 14) return STAGES.REDESIGN;
+  if (questIndex < CAMPAIGN_QUEST_INDEXES.FINAL_TEST) return STAGES.REDESIGN;
   return STAGES.REPORT;
 }
 
 export function claimCurrentQuest(state) {
   if (isClimateQuestActive(state)) return claimClimateQuest(state);
-  const quest = QUESTS[state.questIndex - 1];
+  const quest = questForState(state);
   if (!quest) return { ok: false, reason: 'not_ready' };
   if (state.claimedQuestIds.has(quest.id)) return { ok: false, reason: 'already_claimed' };
   if (state.questStatus !== 'ready_to_claim') return { ok: false, reason: 'not_ready' };
@@ -49,12 +56,15 @@ export function claimCurrentQuest(state) {
   state.progression.tutorialQuestStatus = 'complete';
   state.credits = roundCredits(state.credits + quest.reward.credits);
   quest.reward.unlockFacilities.forEach((facility) => state.unlockedFacilities.add(facility));
+  if (quest.reward.upgradePermitLevel) {
+    state.upgradePermitLevel = Math.max(state.upgradePermitLevel, quest.reward.upgradePermitLevel);
+  }
   if (state.questIndex === 4) {
     state.firstCitySnapshot = state.grid.map((cell) => (cell ? { ...cell } : null));
     state.baseline = { ...(state.metrics || {}), ...(state.lastTickSummary || {}) };
   }
   if (state.questIndex === 4) state.researchMenuUnlocked = true;
-  if (state.questIndex === 15) {
+  if (state.questIndex === CAMPAIGN_QUEST_INDEXES.FINAL_TEST) {
     state.campaignComplete = true;
     state.questStatus = 'claimed';
     const result = { ok: true, credits: quest.reward.credits, unlockedFacility: null, unlockedFacilities: [], nextQuest: null, campaignComplete: true };
@@ -65,20 +75,35 @@ export function claimCurrentQuest(state) {
   state.questStatus = 'active';
   state.questProgress = {};
   state.stage = stageForQuest(state.questIndex);
-  if (state.questIndex === 12) state.climateAlert = 'extreme_heat';
-  if (quest.index === 12) state.climateAlert = 'normal';
   const result = {
     ok: true,
     credits: quest.reward.credits,
     unlockedFacility: quest.reward.unlockFacility,
     unlockedFacilities: [...quest.reward.unlockFacilities],
+    unlockedResearch: [...(quest.reward.unlockResearch || [])],
+    upgradePermitLevel: quest.reward.upgradePermitLevel || null,
+    upgradePermitFacilities: [...(quest.reward.upgradePermitFacilities || [])],
     nextQuest: state.questIndex,
     expandGrid: quest.index === 6,
+    expandSecondGrid: quest.index === 8 && state.expansion?.phase === 1,
+    secondExpansionSide: quest.index === 8 && state.expansion?.phase === 1
+      ? state.expansion.firstChoice === 'east' ? 'west' : 'east'
+      : null,
   };
   if (quest.index === 6) {
-    state.progression.chapter = 3;
+    state.progression.chapter = 2;
     state.progression.objectiveSetId = null;
     state.progression.objectiveProgress = {};
+    state.climateCampaign = {
+      ...state.climateCampaign,
+      status: 'locked',
+      eventType: null,
+      scheduledEventId: null,
+      progress: {},
+      lastResult: null,
+    };
+  } else if (quest.index === CAMPAIGN_QUEST_INDEXES.PREPARATION_END) {
+    state.progression.chapter = 3;
     state.climateCampaign = {
       ...state.climateCampaign,
       status: 'briefing',
@@ -127,6 +152,17 @@ export function applySimulationQuestProgress(state, summary) {
       const baselineWater = Number.isFinite(state.baseline?.dailyWater)
         ? state.baseline.dailyWater
         : summary.dailyWater;
+      // Q4의 기준 수치는 핵발전이 해금되기 전에 저장된다. Q5에서 필수로 추가한
+      // 핵발전의 물 사용까지 그대로 비교하면, 냉각이 핵발전과도 맞닿는 두 방향만
+      // 우연히 통과한다. Q6은 데이터센터 물순환을 검증하므로 새 핵발전 몫을 제외한
+      // 동일 기준 도시끼리 비교한다.
+      const nuclearWater = Object.entries(summary.facilityEnvironment || {})
+        .reduce((total, [index, environment]) => (
+          isOperationalCell(state.grid[Number(index)]) && state.grid[Number(index)].type === 'nuclear'
+            ? total + (Number(environment?.water) || 0)
+            : total
+        ), 0);
+      const comparableDailyWater = summary.dailyWater - nuclearWater;
       condition = state.grid.some((cell, dataIndex) => isOperationalCell(cell) && cell.type === 'data'
         && (summary.facilityPower?.[dataIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
         && neighborIndices(dataIndex, createHexCoordinates(state.boardRadius)).some((coolingIndex) => (
@@ -134,25 +170,32 @@ export function applySimulationQuestProgress(state, summary) {
           && state.grid[coolingIndex].type === 'cooling'
           && (summary.facilityPower?.[coolingIndex]?.ratio ?? 0) >= QUEST_REQUIREMENTS.WATER_CYCLE_POWER_RATIO
         )))
-        && summary.dailyWater <= baselineWater;
+        && comparableDailyWater <= baselineWater;
       break;
     }
     case 7:
-      condition = summary.lowCarbonPercent >= QUEST_REQUIREMENTS.FIRST_SOLAR_LOW_CARBON_PERCENT
+    case 8:
+      return evaluateCurrentQuest(state);
+    case 9:
+      {
+        const type = state.expansion?.firstChoice === 'west' ? 'solar' : 'wind';
+        condition = state.research.completedIds.has(`${type}2`)
         && (summary.routes || []).some((route) => (
-          state.grid[route.from]?.type === 'solar' && route.delivered > 0
+          isOperationalCell(state.grid[route.from])
+          && state.grid[route.from].type === type
+          && Number(route.delivered) >= 0.1
+        ));
+      }
+      break;
+    case 10:
+      condition = state.research.completedIds.has('tidal1')
+        && facilities(state, 'tidal').length > 0
+        && (summary.routes || []).some((route) => (
+          isOperationalCell(state.grid[route.from])
+          && state.grid[route.from].type === 'tidal'
+          && Number(route.delivered) >= 0.1
         ));
       break;
-    case 9: {
-      const delivered = (summary.routes || [])
-        .filter((route) => route.kind === 'battery' && (route.lowCarbonDelivered > 0 || ['solar', 'wind'].includes(state.grid[route.from]?.type)))
-        .reduce((sum, route) => sum + (route.lowCarbonDelivered ?? route.delivered), 0);
-      condition = delivered > 0;
-      state.questProgress.hubEnergy = condition
-        ? Math.round(((state.questProgress.hubEnergy || 0) + delivered) * 100) / 100
-        : 0;
-      break;
-    }
     case 11:
       condition = summary.netCredits > 0 && state.grid.some((cell, index) => isOperationalCell(cell) && cell.type === 'residential' && hasAdjacent(state, index, new Set(['green'])));
       break;
@@ -178,20 +221,17 @@ export function applySimulationQuestProgress(state, summary) {
       return evaluateCurrentQuest(state);
   }
   state.questProgress.consecutiveDays = condition ? (state.questProgress.consecutiveDays || 0) + 1 : 0;
-  if ([2, 4, 5, 6, 7].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_DAYS;
-  if (state.questIndex === 14) required = 4;
-  const ready = state.questIndex === 9
-    ? state.questProgress.consecutiveDays >= 3 && state.questProgress.hubEnergy >= 8
-    : state.questProgress.consecutiveDays >= required;
+  if ([2, 4, 5, 6, 9, 10].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_DAYS;
+  const ready = state.questProgress.consecutiveDays >= required;
   if (ready && state.questStatus !== 'ready_to_claim') {
     state.questStatus = 'ready_to_claim';
-    eventBus.emit(Events.QUEST_READY, { quest: QUESTS[state.questIndex - 1] });
+    eventBus.emit(Events.QUEST_READY, { quest: questForState(state) });
   }
   return evaluateCurrentQuest(state);
 }
 
 export function markQuestQuizResult(state, passed) {
-  if (passed && state.questIndex === 15) state.questStatus = 'ready_to_claim';
+  if (passed && state.questIndex === CAMPAIGN_QUEST_INDEXES.FINAL_TEST) state.questStatus = 'ready_to_claim';
   return evaluateCurrentQuest(state);
 }
 

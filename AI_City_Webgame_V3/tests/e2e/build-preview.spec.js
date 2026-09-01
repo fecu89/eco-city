@@ -31,67 +31,86 @@ for (const viewport of [
   await expect(page.locator('#buildConfirmMetrics [data-metric]')).toHaveCount(5);
   await expect(page.locator('#buildConfirmMetrics [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
     .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
-  await expect(page.locator('#buildConfirmMetrics [data-metric="credit"]')).toContainText('/h');
+  await expect(page.locator('#buildConfirmMetrics [data-metric="credit"]')).toContainText('/일');
   await expect(page.locator('#buildConfirmMetrics [data-metric="credit"] small')).toHaveText('도시 순수익');
   await expect(page.locator('#buildConfirmMetrics [data-metric="carbon"]')).toContainText('CO₂');
-  await expect(page.locator('#buildConfirmMetrics [data-metric="labor"]')).toContainText('0/10');
-  await expect(page.locator('#buildForecastTimeline')).toContainText('5시간');
+  await expect(page.locator('#buildConfirmMetrics [data-metric="labor"]')).toContainText('0/6');
+  await expect(page.locator('#buildForecastTimeline')).toContainText('5일');
   await expect(page.locator('#buildForecastTimeline')).toContainText('주거지');
+  await expect(page.locator('#confirmBuildBtn')).toBeVisible();
   await page.locator('#confirmBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
   await expect(page.locator('#buildConfirm')).toBeHidden();
+  await expect(page.locator('#confirmBuildBtn')).toBeHidden();
 });
 
-test('mixed facilities stay uncommitted until one atomic batch confirmation', async ({ gamePage: page }) => {
+test('confirming a build disarms placement until a facility is picked again', async ({ gamePage: page }) => {
+  await openBuild(page);
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
+
+  const canvas = page.locator('.city-scene-3d-canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  expect(await page.evaluate(() => window.__getCityRendererStats().ghostVisible)).toBe(false);
+
+  await page.evaluate(() => window.__clickCell(1));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+  expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(1);
+
+  await page.locator('[data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(1));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
+    { index: 1, type: 'residential' },
+  ]);
+});
+
+test('only one facility can be pending at a time; a second location is ignored until the first is resolved', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
     window.__setTimeScale(0);
     state.questIndex = 5;
     state.credits = 30;
-    state.unlockedFacilities.add('factory');
     window.__refreshGameForTest();
   });
   await openBuild(page);
   await page.evaluate(() => window.__clickCell(0));
-  await page.locator('[data-facility="factory"]').click();
   await page.evaluate(() => window.__clickCell(1));
 
-  await expect(page.locator('#buildConfirmText')).toContainText('계획 2개');
-  await expect(page.locator('#buildPlanCost')).toHaveText('6.00 💰');
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
     { index: 0, type: 'residential' },
-    { index: 1, type: 'factory' },
   ]);
-  expect(await page.evaluate(() => JSON.parse(window.render_game_to_text()).constructionPlan)).toEqual([
-    { index: 0, type: 'residential' },
-    { index: 1, type: 'factory' },
-  ]);
+  await expect(page.locator('.toast')).toBeVisible();
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
 
   await page.locator('#confirmBuildBtn').click();
-  await expect(page.locator('#modalCard')).toContainText('건설 계획 2개');
-  expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
-  await page.locator('#confirmRiskyBuild').click();
-  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(2);
-  expect(await page.evaluate(() => window.__GAME_STATE__.credits)).toBe(24);
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+
+  await page.locator('[data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(1));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
+    { index: 1, type: 'residential' },
+  ]);
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(2);
 });
 
-test('clicking a planned tile replaces its type and clicking that type again removes it', async ({ gamePage: page }) => {
-  await page.evaluate(() => {
-    window.__GAME_STATE__.questIndex = 5;
-    window.__GAME_STATE__.unlockedFacilities.add('factory');
-    window.__refreshGameForTest();
-  });
+test('picking a facility collapses the build list, and clicking the pending tile again cancels it', async ({ gamePage: page }) => {
   await openBuild(page);
+  await expect(page.locator('#facilityDock')).toBeVisible();
+
   await page.evaluate(() => window.__clickCell(0));
-  await page.locator('[data-facility="factory"]').click();
-  await page.evaluate(() => window.__clickCell(0));
-  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 0, type: 'factory' }]);
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 0, type: 'residential' }]);
+  await expect(page.locator('#facilityDock')).toBeHidden();
+  await expect(page.locator('#buildPanel')).toBeHidden();
 
   await page.evaluate(() => window.__clickCell(0));
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
   await expect(page.locator('#buildConfirm')).toBeHidden();
+  await expect(page.locator('#facilityDock')).toBeVisible();
+  await expect(page.locator('#buildPanel')).toBeVisible();
 });
 
 test('closing the build panel clears the uncommitted construction plan', async ({ gamePage: page }) => {
@@ -103,68 +122,69 @@ test('closing the build panel clears the uncommitted construction plan', async (
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
 });
 
-test('aggregate cost disables atomic confirmation without partially building', async ({ gamePage: page }) => {
+test('insufficient credits disables confirmation without building', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
     state.questIndex = 5;
-    state.credits = 5;
-    state.unlockedFacilities.add('factory');
+    state.credits = 1;
     window.__refreshGameForTest();
   });
   await openBuild(page);
   await page.evaluate(() => window.__clickCell(0));
-  await page.locator('[data-facility="factory"]').click();
-  await page.evaluate(() => window.__clickCell(1));
-  await expect(page.locator('#buildPlanError')).toContainText('1.00 💰');
+  await expect(page.locator('#buildPlanError')).toContainText('💰');
   await expect(page.locator('#confirmBuildBtn')).toBeDisabled();
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
 });
 
-test('clicking beyond the facility permit never adds an invalid virtual placement', async ({ gamePage: page }) => {
+test('facility permit blocks placement once the quest limit is reached', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__GAME_STATE__.credits = 30;
     window.__refreshGameForTest();
   });
   await openBuild(page);
-  await page.evaluate(() => {
-    window.__clickCell(0);
-    window.__clickCell(1);
-    window.__clickCell(2);
-  });
 
-  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
-    { index: 0, type: 'residential' },
-    { index: 1, type: 'residential' },
-  ]);
-  await expect(page.locator('#buildConfirmText')).toContainText('계획 2개');
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
+
+  await page.locator('[data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(1));
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(2);
+
+  // 이제 주거지 허가 한도(2/2)에 도달했으므로, 독 카드 자체가 비활성화되어 재선택을 막는다.
+  await page.evaluate(() => document.querySelector('[data-facility="residential"]').click());
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
   await expect(page.locator('.toast', { hasText: '허가' })).toBeVisible();
-  expect(await page.evaluate(() => window.__getCityRendererStats().planGhostCount)).toBe(2);
 });
 
-test('mixed plan ghosts reuse preallocated GPU layers and disappear on cancel', async ({ gamePage: page }) => {
+test('plan ghost reuses preallocated GPU layers across sequential placements and disappears on cancel', async ({ gamePage: page }) => {
   await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
     state.questIndex = 5;
     state.credits = 30;
     state.unlockedFacilities.add('factory');
-    state.unlockedFacilities.add('thermal');
     window.__refreshGameForTest();
   });
   await openBuild(page);
   const before = await page.evaluate(() => window.__getCityRendererStats());
+
   await page.evaluate(() => window.__clickCell(0));
+  let stats = await page.evaluate(() => window.__getCityRendererStats());
+  expect(stats.planGhostCount).toBe(1);
+  expect(stats.planGhostTypes).toEqual(['residential']);
+
+  await page.locator('#cancelBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__getCityRendererStats().planGhostCount)).toBe(0);
+
   await page.locator('[data-facility="factory"]').click();
   await page.evaluate(() => window.__clickCell(1));
-  await page.locator('[data-facility="thermal"]').click();
-  await page.evaluate(() => window.__clickCell(2));
-
-  const planned = await page.evaluate(() => window.__getCityRendererStats());
-  expect(planned.planGhostCount).toBe(3);
-  expect(planned.planGhostTypes).toEqual(['factory', 'residential', 'thermal']);
-  expect(planned.planGhostLayerCount).toBe(11);
-  expect(planned.resourceRevision).toBe(before.resourceRevision);
-  expect(planned.geometryCount).toBe(before.geometryCount);
+  stats = await page.evaluate(() => window.__getCityRendererStats());
+  expect(stats.planGhostCount).toBe(1);
+  expect(stats.planGhostTypes).toEqual(['factory']);
+  expect(stats.resourceRevision).toBe(before.resourceRevision);
+  expect(stats.geometryCount).toBe(before.geometryCount);
 
   await page.locator('#cancelBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__getCityRendererStats().planGhostCount)).toBe(0);

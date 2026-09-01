@@ -46,7 +46,7 @@ export const CLIMATE_EVENT_DEFINITIONS = Object.freeze({
     icon: 'cloud-rain-wind',
     durationDays: 6,
     description: '일조량이 급감하는 대신 풍력 출력은 소폭 상승합니다.',
-    preparation: '배터리를 충전하고 태양광을 대신할 발전원을 확보하세요.',
+    preparation: '배터리 예비력 8E를 유지하거나 실제 방전 4E를 확보하고 태양광을 대신할 발전원을 준비하세요.',
     facilityModifiers: {
       solar: { supply: 0.4 },
       wind: { supply: 1.15 },
@@ -136,12 +136,14 @@ const reward = ({
   unlockFacilities = [],
   unlockResearch = [],
   upgradePermitLevel = null,
+  upgradePermitFacilities = [],
   stressTest = false,
 }) => Object.freeze({
   credits,
   unlockFacilities: Object.freeze([...unlockFacilities]),
   unlockResearch: Object.freeze([...unlockResearch]),
   upgradePermitLevel,
+  upgradePermitFacilities: Object.freeze([...upgradePermitFacilities]),
   stressTest,
 });
 
@@ -156,6 +158,7 @@ const climateQuest = ({
   targetDays = 4,
   carbonTarget = null,
   batteryTarget = null,
+  batteryReserveTarget = null,
   generationTypeTarget = null,
   tidalEnergyTarget = null,
   entry = null,
@@ -172,38 +175,40 @@ const climateQuest = ({
   targetDays,
   carbonTarget,
   batteryTarget,
+  batteryReserveTarget,
   generationTypeTarget,
   tidalEnergyTarget,
   entry: entry ? Object.freeze({ ...entry }) : null,
   reward: reward(questReward),
 });
 
-export const CLIMATE_QUEST_ORDER = Object.freeze([7, 8, 9, 10, 11, 12, 13, 14]);
+export const CLIMATE_QUEST_ORDER = Object.freeze([11, 12, 13, 14, 15, 16, 17, 18]);
 
 export const CLIMATE_QUESTS = Object.freeze({
-  7: climateQuest({
-    index: 7,
+  11: climateQuest({
+    index: 11,
     id: 'extreme-heat',
     title: '폭염 경보',
     goal: '폭염 중 필수시설 전력 공급률 90% 이상을 4일 연속 유지하세요.',
     details: ['24일 예보 동안 배터리와 주거 전력 우선순위를 준비하세요.', '폭염 활성 기간에만 연속 일수가 누적됩니다.'],
     eventType: 'heatwave',
     objective: 'essential',
-    questReward: { credits: 8, unlockFacilities: ['battery'], unlockResearch: ['green2'], upgradePermitLevel: 2 },
+    questReward: { credits: 8, unlockResearch: ['green2'], upgradePermitFacilities: ['solar', 'tidal'] },
   }),
-  8: climateQuest({
-    index: 8,
+  12: climateQuest({
+    index: 12,
     id: 'monsoon-response',
     title: '장마와 집중호우',
-    goal: '필수시설 전력 90%를 4일 유지하고 배터리에서 누적 4E를 공급하세요.',
-    details: ['장마에는 태양광 출력이 크게 감소합니다.', '배터리의 실제 방전량만 누적 목표에 포함됩니다.'],
+    goal: '필수시설 전력 90%를 4일 유지하고 배터리 방전 4E 또는 예비전력 8E를 확보하세요.',
+    details: ['장마에는 태양광 출력이 크게 감소합니다.', '실제 방전 4E와 장마 기간 최저 예비전력 8E 중 하나를 만족하면 됩니다.'],
     eventType: 'monsoon',
     objective: 'battery',
     batteryTarget: 4,
-    questReward: { credits: 8, unlockFacilities: ['wind'] },
+    batteryReserveTarget: 8,
+    questReward: { credits: 8, unlockResearch: ['green3'], upgradePermitLevel: 3 },
   }),
-  9: climateQuest({
-    index: 9,
+  13: climateQuest({
+    index: 13,
     id: 'typhoon-safe-operation',
     title: '태풍 안전운전',
     goal: '필수시설 전력 90%와 실제 공급 발전원 2종을 같은 날 4일 유지하세요.',
@@ -213,8 +218,8 @@ export const CLIMATE_QUESTS = Object.freeze({
     generationTypeTarget: 2,
     questReward: { credits: 10 },
   }),
-  10: climateQuest({
-    index: 10,
+  14: climateQuest({
+    index: 14,
     id: 'cold-wave-resilience',
     title: '폭설과 한파',
     goal: '주거 전력 90% 이상과 도시 흑자를 4일 연속 유지하세요.',
@@ -223,8 +228,8 @@ export const CLIMATE_QUESTS = Object.freeze({
     objective: 'winter',
     questReward: { credits: 10 },
   }),
-  11: climateQuest({
-    index: 11,
+  15: climateQuest({
+    index: 15,
     id: 'drought-emergency',
     title: '가뭄 비상운영',
     goal: '물 제한을 지키며 데이터센터와 핵발전 전력 90%를 4일 유지하세요.',
@@ -233,8 +238,8 @@ export const CLIMATE_QUESTS = Object.freeze({
     objective: 'water',
     questReward: { credits: 10 },
   }),
-  12: climateQuest({
-    index: 12,
+  16: climateQuest({
+    index: 16,
     id: 'stagnant-air',
     title: '무풍과 미세먼지',
     goal: 'CO₂ 8/일 이하와 필수시설 전력 90%를 4일 연속 유지하세요.',
@@ -242,10 +247,10 @@ export const CLIMATE_QUESTS = Object.freeze({
     eventType: 'stagnantAir',
     objective: 'cleanAir',
     carbonTarget: 8,
-    questReward: { credits: 12, unlockResearch: ['tidal1'] },
+    questReward: { credits: 12 },
   }),
-  13: climateQuest({
-    index: 13,
+  17: climateQuest({
+    index: 17,
     id: 'dry-wildfire',
     title: '산불과 건조',
     goal: 'CO₂ 8/일 이하와 양의 순수익을 4일 연속 유지하세요.',
@@ -253,10 +258,10 @@ export const CLIMATE_QUESTS = Object.freeze({
     eventType: 'dryWildfire',
     objective: 'wildfire',
     carbonTarget: 8,
-    questReward: { credits: 12, unlockResearch: ['green3'], upgradePermitLevel: 3 },
+    questReward: { credits: 12 },
   }),
-  14: climateQuest({
-    index: 14,
+  18: climateQuest({
+    index: 18,
     id: 'storm-surge',
     title: '폭풍해일',
     goal: '조력발전으로 누적 8E를 공급하며 필수시설 전력 90%를 4일 유지하세요.',

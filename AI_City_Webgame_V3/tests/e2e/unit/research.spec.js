@@ -127,10 +127,30 @@ test('every research finishes within three real minutes at 1x speed', () => {
   expect(Math.max(...Object.values(RESEARCH).map((item) => item.durationDays))).toBe(180);
 });
 
+test('green level-three research is available after the monsoon quest so every upgrade path is open by quest thirteen', () => {
+  const state = stateWithDataCenter({ credits: 100 });
+  state.questIndex = 12;
+  state.unlockedFacilities.add('green');
+  state.research.completedIds.add('green2');
+  state.research.techLevels.green = 2;
+
+  expect(listResearchAvailability(state).find(({ id }) => id === 'green3')).toMatchObject({
+    available: false,
+    reasonCodes: ['quest:monsoon-response'],
+  });
+
+  state.questIndex = 13;
+  state.claimedQuestIds.add('monsoon-response');
+  expect(listResearchAvailability(state).find(({ id }) => id === 'green3')).toMatchObject({
+    available: true,
+    reasonCodes: [],
+  });
+});
+
 test('tidal research accepts either generation branch and legacy capstone is not listed', () => {
   const state = stateWithDataCenter({ credits: 100 });
   state.research.completedIds.add('wind2');
-  state.claimedQuestIds.add('stagnant-air');
+  state.claimedQuestIds.add('wind-pilot-grid');
   const availability = listResearchAvailability(state);
   expect(availability.find(({ id }) => id === 'tidal1')).toMatchObject({ available: true, reasonCodes: [] });
   expect(availability.some(({ id }) => id === 'renewable3')).toBe(false);
@@ -156,9 +176,9 @@ test('tidal research remains quest-locked even when its technology prerequisite 
   state.research.completedIds.add('wind2');
   expect(listResearchAvailability(state).find(({ id }) => id === 'tidal1')).toMatchObject({
     available: false,
-    reasonCodes: ['quest:stagnant-air'],
+    reasonCodes: ['quest:wind-pilot-grid'],
   });
-  state.claimedQuestIds.add('stagnant-air');
+  state.claimedQuestIds.add('wind-pilot-grid');
   expect(listResearchAvailability(state).find(({ id }) => id === 'tidal1')).toMatchObject({
     available: true,
     reasonCodes: [],

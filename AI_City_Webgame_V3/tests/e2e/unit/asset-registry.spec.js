@@ -85,39 +85,23 @@ test('manual acquisitions remain available beside repeatable automatic downloads
   ]);
 });
 
-test('approved selection is unique and keeps only 45 representative runtime GLBs', async () => {
+test('approved selection is unique and keeps only 52 representative runtime GLBs', async () => {
   const selection = JSON.parse(await readFile(new URL('../../../assets-source/selection.json', import.meta.url), 'utf8'));
-  expect(selection.models).toHaveLength(45);
-  expect(new Set(selection.models.map((item) => item.id)).size).toBe(45);
-  expect(new Set(selection.models.map((item) => item.target)).size).toBe(45);
+  expect(selection.models).toHaveLength(52);
+  expect(new Set(selection.models.map((item) => item.id)).size).toBe(52);
+  expect(new Set(selection.models.map((item) => item.target)).size).toBe(52);
   expect(selection.models.every((item) => item.target.endsWith('.glb'))).toBe(true);
-  expect(selection.models.filter((item) => item.id.startsWith('energy.')).map((item) => item.id)).toEqual([
-    'energy.solarSmall',
-    'energy.solarLarge',
-    'energy.windBase',
-  ]);
+  // Quaternius의 energy.* 에셋(태양광·풍력 자리표시자)은 태양광·풍력이 각각 industrial
+  // 2.0 kit 모델로 옮겨가며 더 이상 어떤 시설에도 쓰이지 않아 완전히 정리했다.
+  expect(selection.models.some((item) => item.id.startsWith('energy.'))).toBe(false);
 });
 
-test('converted energy assets retain hashes for their original source files', async () => {
-  const selected = JSON.parse(await readFile(new URL('../../../assets-source/selected.json', import.meta.url), 'utf8'));
-  const energy = selected.models.filter((item) => item.id.startsWith('energy.'));
-  expect(energy).toHaveLength(3);
-  expect(energy.flatMap((item) => item.originals.map((original) => original.member))).toEqual([
-    'Original/Environment/GLTF/SolarPanel_Ground.gltf',
-    'Original/Environment/GLTF/SolarPanel_Structure.gltf',
-    'Original/OBJ/Windmill.obj',
-    'Original/OBJ/Windmill.mtl',
-  ]);
-  expect(energy.flatMap((item) => item.originals).every((original) => (
-    original.bytes > 0 && /^[a-f0-9]{64}$/.test(original.sha256)
-  ))).toBe(true);
-});
-
-test('selected wind model stays lightweight enough for repeated mobile instances', async () => {
+test('selected wind models stay lightweight enough for repeated mobile instances', async () => {
   const report = JSON.parse(await readFile(new URL('../../../assets-source/ASSET_REPORT.json', import.meta.url), 'utf8'));
-  const wind = report.models.find((item) => item.id === 'energy.windBase');
-  expect(wind.stats.triangles).toBeLessThanOrEqual(800);
-  expect(wind.stats.bytes).toBeLessThan(50 * 1024);
+  for (const id of ['industrial.windmillLow', 'industrial.windmill']) {
+    const wind = report.models.find((item) => item.id === id);
+    expect(wind.stats.bytes).toBeLessThan(50 * 1024);
+  }
 });
 
 test('detects external texture references embedded in a GLB JSON chunk', () => {
@@ -167,22 +151,10 @@ test('static web-game copies remove unused source animations explicitly', () => 
 
 test('runtime registry exposes selected GLBs while keeping only birds procedural', () => {
   const assets = flattenAssets();
-  expect(assets.filter((asset) => asset.path)).toHaveLength(45);
+  expect(assets.filter((asset) => asset.path)).toHaveLength(52);
   expect(getAsset('terrain.hexGrass')).toMatchObject({ phase: 'critical', license: 'CC0-1.0' });
-  expect(getAsset('energy.solarSmall')).toMatchObject({
-    kind: 'glb',
-    path: '/assets/buildings/energy/solar-small.glb',
-    fallback: 'solar',
-  });
-  expect(getAsset('energy.solarLarge')).toMatchObject({
-    kind: 'glb',
-    path: '/assets/buildings/energy/solar-large.glb',
-  });
-  expect(getAsset('energy.windBase')).toMatchObject({
-    kind: 'glb',
-    path: '/assets/buildings/energy/wind-turbine.glb',
-    fallback: 'wind',
-  });
+  expect(() => getAsset('energy.solarSmall')).toThrow();
+  expect(() => getAsset('energy.windBase')).toThrow();
   expect(assetIdsByPhase('critical')).toEqual(expect.arrayContaining([
     'terrain.hexGrass',
     'residential.house1',
@@ -208,15 +180,37 @@ test('runtime registry exposes the selected Kenney coastline set', () => {
 
 test('factory and thermal generation use different selected Kenney silhouettes', () => {
   expect(FACILITY_ASSET_IDS.factory[0]).toBe('industrial.factorySmall');
-  expect(FACILITY_ASSET_IDS.thermal[0]).toBe('industrial.chimney');
+  expect(FACILITY_ASSET_IDS.thermal[0]).toBe('industrial.thermalSmall');
   expect(FACILITY_ASSET_IDS.thermal[0]).not.toBe(FACILITY_ASSET_IDS.factory[0]);
 });
 
-test('factory-small is sourced from the pipe-and-stack Kenney building', async () => {
+test('facilities with a real per-level model swap resolve a distinct GLB for every level', () => {
+  const levelSwapTypes = ['thermal', 'nuclear', 'solar', 'data', 'residential', 'tidal'];
+  for (const type of levelSwapTypes) {
+    const ids = FACILITY_ASSET_IDS[type];
+    expect(new Set(ids).size).toBe(3);
+    ids.forEach((assetId) => expect(getAsset(assetId).kind).toBe('glb'));
+  }
+  // 순환냉각·풍력은 1·2단계가 같은 모델을 스케일만 다르게 쓰고, 3단계만 실제로 바뀐다.
+  for (const type of ['cooling', 'wind']) {
+    expect(FACILITY_ASSET_IDS[type][0]).toBe(FACILITY_ASSET_IDS[type][1]);
+    expect(FACILITY_ASSET_IDS[type][2]).not.toBe(FACILITY_ASSET_IDS[type][0]);
+    expect(getAsset(FACILITY_ASSET_IDS[type][2]).kind).toBe('glb');
+  }
+  // 공장·에너지저장·녹지는 단일 모델을 스케일만 다르게 쓴다(에너지저장은 building-p/t/q
+  // 레벨 스왑으로 갔다가 다시 shipping-container-b 단일 모델로 돌아왔다).
+  for (const type of ['factory', 'battery', 'green']) {
+    expect(new Set(FACILITY_ASSET_IDS[type]).size).toBe(1);
+  }
+});
+
+test('factory uses a single building-s Kenney model shared across every level', async () => {
   const selection = JSON.parse(await readFile(new URL('../../../assets-source/selection.json', import.meta.url), 'utf8'));
   expect(selection.models.find((item) => item.id === 'industrial.factorySmall')).toMatchObject({
-    member: 'Models/GLB format/building-b.glb',
+    source: 'kenney-industrial2',
+    member: 'Models/GLB format/building-s.glb',
   });
+  expect(new Set(FACILITY_ASSET_IDS.factory)).toEqual(new Set(['industrial.factorySmall']));
 });
 
 test('asset loader caches one URL promise and preserves every primitive', async () => {
@@ -297,15 +291,19 @@ test('asset loader records a failure without poisoning the procedural bird fallb
   await expect(loader.loadAsset('animals.birds')).resolves.toBeNull();
 });
 
-test('license ledger records every used pack and completed energy import', async () => {
+test('license ledger records every currently used pack', async () => {
   const ledger = await readFile(new URL('../../../public/assets/licenses/ASSET_LICENSES.md', import.meta.url), 'utf8');
   for (const pack of [
     'Hexagon Kit', 'City Kit Roads', 'City Kit Suburban', 'City Kit Commercial',
-    'City Kit Industrial', 'Nature Kit', 'Car Kit', 'Blocky Characters',
-    'Ultimate Space Kit', 'Farm Buildings Pack',
+    'City Kit Industrial', 'Nature Kit', 'Car Kit', 'Blocky Characters', 'Space Bits',
   ]) expect(ledger).toContain(pack);
   expect(ledger).toContain('CC0-1.0');
-  expect(ledger).toContain('SolarPanel_Ground.gltf');
-  expect(ledger).toContain('`Windmill.obj`');
   expect(ledger).not.toContain('수동 다운로드 필요');
+});
+
+test('license ledger no longer lists packs that were cleaned up after every referencing facility moved on', async () => {
+  const ledger = await readFile(new URL('../../../public/assets/licenses/ASSET_LICENSES.md', import.meta.url), 'utf8');
+  // 별도 절(##) 표기는 사라져야 하지만, 무엇을 왜 정리했는지 남기는 각주까지 금지하지는 않는다.
+  expect(ledger).not.toContain('## Quaternius — Ultimate Space Kit');
+  expect(ledger).not.toContain('## Quaternius — Farm Buildings Pack');
 });
