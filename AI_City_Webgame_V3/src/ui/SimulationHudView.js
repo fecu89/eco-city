@@ -1,7 +1,7 @@
 import { gameState } from '../core/GameState.js';
 import { CARBON_CRISIS, CITY_FAILURE_RULES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { exactNumberLabel, formatCompactNumber, formatCredits, round1 } from './format.js';
+import { compactMetric, exactNumberLabel, formatCredits, round1 } from './format.js';
 
 let els;
 // #simulationHud 전체를 aria-live로 두면 매 틱 정산 수치가 그대로 읽혀 스크린리더가 폭주한다.
@@ -19,11 +19,6 @@ export function initSimulationHudView(elements) {
       eventBus.emit(Events.HUD_METRIC_CAUSES_REQUESTED, { metric: metric.dataset.metric });
     });
   }
-}
-
-function compactMetric(value) {
-  const numeric = Number(value) || 0;
-  return Math.abs(numeric) >= 1_000 ? formatCompactNumber(numeric) : String(round1(numeric));
 }
 
 function setMetricLabel(element, label, title) {

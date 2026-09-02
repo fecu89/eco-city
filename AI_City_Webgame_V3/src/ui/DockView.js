@@ -1,10 +1,9 @@
 import { ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
-import { facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
+import { facilityBuildAvailability, facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
 import { effectiveFacilityStats } from '../systems/CityModifierSystem.js';
-import { formatCredits } from './format.js';
+import { compactMetric, formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { getFacilityPermit } from '../systems/FacilityPermitSystem.js';
 
 let dockEl = null;
 let detailEl = null;
@@ -24,8 +23,6 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
     detailFacilityKey = null;
   });
 }
-
-const compactMetric = (value) => Number(Number(value || 0).toFixed(2)).toString();
 
 export function facilityPresentation(key) {
   const reference = effectiveFacilityStats({
@@ -78,8 +75,7 @@ function renderFacilityDetail(requestedKey = null) {
   const facility = FACILITIES[key];
   const { money, power, carbon, water, laborText, economyLabel, basisText, reference } = facilityPresentation(key);
   const powerLabel = reference.supply ? '최대 발전' : reference.demand ? '정상 수요' : '전력';
-  const locked = !gameState.unlockedFacilities.has(key)
-    || (key === 'tidal' && (gameState.research.techLevels.tidal || 0) < 1);
+  const locked = !facilityBuildAvailability(gameState, key).unlocked;
   // 이 영역은 호버·포커스뿐 아니라 renderDock()을 타고 매 틱 다시 그려진다.
   // 시설 버튼(아래)과 같은 방식으로 내용이 실제로 달라질 때만 DOM을 교체한다.
   const markup = `
@@ -114,12 +110,8 @@ export function renderDock() {
   const existingButtons = new Map([...dockEl.querySelectorAll('[data-facility]')]
     .map((button) => [button.dataset.facility, button]));
   orderedFacilities().forEach(([key, f]) => {
-    const questLocked = !gameState.unlockedFacilities.has(key);
-    const researchLocked = key === 'tidal' && (gameState.research.techLevels.tidal || 0) < 1;
-    const locked = !gameState.isEditable || questLocked || researchLocked;
-    const unaffordable = gameState.credits < f.cost;
-    const permit = getFacilityPermit(gameState, key, gameState.constructionPlan || []);
-    const permitBlocked = !locked && !permit.ok;
+    const { locked, permit, permitBlocked, affordable, missingCredits } = facilityBuildAvailability(gameState, key, gameState.constructionPlan || []);
+    const unaffordable = !affordable;
     const btn = existingButtons.get(key) || document.createElement('button');
     btn.className = 'facility-btn'
       + (gameState.selectedFacility === key ? ' active' : '')
@@ -133,7 +125,7 @@ export function renderDock() {
       : permitBlocked
         ? `${f.name} — ${permit.message}`
         : unaffordable
-        ? `${f.name} — ${formatCredits(f.cost - gameState.credits)} 부족`
+        ? `${f.name} — ${formatCredits(missingCredits)} 부족`
         : `${f.name} — 보드에서 선택하면 인접 보너스/갈등 구역이 표시됩니다.`;
     const markup = `
       <div class="facility-card-main"><span class="f-icon">${f.icon}</span><span class="facility-card-identity"><strong>${f.name}</strong><span class="cost">-${formatCredits(f.cost)}</span>${!locked ? `<span class="facility-limit" aria-label="현재 ${permit.current}, 계획 ${permit.planned}, 최대 ${permit.limit}">${permit.current}${permit.planned ? ` +${permit.planned}` : ''} / ${permit.limit}</span>` : ''}</span></div>
@@ -145,18 +137,15 @@ export function renderDock() {
       btn.addEventListener('focus', () => renderFacilityDetail(key));
       btn.addEventListener('click', () => {
         renderFacilityDetail(key);
-        const currentLocked = btn.classList.contains('locked');
-        const currentUnaffordable = btn.classList.contains('unaffordable');
-        const currentPermitBlocked = btn.classList.contains('permit-capped');
-        if (currentLocked || currentUnaffordable || currentPermitBlocked) {
-          const currentPermit = getFacilityPermit(gameState, key, gameState.constructionPlan || []);
+        const current = facilityBuildAvailability(gameState, key, gameState.constructionPlan || []);
+        if (current.locked || current.permitBlocked || !current.affordable) {
           eventBus.emit(Events.TOAST_SHOW, {
             title: `${f.name} 건설 불가`,
-            text: currentLocked
+            text: current.locked
               ? facilityUnlockMessage(gameState, key)
-              : currentPermitBlocked
-                ? currentPermit.message
-                : `${formatCredits(f.cost - gameState.credits)}가 더 필요합니다.`,
+              : current.permitBlocked
+                ? current.permit.message
+                : `${formatCredits(current.missingCredits)}가 더 필요합니다.`,
           });
           return;
         }

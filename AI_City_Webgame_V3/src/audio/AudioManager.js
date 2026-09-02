@@ -17,8 +17,9 @@ function ensureContext() {
   return ctx;
 }
 
+// 배경음은 <audio> 엘리먼트라 masterGain을 타지 않는다. 효과음 음소거와 독립적으로 켠다.
 function startAmbientIfReady() {
-  if (ctx && gameState.sound && gameState.musicEnabled) startAmbient(ctx, masterGain);
+  if (ctx && gameState.musicEnabled) startAmbient(ctx, masterGain);
 }
 
 function resumeAndStart() {
@@ -46,16 +47,21 @@ export function initAudioManager() {
     playSfx(ctx, masterGain, name);
   });
 
+  // 효과음 음소거는 효과음만 끈다. 배경음은 #musicBtn이 따로 관리한다.
   eventBus.on(Events.AUDIO_TOGGLE_MUTE, () => {
     gameState.sound = !gameState.sound;
     if (masterGain) masterGain.gain.value = gameState.sound ? 1 : 0;
-    if (!gameState.sound) stopAmbient();
-    else startAmbientIfReady();
   });
 
   // 브라우저 자동재생 정책 — 첫 사용자 입력에서 AudioContext를 시작/재개한다.
+  // 키보드만 쓰는 플레이어도 배경음을 들을 수 있도록 두 입력을 모두 받는다.
   const resume = () => { resumeAndStart(); };
   window.addEventListener('pointerdown', resume, { once: true });
+  window.addEventListener('keydown', resume, { once: true });
+}
+
+export function audioContextState() {
+  return ctx?.state ?? null;
 }
 
 export function toggleMusic() {

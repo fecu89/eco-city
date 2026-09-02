@@ -294,6 +294,38 @@ const PLACEMENT_MESSAGES = Object.freeze({
   insufficient_credits: '건설 크레딧이 부족합니다.',
 });
 
+// 대지와 무관한 시설 자체의 해금 상태. validatePlacement과 독(dock) 카드가 함께 쓴다.
+// 편집 가능 여부(isEditable)는 대지 판정에 속하므로 여기서 따지지 않는다.
+export function facilityLockReason(state, facilityKey) {
+  if (!FACILITIES[facilityKey]) return 'locked_quest';
+  if (facilityKey === 'tidal'
+    && (!state.unlockedFacilities.has('tidal') || (state.research?.techLevels?.tidal || 0) < 1)) {
+    return 'locked_research';
+  }
+  if (!state.unlockedFacilities.has(facilityKey)) return 'locked_quest';
+  return null;
+}
+
+// 아직 대지를 고르지 않은 독(dock) 카드가 묻는 "이 시설을 지금 지을 수 있는가".
+// 비용은 지형 보정 전 기본 건설비로 비교한다 — 대지를 고르면 validatePlacement이 다시 판정한다.
+export function facilityBuildAvailability(state, facilityKey, plan = []) {
+  const lockReason = facilityLockReason(state, facilityKey);
+  const cost = FACILITIES[facilityKey]?.cost || 0;
+  const permit = getFacilityPermit(state, facilityKey, plan);
+  const missingCredits = roundCredits(Math.max(0, cost - state.credits));
+  const unlocked = lockReason == null;
+  const locked = !state.isEditable || !unlocked;
+  return {
+    unlocked,
+    lockReason,
+    locked,
+    permit,
+    permitBlocked: !locked && !permit.ok,
+    affordable: missingCredits === 0,
+    missingCredits,
+  };
+}
+
 export function validatePlacement(state, facilityKey, index, {
   grid = state.grid,
   availableCredits = state.credits,
@@ -303,15 +335,14 @@ export function validatePlacement(state, facilityKey, index, {
 } = {}) {
   const facility = FACILITIES[facilityKey];
   const coords = getBoardCoordinates(state);
+  const lockReason = facilityLockReason(state, facilityKey);
   let reason = null;
   let permit = null;
   if (!state.isEditable) reason = 'not_editable';
   else if (!Number.isInteger(index) || !coords[index]) reason = 'invalid_cell';
   else if (!isExpansionCellActive(state, index)) reason = 'inactive_expansion';
   else if (grid[index]) reason = 'occupied';
-  else if (!facility) reason = 'locked_quest';
-  else if (facilityKey === 'tidal' && (!state.unlockedFacilities.has('tidal') || (state.research?.techLevels?.tidal || 0) < 1)) reason = 'locked_research';
-  else if (!state.unlockedFacilities.has(facilityKey)) reason = 'locked_quest';
+  else if (lockReason) reason = lockReason;
   else if (facility.placement === 'outer_ring' && !isOuterRing(index, coords, state.boardRadius)) reason = 'outer_ring_only';
   else if (!skipPermit && !(permit = getFacilityPermit(state, facilityKey, plan)).ok) reason = permit.reason;
   else {

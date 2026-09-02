@@ -49,6 +49,7 @@ export function activeResearchJobs(state) {
 
 export function listResearchAvailability(state) {
   const jobs = researchJobs(state);
+  const menuUnlocked = Boolean(state.researchMenuUnlocked);
   return Object.values(RESEARCH).map((definition) => {
     const prerequisiteCodes = unmetPrerequisites(state, definition);
     const questCodes = definition.unlockAfterQuestId && !state.claimedQuestIds.has(definition.unlockAfterQuestId)
@@ -60,11 +61,18 @@ export function listResearchAvailability(state) {
       ...groupLabel(definition, prerequisiteCodes.map(prerequisiteLabel)),
       ...questCodes.map(prerequisiteLabel),
     ];
+    const available = !completed && !jobs[definition.id] && reasonCodes.length === 0;
+    const missingCredits = roundCredits(Math.max(0, definition.cost - state.credits));
     return {
       ...definition,
       completed,
       active: Boolean(jobs[definition.id]),
-      available: !completed && !jobs[definition.id] && reasonCodes.length === 0,
+      available,
+      // available은 선행 조건만 본다. 실제로 착수 버튼을 켤 수 있는지는 startable이 답한다.
+      menuUnlocked,
+      affordable: missingCredits === 0,
+      missingCredits,
+      startable: menuUnlocked && available && missingCredits === 0,
       reasonCodes,
       reasonLabels,
     };

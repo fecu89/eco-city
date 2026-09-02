@@ -2,15 +2,17 @@ import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import {
   applySimulationQuestProgress,
+  canRequestEmergencySupport,
   claimCurrentQuest,
   evaluateCurrentQuest,
+  questProgressFraction,
   requestEmergencySupport,
   stageForQuest,
 } from '../../../src/systems/QuestSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
 import { QUESTS } from '../../../src/core/QuestDefinitions.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../../../src/core/CampaignProgression.js';
-import { FACILITIES, STAGES, STRESS_TEST_RULES } from '../../../src/core/Constants.js';
+import { EMERGENCY_SUPPORT, FACILITIES, QUEST_REQUIREMENTS, STAGES, STRESS_TEST_RULES } from '../../../src/core/Constants.js';
 import { validatePlacement } from '../../../src/systems/BoardSystem.js';
 import { assessConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
 import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
@@ -336,4 +338,62 @@ test('emergency support is limited to once per campaign at one credit or less', 
   state.credits = 1;
   expect(requestEmergencySupport(state)).toEqual({ ok: true, credits: 5 });
   expect(requestEmergencySupport(state)).toEqual({ ok: false, reason: 'already_used' });
+});
+
+test('quest progress fraction reports count, research, modernization and day quests on one scale', () => {
+  const countState = new GameState();
+  expect(questProgressFraction(countState)).toBe(0);
+  countState.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+  expect(questProgressFraction(countState)).toBe(0.5);
+
+  const researchState = new GameState();
+  researchState.questIndex = CAMPAIGN_QUEST_INDEXES.PREPARATION_START;
+  researchState.research.jobs.solar2 = {
+    id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 60, status: 'running', paidCost: 10,
+  };
+  expect(questProgressFraction(researchState)).toBe(0.5);
+
+  const modernizationState = new GameState();
+  modernizationState.questIndex = CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST;
+  modernizationState.grid[0] = { type: 'data', level: 2 };
+  expect(questProgressFraction(modernizationState)).toBe(0.5);
+
+  const dayState = new GameState();
+  dayState.questIndex = 2;
+  dayState.questProgress.consecutiveDays = 1;
+  expect(questProgressFraction(dayState)).toBe(1 / QUEST_REQUIREMENTS.OPERATING_DAYS);
+});
+
+test('quest progress fraction is complete once the quest can be claimed', () => {
+  const state = new GameState();
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
+  evaluateCurrentQuest(state);
+  expect(state.questStatus).toBe('ready_to_claim');
+  expect(questProgressFraction(state)).toBe(1);
+});
+
+test('the west branch measures its research quest with the wind study it actually needs', () => {
+  const state = new GameState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.PREPARATION_START;
+  state.expansion.firstChoice = 'west';
+  state.research.jobs.solar2 = {
+    id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 120, status: 'running', paidCost: 10,
+  };
+  expect(questProgressFraction(state)).toBe(0);
+  state.research.jobs.wind2 = {
+    id: 'wind2', dataCenterIndex: 0, elapsedEffectiveDays: 30, status: 'running', paidCost: 10,
+  };
+  expect(questProgressFraction(state)).toBe(0.25);
+});
+
+test('emergency support is offered only while it is still available at the credit floor', () => {
+  const state = new GameState();
+  state.credits = EMERGENCY_SUPPORT.CREDIT_THRESHOLD + 1;
+  expect(canRequestEmergencySupport(state)).toBe(false);
+  state.credits = EMERGENCY_SUPPORT.CREDIT_THRESHOLD;
+  expect(canRequestEmergencySupport(state)).toBe(true);
+  requestEmergencySupport(state);
+  state.credits = EMERGENCY_SUPPORT.CREDIT_THRESHOLD;
+  expect(canRequestEmergencySupport(state)).toBe(false);
 });

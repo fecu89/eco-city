@@ -240,7 +240,7 @@ function metricCauseData(metric) {
     groupedFacilityValues(summary.facilityPower, 'demand').forEach((label) => data.causes.push(`${label}E 수요`));
     data.action = '시설 모드를 절약으로 바꾸거나, 필수시설 우선순위·배터리 정책·발전 여유를 조정하세요.';
   } else if (metric === 'credit') {
-    data.current = `일일 ${gameState.lastSettlementDelta >= 0 ? '+' : ''}${round1(gameState.lastSettlementDelta)} 💰`;
+    data.current = `일일 ${gameState.lastSettlementDelta >= 0 ? '+' : ''}${formatCredits(gameState.lastSettlementDelta)}`;
     groupedFacilityValues(summary.facilityEconomy, 'upkeep').forEach((label) => data.causes.push(`${label} 💰/일 유지비`));
     if (summary.expansionUpkeep > 0) data.causes.push(`확장 대지 ${round1(summary.expansionUpkeep)} 💰/일 유지비`);
     if (summary.health > 0) data.causes.push(`오염 건강비 ${round1(summary.health)} 💰/일`);
@@ -303,8 +303,7 @@ export function openFacilityInspectorModal(index) {
   const investment = investedCost(cell);
   const refund = demolitionRefund(cell);
   const loss = investment - refund;
-  const priorityUnlocked = gameState.questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START
-    || gameState.claimedQuestIds.has('living-neighborhood');
+  const priorityUnlocked = gameState.questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START;
   const positive = spatial.positive.length
     ? spatial.positive.map((item) => `<span class="spatial-tag good">🔗 ${item}</span>`).join('')
     : '<span class="spatial-tag neutral">연결 보너스 없음</span>';
@@ -709,9 +708,11 @@ export function openReportModal() {
   $modal('#finalBonusQuizBtn')?.addEventListener('click', () => eventBus.emit(Events.FINAL_QUIZ_REQUESTED, {}));
 }
 
+const stressTestTotalDays = () => STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
+
 export function openStressTestModal(onStarted = null) {
   const previous = gameState.stressTest.result;
-  const totalDays = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
+  const totalDays = stressTestTotalDays();
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">CHAPTER 4 · FINAL TEST</span><h2>도시 스트레스 테스트</h2></div><button class="icon-btn close-modal" aria-label="닫기"><i data-lucide="x"></i></button></div>
     <p class="expansion-choice-intro">지금까지 만든 도시를 ${totalDays}일 동안 복합 위기에 노출합니다. 도시를 멈추지 않고 운영 결정을 내려 생존시키세요.</p>
@@ -755,11 +756,11 @@ export function openStressResultModal(result, { onReport = null, onClose = null 
       <div class="summary-card"><span>평균 순수익</span><strong>${formatCredits(result.averageNetIncome)}/일</strong></div>
       <div class="summary-card"><span>연속 파산 최대</span><strong>${result.maxConsecutiveBankruptcyDays}일</strong></div>
       <div class="summary-card"><span>배터리 사용</span><strong>${round1(result.batteryEnergyUsed)}E</strong></div>
-      <div class="summary-card"><span>CO₂ 평균</span><strong>${round1(result.averageCarbon)} / 8/일</strong></div>
-      <div class="summary-card"><span>CO₂ 안전일</span><strong>${result.daysAtOrBelowEight} / 41일</strong></div>
-      <div class="summary-card"><span>CO₂ 10 초과</span><strong>${result.daysAboveTen} / 3일</strong></div>
+      <div class="summary-card"><span>CO₂ 평균</span><strong>${round1(result.averageCarbon)} / ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일</strong></div>
+      <div class="summary-card"><span>CO₂ 안전일</span><strong>${result.daysAtOrBelowEight} / ${stressTestTotalDays()}일</strong></div>
+      <div class="summary-card"><span>CO₂ ${STRESS_TEST_RULES.HIGH_CARBON_RATE} 초과</span><strong>${result.daysAboveTen} / ${STRESS_TEST_RULES.MAX_HIGH_CARBON_DAYS}일</strong></div>
       <div class="summary-card"><span>물 초과</span><strong>${result.waterViolationDays}일</strong></div>
-      <div class="summary-card"><span>조력 공급</span><strong>${round1(result.tidalEnergyDelivered)} / 8E</strong></div>
+      <div class="summary-card"><span>조력 공급</span><strong>${round1(result.tidalEnergyDelivered)} / ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E</strong></div>
       <div class="summary-card"><span>복구 달성</span><strong>${Number.isFinite(result.recoveryAchievedAtDay) ? `${result.recoveryAchievedAtDay}일` : '미달'}</strong></div>
     </div>
     <div class="modal-actions"><button class="btn ${result.passed ? 'secondary' : 'primary'}" id="stressResultClose">${result.passed ? '도시 계속 보기' : '도시 보완하기'}</button>${result.passed ? '<button class="btn primary" id="stressResultReport">최종 운영 보고서</button>' : ''}</div>
@@ -851,10 +852,12 @@ export function openCarbonGameOverModal({ dailyCarbon = 0, onReset } = {}) {
 
 export function openOperationalRiskModal({ reason } = {}) {
   const credit = reason === 'credit-12';
+  const creditDaysLeft = CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS - CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS;
+  const essentialDaysLeft = CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS - CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS;
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow danger-label">OPERATING PAUSE</span><h2>${credit ? '재정 적자 12일' : '필수시설 정전 6일'}</h2></div></div>
+    <div class="modal-head"><div><span class="eyebrow danger-label">OPERATING PAUSE</span><h2>${credit ? `재정 적자 ${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}일` : `필수시설 정전 ${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS}일`}</h2></div></div>
     <div class="demolition-warning">
-      <strong>${credit ? '현재 추세가 이어지면 12일 뒤 파산합니다.' : '현재 추세가 이어지면 6일 뒤 전력망이 붕괴합니다.'}</strong>
+      <strong>${credit ? `현재 추세가 이어지면 ${creditDaysLeft}일 뒤 파산합니다.` : `현재 추세가 이어지면 ${essentialDaysLeft}일 뒤 전력망이 붕괴합니다.`}</strong>
       <p>${credit ? '공장을 절전 모드로 전환하거나 확장·시설 운영비를 줄이고 흑자 시설을 확보하세요.' : '주거지·냉각 우선순위를 높이고 발전·저장 예비력을 확보하세요.'}</p>
     </div>
     <div class="modal-actions"><button class="btn primary" id="acknowledgeOperationalRisk">운영 조정하기</button></div>

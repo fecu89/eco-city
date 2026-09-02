@@ -48,7 +48,7 @@ import {
   openStressResultModal,
   refreshStageConstructionProgress,
 } from './ui/StageModals.js';
-import { initAudioManager, toggleMusic } from './audio/AudioManager.js';
+import { audioContextState, initAudioManager, toggleMusic } from './audio/AudioManager.js';
 import { getAssetStatus } from './level/CityAssetLoader.js';
 import { createContinuousClockView } from './ui/ContinuousClockView.js';
 import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from './core/EventDefinitions.js';
@@ -113,7 +113,7 @@ const els = {
   questPanelProgressBar: $('#questPanelProgressBar'),
   questPanelReward: $('#questPanelReward'),
   questPanelClaimBtn: $('#questPanelClaimBtn'),
-  questPanelContextAction: $('#questPanelContextAction'),
+  questPanelEmergencyBtn: $('#questPanelEmergencyBtn'),
   simTime: $('#simTime'),
   simNet: $('#simNet'),
   simCarbonRate: $('#simCarbonRate'),
@@ -508,7 +508,7 @@ function boot() {
     goal: els.questPanelGoal,
     bar: els.questPanelProgressBar,
     reward: els.questPanelReward,
-    contextAction: els.questPanelContextAction,
+    emergency: els.questPanelEmergencyBtn,
     claim: els.questPanelClaimBtn,
     map: els.questPanelMapBtn,
     details: document.querySelector('#questPanelDetails'),
@@ -690,6 +690,7 @@ window.__refreshGameForTest = () => refreshAll();
 window.__settleSimulationDay = () => settleSimulationDay();
 window.__getSimulationState = () => simulationController?.getState();
 window.__getModalState = () => getModalState();
+window.__getAudioState = () => audioContextState();
 window.__setTimeScale = (scale) => {
   const applied = setPlayerTimeScale(scale);
   refreshAll();

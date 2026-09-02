@@ -173,6 +173,8 @@ export const AUDIO = Object.freeze({
 
 export const QUEST_REQUIREMENTS = Object.freeze({
   OPERATING_DAYS: 2,
+  FIRST_RESIDENTIAL_COUNT: 2,
+  FIRST_GREEN_COUNT: 1,
   WATER_CYCLE_POWER_RATIO: 0.9,
   TRANSITION_LOW_CARBON_PERCENT: 40,
   TRANSITION_CARBON_MAX: 12,
@@ -244,6 +246,13 @@ export const CITY_FAILURE_RULES = Object.freeze({
   ESSENTIAL_PAUSE_DAYS: 6,
   ESSENTIAL_GAME_OVER_DAYS: 12,
   ESSENTIAL_BLACKOUT_PERCENT: 5,
+});
+
+// 캠페인 전체에서 한 번만 받을 수 있는 파산 직전 구제금. 받으면 최종 운영 점수에서 차감된다.
+export const EMERGENCY_SUPPORT = Object.freeze({
+  CREDIT_THRESHOLD: 1,
+  GRANT: 4,
+  ECONOMY_SCORE_PENALTY: 2,
 });
 
 export const POWER_RULES = Object.freeze({

@@ -1,5 +1,6 @@
 import { QUESTS, questForState } from '../core/QuestDefinitions.js';
-import { QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
+import { EMERGENCY_SUPPORT, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
+import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
 import { roundCredits } from '../core/Money.js';
@@ -20,17 +21,62 @@ function hasAdjacent(state, index, types) {
   ));
 }
 
+// 완공된 시설 개수만 세는 퀘스트. 판정과 진행률이 같은 목표치를 쓴다.
+const COUNT_QUEST_TARGETS = Object.freeze({
+  1: Object.freeze({ type: 'residential', target: QUEST_REQUIREMENTS.FIRST_RESIDENTIAL_COUNT }),
+  3: Object.freeze({ type: 'green', target: QUEST_REQUIREMENTS.FIRST_GREEN_COUNT }),
+});
+
+// 준비 단계 연구 퀘스트가 요구하는 연구는 첫 확장 방향에 따라 갈린다.
+function branchResearchId(state) {
+  return state.expansion?.firstChoice === 'west' ? 'wind2' : 'solar2';
+}
+
+function hasModernizedDataCenter(state) {
+  return state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2);
+}
+
 // 현재 도시 상태만으로 판정하는 퀘스트들. 조건이 다시 깨지면 준비 상태도 해제된다.
 // 연속 일수 퀘스트는 applySimulationQuestProgress가 따로 관리한다.
 const STATE_QUEST_PREDICATES = Object.freeze({
-  1: (state) => facilities(state, 'residential').length >= 2,
-  3: (state) => facilities(state, 'green').length >= 1,
-  [CAMPAIGN_QUEST_INDEXES.PREPARATION_START]: (state) => state.research.completedIds.has(
-    state.expansion?.firstChoice === 'west' ? 'wind2' : 'solar2',
-  ),
+  ...Object.fromEntries(Object.entries(COUNT_QUEST_TARGETS).map(([questIndex, rule]) => [
+    questIndex,
+    (state) => facilities(state, rule.type).length >= rule.target,
+  ])),
+  [CAMPAIGN_QUEST_INDEXES.PREPARATION_START]: (state) => state.research.completedIds.has(branchResearchId(state)),
   [CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST]: (state) => state.research.completedIds.has('smartGrid')
-    && state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2),
+    && hasModernizedDataCenter(state),
 });
+
+const clampFraction = (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+function researchQuestFraction(state) {
+  const researchId = branchResearchId(state);
+  if (state.research.completedIds.has(researchId)) return 1;
+  const job = state.research.jobs?.[researchId];
+  const durationDays = RESEARCH[researchId]?.durationDays || 0;
+  if (!job || !durationDays) return 0;
+  return clampFraction(job.elapsedEffectiveDays / durationDays);
+}
+
+// 퀘스트 진행률(0~1)의 단일 출처. UI는 이 값을 표시만 한다.
+export function questProgressFraction(state) {
+  if (state.questStatus === 'ready_to_claim' || state.questStatus === 'claimed') return 1;
+  if (isClimateQuestActive(state)) {
+    const evaluation = currentClimateQuestEvaluation(state);
+    const targetDays = evaluation.quest?.targetDays || 0;
+    if (!targetDays) return 0;
+    return clampFraction((evaluation.bestConsecutiveDays || evaluation.consecutiveDays || 0) / targetDays);
+  }
+  const countRule = COUNT_QUEST_TARGETS[state.questIndex];
+  if (countRule) return clampFraction(facilities(state, countRule.type).length / countRule.target);
+  if (state.questIndex === CAMPAIGN_QUEST_INDEXES.PREPARATION_START) return researchQuestFraction(state);
+  if (state.questIndex === CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST) {
+    return (hasModernizedDataCenter(state) ? 0.5 : 0)
+      + (state.research.completedIds.has('smartGrid') ? 0.5 : 0);
+  }
+  return clampFraction((state.questProgress.consecutiveDays || 0) / QUEST_REQUIREMENTS.OPERATING_DAYS);
+}
 
 export function evaluateCurrentQuest(state) {
   if (isClimateQuestActive(state)) return currentClimateQuestEvaluation(state);
@@ -221,11 +267,16 @@ export function markQuestQuizResult(state, passed) {
   return evaluateCurrentQuest(state);
 }
 
+// 긴급지원 버튼을 어디에 그리든 같은 판정을 쓴다.
+export function canRequestEmergencySupport(state) {
+  return !state.emergencySupport?.used && state.credits <= EMERGENCY_SUPPORT.CREDIT_THRESHOLD;
+}
+
 export function requestEmergencySupport(state) {
   if (state.emergencySupport?.used) return { ok: false, reason: 'already_used' };
-  if (state.credits > 1) return { ok: false, reason: 'not_eligible' };
-  state.emergencySupport = { used: true, economyScorePenalty: 2 };
+  if (!canRequestEmergencySupport(state)) return { ok: false, reason: 'not_eligible' };
+  state.emergencySupport = { used: true, economyScorePenalty: EMERGENCY_SUPPORT.ECONOMY_SCORE_PENALTY };
   state.decisionCounts.emergencySupport = (state.decisionCounts.emergencySupport || 0) + 1;
-  state.credits = roundCredits(state.credits + 4);
+  state.credits = roundCredits(state.credits + EMERGENCY_SUPPORT.GRANT);
   return { ok: true, credits: state.credits };
 }

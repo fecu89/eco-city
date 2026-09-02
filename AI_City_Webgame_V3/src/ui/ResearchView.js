@@ -1,6 +1,8 @@
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { RESEARCH_RULES } from '../core/Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { questForState } from '../core/QuestDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import {
   activeResearchJobs,
@@ -47,9 +49,15 @@ function activeJobMarkup(job, dataCenterIndex) {
     </article>`;
 }
 
+// 연구 메뉴는 기준 도시 지표를 저장하는 퀘스트 보상으로 열린다.
+function researchMenuQuestLabel() {
+  const questIndex = CAMPAIGN_QUEST_INDEXES.BASELINE_CAPTURE_QUEST;
+  return `퀘스트 ${questIndex} ‘${questForState(gameState, questIndex).title}’`;
+}
+
 function researchLockReason(item, centerJob) {
   const active = gameState.research.jobs[item.id];
-  if (!gameState.researchMenuUnlocked) return '퀘스트 4 ‘연구도시의 씨앗’ 완료 필요';
+  if (!item.menuUnlocked) return `${researchMenuQuestLabel()} 완료 필요`;
   if (item.completed) return '이미 완료한 연구입니다.';
   if (active) {
     return active.dataCenterIndex == null
@@ -58,15 +66,12 @@ function researchLockReason(item, centerJob) {
   }
   if (item.reasonLabels.length) return item.reasonLabels.join(' · ');
   if (centerJob) return `이 데이터센터에서 ${RESEARCH[centerJob.id].name} 연구가 진행 중입니다.`;
-  if (gameState.credits < item.cost) return `${formatCredits(item.cost - gameState.credits)}가 더 필요합니다.`;
+  if (!item.affordable) return `${formatCredits(item.missingCredits)}가 더 필요합니다.`;
   return '';
 }
 
 function researchCardMarkup(item, centerJob) {
-  const canStart = gameState.researchMenuUnlocked
-    && item.available
-    && !centerJob
-    && gameState.credits >= item.cost;
+  const canStart = item.startable && !centerJob;
   const lockReason = canStart ? '' : researchLockReason(item, centerJob);
   const status = item.completed ? '완료' : item.active ? '진행 중' : canStart ? '연구 시작 가능' : '잠김';
   const tooltipId = `research-tip-${item.id}`;
@@ -100,7 +105,7 @@ export function researchPanelMarkup(dataCenterIndex) {
   return `
     <section class="research-panel" aria-label="재생에너지 연구" data-center-index="${dataCenterIndex}">
       <div class="research-head"><div><span>RESEARCH GRID</span><h3>데이터센터 #${dataCenterIndex} 연구</h3></div><b>진행 중 추가 수요 +2E</b></div>
-      ${gameState.researchMenuUnlocked ? '' : '<div class="research-menu-lock"><strong>연구 메뉴 잠김</strong><span>퀘스트 4 완료 후 사용할 수 있습니다.</span></div>'}
+      ${gameState.researchMenuUnlocked ? '' : `<div class="research-menu-lock"><strong>연구 메뉴 잠김</strong><span>${researchMenuQuestLabel()} 완료 후 사용할 수 있습니다.</span></div>`}
       ${centerJob ? activeJobMarkup(centerJob, dataCenterIndex) : '<div class="research-center-idle"><strong>이 데이터센터는 비어 있습니다.</strong><p>새 연구를 시작하거나 미배정 연구를 연결할 수 있습니다.</p></div>'}
       ${unassignedJobs.length ? `<div class="research-unassigned"><strong>재배정 대기</strong>${unassignedJobs.map((job) => activeJobMarkup(job, dataCenterIndex)).join('')}</div>` : ''}
       ${elsewhereJobs.length ? `<p class="research-elsewhere">다른 센터 진행: ${elsewhereJobs.map((job) => `${RESEARCH[job.id].name} (#${job.dataCenterIndex})`).join(' · ')}</p>` : ''}

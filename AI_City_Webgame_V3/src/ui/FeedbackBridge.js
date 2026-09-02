@@ -2,37 +2,15 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { FACILITIES, UI_FEEDBACK } from '../core/Constants.js';
 import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
-import { formatCredits } from '../core/Money.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
-
-function questRewardText(quest) {
-  const parts = [];
-  if (quest.reward.credits) parts.push(formatCredits(quest.reward.credits));
-  if (quest.reward.unlockFacilities.length) {
-    const names = quest.reward.unlockFacilities
-      .map((facility) => FACILITIES[facility]?.name || facility)
-      .join('·');
-    parts.push(`${names} 해금`);
-  }
-  if (quest.reward.unlockResearch?.length) {
-    parts.push(`${quest.reward.unlockResearch.map((id) => RESEARCH[id]?.name || id).join('·')} 해금`);
-  }
-  if (quest.reward.upgradePermitFacilities?.length) {
-    const names = quest.reward.upgradePermitFacilities
-      .map((facility) => FACILITIES[facility]?.name || facility)
-      .join('·');
-    parts.push(`${names} Lv.3 강화 허가`);
-  }
-  if (quest.reward.upgradePermitLevel) parts.push(`Lv.${quest.reward.upgradePermitLevel} 강화 허가`);
-  return `보상 ${parts.join(' · ') || '최종 성적표'}`;
-}
+import { rewardText } from './questText.js';
 
 function showQuestRewardAlert(quest, result) {
   const nextQuest = result.nextQuest ? questForState(gameState, result.nextQuest) : null;
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: result.campaignComplete ? '최종 퀘스트 완료' : '퀘스트 완료 · 보상 지급',
     title: `${quest.title} 완료`,
-    text: questRewardText(quest),
+    text: rewardText(quest),
     meta: result.expandGrid
       ? '동부 또는 서부 9칸을 선택해 다음 운영 장을 시작하세요.'
       : result.expandSecondGrid
@@ -53,7 +31,7 @@ function showQuestAlert(quest, ready = false) {
     kicker: ready ? '퀘스트 완료 조건 달성' : '새 퀘스트 시작',
     title: `LEVEL ${quest.index} / ${QUEST_COUNT} · ${quest.title}`,
     text: quest.goal,
-    meta: questRewardText(quest),
+    meta: rewardText(quest),
     priority: true,
     kind: 'quest-alert',
     action: 'quest',
@@ -87,6 +65,7 @@ export function initFeedbackBridge() {
 
   eventBus.on(Events.QUEST_CLAIMED, ({ quest, result }) => {
     showQuestRewardAlert(quest, result);
+    eventBus.emit(Events.AUDIO_SFX, { name: 'click' });
   });
 
   eventBus.on(Events.QUEST_STARTED, ({ quest, silentAlert = false }) => {
