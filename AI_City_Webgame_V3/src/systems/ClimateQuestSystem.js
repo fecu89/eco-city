@@ -3,7 +3,7 @@ import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { CITY_EVENTS } from '../core/EventDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { STAGES } from '../core/Constants.js';
+import { STAGES, WATER_RULES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
 import { isOperationalCell } from './ConstructionProjectSystem.js';
 
@@ -48,7 +48,9 @@ function resetEventAttempt(state) {
   state.events.forecastAcknowledgedIds = [];
 }
 
-function initialProgress() {
+function initialProgress(state = null) {
+  const measuredWater = Number(state?.lastTickSummary?.dailyWater);
+  const cityBaselineWater = Number(state?.baseline?.dailyWater);
   return {
     consecutiveDays: 0,
     bestConsecutiveDays: 0,
@@ -57,6 +59,12 @@ function initialProgress() {
     batteryReserveMinimum: null,
     tidalEnergy: 0,
     generationTypeDays: 0,
+    // 이벤트 물 한도는 브리핑을 수락한 순간의 실제 사용량을 기준으로 잡는다.
+    waterBaseline: Number.isFinite(measuredWater) && measuredWater > 0
+      ? measuredWater
+      : Number.isFinite(cityBaselineWater) && cityBaselineWater > 0
+        ? cityBaselineWater
+        : WATER_RULES.DEFAULT_BASELINE,
   };
 }
 
@@ -196,7 +204,7 @@ export function acknowledgeClimateBriefing(state) {
     eventType: quest.eventType,
     attempt,
     scheduledEventId: event.id,
-    progress: initialProgress(),
+    progress: initialProgress(state),
     lastResult: null,
   });
   state.questStatus = 'active';
@@ -349,7 +357,8 @@ export function claimClimateQuest(state) {
   state.events.schedule = [];
   if (quest.index === CLIMATE_QUEST_MAX) {
     state.questStatus = 'active';
-    state.stage = STAGES.REPORT;
+    // 최종시험 동안에도 도시를 고칠 수 있어야 한다. 보고서 단계는 시험을 통과한 뒤에 설정된다.
+    state.stage = STAGES.REDESIGN;
     state.progression.chapter = 4;
     state.stressTest.status = 'ready';
     Object.assign(campaign, {

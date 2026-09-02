@@ -1,10 +1,25 @@
 import { test, expect } from '@playwright/test';
 import { calculateLabor, settleEconomy } from '../../../src/systems/EconomySystem.js';
+import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { calcMetrics, demolitionRefund } from '../../../src/systems/BoardSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
+import { ECONOMY_RULES, FACILITIES } from '../../../src/core/Constants.js';
 
 const cells = (types) => types.map((type) => ({ type, level: 1, priority: 'normal' }));
 const fullyPowered = (grid) => Object.fromEntries(grid.map((_, index) => [index, { demand: 1, delivered: 1, ratio: 1 }]));
+
+// 실제 급전 결과를 그대로 정산에 넘긴다. 발전 시설 가동률은 송전된 전력에서만 나온다.
+function settleDispatchedGrid(grid, coords) {
+  const power = calculatePowerNetwork({ grid, coords, dayIndex: 1, tickIndex: 1 });
+  return settleEconomy({
+    grid,
+    coords,
+    facilityPower: power.facilityPower,
+    generationAvailableByIndex: power.generationAvailableByIndex,
+    generationDispatchedByIndex: power.generationDispatchedByIndex,
+    credits: 10,
+  });
+}
 
 test('residential tax falls to its 25 percent floor without jobs', () => {
   const grid = cells(['residential', 'residential']);
@@ -197,4 +212,53 @@ test('static preview and fully powered live operation share carbon and water rul
     carbon: live.dailyCarbon,
     water: live.dailyWater,
   });
+});
+
+test('a thermal plant emits only the idle floor while low-carbon dispatch covers the city', () => {
+  const coords = createHexCoordinates(2);
+  const idleGrid = Array(19).fill(null);
+  idleGrid[0] = { type: 'thermal', level: 1, priority: 'normal' };
+  idleGrid[1] = { type: 'solar', level: 1, priority: 'normal' };
+  idleGrid[2] = { type: 'residential', level: 1, priority: 'essential' };
+
+  const idle = settleDispatchedGrid(idleGrid, coords);
+  const idleFloor = FACILITIES.thermal.carbon * ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO;
+
+  expect(idle.facilityEconomy[0].operationRatio).toBe(0);
+  expect(idle.facilityEnvironment[0].carbon).toBeCloseTo(idleFloor, 2);
+
+  // 태양광 한 기로는 덮을 수 없는 수요를 붙이면 화력이 실제로 급전되고 탄소가 바닥선 위로 올라간다.
+  const dispatchedGrid = idleGrid.map((cell) => cell && { ...cell });
+  [3, 4, 5].forEach((index) => { dispatchedGrid[index] = { type: 'residential', level: 1, priority: 'essential' }; });
+  const dispatched = settleDispatchedGrid(dispatchedGrid, coords);
+
+  expect(dispatched.facilityEconomy[0].operationRatio).toBeGreaterThan(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO);
+  expect(dispatched.facilityEnvironment[0].carbon).toBeGreaterThan(idleFloor);
+});
+
+test('nuclear cooling water scales with the energy the plant actually dispatches', () => {
+  const coords = createHexCoordinates(2);
+  const idleGrid = Array(19).fill(null);
+  idleGrid[0] = { type: 'nuclear', level: 1, priority: 'normal' };
+  idleGrid[1] = { type: 'thermal', level: 1, priority: 'normal' };
+  idleGrid[2] = { type: 'residential', level: 1, priority: 'essential' };
+
+  const idle = settleDispatchedGrid(idleGrid, coords);
+  const fullWater = FACILITIES.nuclear.water;
+
+  expect(idle.facilityEnvironment[0].water).toBeCloseTo(fullWater * ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO, 2);
+
+  const loadedGrid = idleGrid.map((cell) => cell && { ...cell });
+  [3, 4, 5, 6].forEach((index) => { loadedGrid[index] = { type: 'data', level: 1, priority: 'normal' }; });
+  const loaded = settleDispatchedGrid(loadedGrid, coords);
+
+  expect(loaded.facilityEnvironment[0].water).toBeGreaterThan(idle.facilityEnvironment[0].water);
+});
+
+test('a level two facility keeps its upkeep at cent precision', () => {
+  const grid = [{ type: 'solar', level: 2, priority: 'normal' }];
+  const result = settleEconomy({ grid, facilityPower: {}, credits: 10 });
+
+  expect(result.facilityEconomy[0].upkeep).toBe(0.14);
+  expect(result.maintenance).toBe(0.14);
 });

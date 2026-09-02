@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { Events } from '../../../src/core/EventBus.js';
 import { gameState } from '../../../src/core/GameState.js';
 import { classifyCity, computeReport, exportReport } from '../../../src/systems/ReportSystem.js';
+import { STRESS_PHASES } from '../../../src/core/EventDefinitions.js';
 
 function completedStress(overrides = {}) {
   return {
@@ -58,6 +59,15 @@ test('report exposes five weighted axes totaling one hundred operating points', 
   );
   expect(report.operatingTotal).toBeGreaterThan(0);
   expect(report.operatingTotal).toBeLessThanOrEqual(100);
+});
+
+test('report rates stress days against the full final exam length', () => {
+  const examDays = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
+  expect(examDays).toBe(41);
+
+  operatingState();
+  // 정전 1일 / 41일 = 97.56 무정전 점수. 27일로 나누면 96.3이 되어 비율이 부풀려진다.
+  expect(computeReport().axes.powerStability.value).toBe(92.7);
 });
 
 test('the post-report concept quiz adds up to ten bonus points without changing operating score', () => {

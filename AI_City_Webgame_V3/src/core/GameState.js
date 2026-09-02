@@ -1,6 +1,7 @@
 import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from './CampaignProgression.js';
 import { roundCredits } from './Money.js';
-import { normalizeConstructionProject } from '../systems/ConstructionProjectSystem.js';
+import { normalizeConstructionProject } from './ConstructionProject.js';
 
 export const SAVE_VERSION = 9;
 
@@ -98,7 +99,7 @@ export class GameState {
     this.expansion = expansionDefaults();
     this.events = eventDefaults();
     this.climateCampaign = climateCampaignDefaults();
-    this.stressTest = { status: 'locked', phaseIndex: 0, phaseDay: 0, result: null, metrics: null, attempts: 0 };
+    this.stressTest = { status: 'locked', phaseIndex: 0, phaseDay: 0, result: null, metrics: null, attempts: 0, waterBaseline: null };
     this.operationalRisk = { negativeCreditDays: 0, essentialBlackoutDays: 0, warningIds: [] };
     this.emergencySupport = { used: false, economyScorePenalty: 0 };
     this.decisionCounts = {
@@ -117,7 +118,6 @@ export class GameState {
       jobs: {},
       completedIds: new Set(),
       techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0, green: 1 },
-      quizAccelerationBankDays: 0,
       quizCreditQuestionIds: {},
     };
     this.carbonCrisisDays = 0;
@@ -205,7 +205,6 @@ export class GameState {
         jobs: Object.fromEntries(Object.entries(this.research.jobs).map(([id, job]) => [id, { ...job }])),
         completedIds: [...this.research.completedIds],
         techLevels: { ...this.research.techLevels },
-        quizAccelerationBankDays: this.research.quizAccelerationBankDays,
         quizCreditQuestionIds: structuredClone(this.research.quizCreditQuestionIds || {}),
       },
       carbonCrisisDays: this.carbonCrisisDays,
@@ -242,6 +241,12 @@ export class GameState {
       this.musicEnabled = data.musicEnabled ?? this.musicEnabled;
       this.questIndex = data.questIndex ?? 1;
       if (this.questIndex === 6 && this.stage === STAGES.DIAGNOSIS) this.stage = STAGES.REDESIGN;
+      // 최종시험은 재설계 단계다. 19단계를 REPORT로 기록한 옛 저장은 보드가 얼어붙으므로 되돌린다.
+      if (this.questIndex === CAMPAIGN_QUEST_INDEXES.FINAL_TEST
+        && !data.campaignComplete
+        && this.stage === STAGES.REPORT) {
+        this.stage = STAGES.REDESIGN;
+      }
       this.questStatus = data.questStatus ?? 'active';
       this.questProgress = data.questProgress ?? {};
       this.claimedQuestIds = new Set(data.claimedQuestIds || []);
@@ -285,6 +290,7 @@ export class GameState {
       };
       this.stressTest = {
         status: 'locked', phaseIndex: 0, phaseDay: 0, result: null, metrics: null, attempts: 0,
+        waterBaseline: null,
         ...(data.stressTest || {}),
       };
       this.operationalRisk = {
@@ -319,7 +325,6 @@ export class GameState {
           tidal: data.research?.techLevels?.tidal ?? 0,
           green: data.research?.techLevels?.green ?? 1,
         },
-        quizAccelerationBankDays: Math.max(0, Number(data.research?.quizAccelerationBankDays) || 0),
         quizCreditQuestionIds: structuredClone(data.research?.quizCreditQuestionIds || {}),
       };
       this.carbonCrisisDays = Math.max(0, Number(data.carbonCrisisDays) || 0);

@@ -1,4 +1,6 @@
-import { CARBON_CRISIS, STRESS_TEST_RULES } from '../core/Constants.js';
+import { CARBON_CRISIS, STAGES, STRESS_TEST_RULES } from '../core/Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { QUESTS } from '../core/QuestDefinitions.js';
 import { STRESS_PHASES } from '../core/EventDefinitions.js';
 import {
   cityModifierForClimate,
@@ -38,7 +40,13 @@ export function stressModifierForFacility(state, facilityType, level = 1) {
   return facilityModifierForClimate(currentStressPhase(state), facilityType, level);
 }
 
-export function stressCityModifier(state, { baselineWater = 10 } = {}) {
+// 시험 물 한도는 절대값이 아니라 "시험을 시작한 날 도시가 쓰던 물"을 기준으로 잡는다.
+export function stressTestWaterBaseline(state) {
+  const stored = Number(state?.stressTest?.waterBaseline);
+  return Number.isFinite(stored) && stored > 0 ? stored : STRESS_TEST_RULES.DEFAULT_WATER_LIMIT;
+}
+
+export function stressCityModifier(state, { baselineWater = stressTestWaterBaseline(state) } = {}) {
   return cityModifierForClimate(currentStressPhase(state), { baselineWater });
 }
 
@@ -54,6 +62,7 @@ export function startStressTest(state) {
   if (!hasTidalEntry(state)) return { ok: false, reason: 'tidal_required' };
   state.events.activeId = null;
   state.events.currentMetrics = null;
+  const measuredWater = Number(state.lastTickSummary?.dailyWater);
   state.stressTest = {
     status: 'running',
     phaseIndex: 0,
@@ -62,6 +71,10 @@ export function startStressTest(state) {
     metrics: emptyMetrics(),
     startedAtDay: state.elapsedGameDays,
     attempts: (state.stressTest.attempts || 0) + 1,
+    // 시험 내내 쓰이는 물 기준선은 시작 순간의 실제 사용량으로 고정한다.
+    waterBaseline: round1(Number.isFinite(measuredWater) && measuredWater > 0
+      ? measuredWater
+      : STRESS_TEST_RULES.DEFAULT_WATER_LIMIT),
   };
   return { ok: true, phase: STRESS_PHASES[0], attempts: state.stressTest.attempts };
 }
@@ -71,11 +84,10 @@ function tidalDelivered(summary) {
   return Number.isFinite(delivered) ? Math.max(0, delivered) : 0;
 }
 
+// 물 한도는 건조 위기 구간에만 걸린다. 그 밖의 날은 한도 자체가 없다.
 function waterLimitFor(summary) {
   const limit = Number(summary?.waterLimit);
-  return Number.isFinite(limit) && summary?.waterLimit != null
-    ? limit
-    : STRESS_TEST_RULES.DEFAULT_WATER_LIMIT;
+  return Number.isFinite(limit) && summary?.waterLimit != null ? limit : Infinity;
 }
 
 function recordDay(state, summary) {
@@ -122,7 +134,7 @@ function diagnosis(result) {
   }
   if (result.finalCredits < 0) return { id: 'credit_recovery', label: '시험 종료까지 크레딧을 0 이상으로 복구하지 못했습니다.' };
   if (result.waterViolationDays > STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS) {
-    return { id: 'water', label: '물 제한 초과가 6일을 넘었습니다.' };
+    return { id: 'water', label: `물 제한 초과가 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일을 넘었습니다.` };
   }
   if (result.recoveryAchievedAtDay > STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS) {
     return { id: 'recovery', label: '최종 복구 3일 안에 전력과 수익을 정상화하지 못했습니다.' };
@@ -180,7 +192,13 @@ export function finishStressTest(state) {
   state.stressTest.result = result;
   state.stressTest.metrics = null;
   state.campaignComplete = result.passed;
-  if (result.passed) state.progression.chapter = 4;
+  if (result.passed) {
+    state.progression.chapter = 4;
+    // 최종시험 통과가 곧 19단계 완료다. 보고서의 완료 퀘스트 목록에도 들어가야 한다.
+    state.claimedQuestIds.add(QUESTS[CAMPAIGN_QUEST_INDEXES.FINAL_TEST - 1].id);
+    state.questStatus = 'claimed';
+    state.stage = STAGES.REPORT;
+  }
   return result;
 }
 

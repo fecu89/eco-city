@@ -1,5 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
+// PW_PORT로 개발 서버 포트를 바꿀 수 있다 (기본 3000). 다른 프로세스가 3000을 점유한 환경용.
+const port = Number(process.env.PW_PORT) || 3000;
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30000,
@@ -8,7 +11,7 @@ export default defineConfig({
   // 로딩·모션 타이머를 막을 수 있다. 단일 워커로 기능 실패와 자원 경합을 분리한다.
   workers: 1,
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${port}`,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
@@ -25,8 +28,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
-    port: 3000,
+    command: `npx vite --port ${port}`,
+    port,
     reuseExistingServer: true,
   },
 });

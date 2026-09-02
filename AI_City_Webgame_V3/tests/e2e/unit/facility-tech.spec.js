@@ -14,7 +14,7 @@ import { evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
 import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
-import { completeResearchJob } from '../../../src/systems/ResearchSystem.js';
+import { completeResearchJob, startResearch } from '../../../src/systems/ResearchSystem.js';
 import { advanceConstructionProjects } from '../../../src/systems/ConstructionProjectSystem.js';
 
 test.beforeEach(() => gameState.reset());
@@ -171,6 +171,22 @@ test('a facility with an active project cannot be upgraded or demolished again',
   expect(upgradeCell(0)).toMatchObject({ ok: true, targetLevel: 2 });
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
   expect(demolishCell(0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
+});
+
+test('a data center assigned to active research cannot start an upgrade', () => {
+  gameState.credits = 100;
+  gameState.upgradePermitLevel = 2;
+  gameState.researchMenuUnlocked = true;
+  gameState.unlockedFacilities.add('solar');
+  gameState.grid[0] = { type: 'data', level: 1, operationMode: 'normal' };
+
+  expect(startResearch(gameState, 'solar2', 0)).toMatchObject({ ok: true, dataCenterIndex: 0 });
+  const validation = validateUpgrade(gameState, 0);
+
+  expect(validation).toMatchObject({ ok: false, reason: 'research_in_progress' });
+  expect(upgradeRequirementMessage(gameState, validation)).toContain('연구를 완료하거나 취소');
+  expect(upgradeCell(0)).toMatchObject({ ok: false, reason: 'research_in_progress' });
+  expect(gameState.grid[0].project).toBeUndefined();
 });
 
 test('an upgrade is blocked when its extra staff would exceed the resident population', () => {

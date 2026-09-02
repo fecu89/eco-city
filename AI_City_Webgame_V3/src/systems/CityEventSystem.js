@@ -10,6 +10,7 @@ import {
   facilityModifierForClimate,
 } from './ClimateModifierSystem.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { WATER_RULES } from '../core/Constants.js';
 
 function rotatedDeck(deck, seed) {
   const offset = Math.abs(Math.trunc(Number(seed) || 0)) % deck.length;
@@ -88,10 +89,18 @@ function freshMetrics(event) {
   };
 }
 
+// 이벤트 물 한도는 브리핑을 수락한 순간 측정한 사용량을 기준으로 잡는다. 기후 캠페인이
+// 기준선을 남기지 않았을 때만 4단계 도시 기준선으로 되돌아간다.
+export function eventBaselineWater(state) {
+  const campaignBaseline = Number(state?.climateCampaign?.progress?.waterBaseline);
+  if (Number.isFinite(campaignBaseline) && campaignBaseline > 0) return campaignBaseline;
+  const baseline = Number(state?.baseline?.dailyWater);
+  return Number.isFinite(baseline) && baseline > 0 ? baseline : WATER_RULES.DEFAULT_BASELINE;
+}
+
 function eventWaterLimit(state, event) {
-  const baseline = Number(state.baseline?.dailyWater);
   return cityModifierForClimate(CITY_EVENTS[event?.type], {
-    baselineWater: Number.isFinite(baseline) && baseline > 0 ? baseline : 10,
+    baselineWater: eventBaselineWater(state),
   }).waterLimit;
 }
 
@@ -146,10 +155,7 @@ export function activeEventContext(state) {
   const event = eventById(state, state.events?.activeId);
   if (!event) return { event: null, byFacility: null, city: {} };
   const definition = CITY_EVENTS[event.type];
-  const baselineWater = Number(state.baseline?.dailyWater);
-  const city = cityModifierForClimate(definition, {
-    baselineWater: Number.isFinite(baselineWater) && baselineWater > 0 ? baselineWater : 10,
-  });
+  const city = cityModifierForClimate(definition, { baselineWater: eventBaselineWater(state) });
   return {
     event,
     byFacility: (index) => eventModifierForFacility(event.type, state.grid[index]?.type, state.grid[index]?.level),
@@ -158,7 +164,10 @@ export function activeEventContext(state) {
 }
 
 export function advanceCityEvents(state, summary = null) {
-  if ((state.progression?.chapter || 1) < 3) {
+  // 최종시험은 자체 8단계 시나리오로만 도시를 압박한다. 시험 준비·진행·종료 어느 시점에도
+  // 무작위 도시 이벤트 덱을 새로 만들지 않는다.
+  const finalTest = Number(state.questIndex) >= CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
+  if ((state.progression?.chapter || 1) < 3 || finalTest) {
     return { active: null, forecast: null, forecasted: null, started: null, ended: null, result: null };
   }
   ensureSchedule(state);

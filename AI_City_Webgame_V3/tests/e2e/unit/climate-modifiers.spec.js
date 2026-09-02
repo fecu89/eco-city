@@ -26,12 +26,15 @@ test('wildfire weakens only lower-level green absorption', () => {
 });
 
 test('city modifiers derive water limits and compose compound phases without mutation', () => {
+  // 가뭄 한도는 "예보 직전 사용량 그대로"(비율 1.0)다. 냉각 부담이 커지므로 유지 자체가 과제다.
   expect(cityModifierForClimate(CITY_EVENTS.drought, { baselineWater: 20 })).toMatchObject({
-    waterLimit: 14,
-    waterLimitRatio: 0.7,
+    waterLimit: 20,
+    waterLimitRatio: 1,
     coolingEffectiveness: 1.25,
   });
+  // 물 한도를 선언하지 않은 행사는 한도를 만들지 않는다.
+  expect(cityModifierForClimate(CITY_EVENTS.heatwave, { baselineWater: 20 }).waterLimit).toBe(null);
   const compound = composeClimateDefinitions([CITY_EVENTS.heatwave, CITY_EVENTS.drought]);
   expect(facilityModifierForClimate(compound, 'data')).toMatchObject({ water: 1.38 });
-  expect(cityModifierForClimate(compound, { baselineWater: 20 }).waterLimit).toBe(14);
+  expect(cityModifierForClimate(compound, { baselineWater: 20 }).waterLimit).toBe(20);
 });

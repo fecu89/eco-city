@@ -60,13 +60,13 @@ test('residential upgrades retain eighty percent population and operating values
   expect(labor.capacity).toBeCloseTo(4.8, 8);
 });
 
-test('data-center upgrades use their dedicated demand, income, water, and research ratios', () => {
+test('data-center upgrades use their dedicated demand, income, and water ratios while research is stopped', () => {
   const stats = effectiveFacilityStats(upgradeCell('data'));
 
   expect(stats.demand).toBeCloseTo(5.6, 8);
   expect(stats.income).toBeCloseTo(1.2, 8);
   expect(stats.water).toBeCloseTo(3.5, 8);
-  expect(stats.researchSpeed).toBe(0.5);
+  expect(stats.researchSpeed).toBe(0);
   expect(stats.workforce).toBe(4);
 });
 
@@ -103,7 +103,7 @@ test('an upgrading battery retains stored energy and capacity but halves through
   expect(power.nextBatteries[1].lowCarbon + power.nextBatteries[1].fossil).toBe(7);
 });
 
-test('active research in an upgrading data center advances at half speed', () => {
+test('a legacy research job in an upgrading data center remains assigned but does not advance', () => {
   const state = new GameState();
   state.grid[0] = upgradeCell('data');
   state.research.jobs = {
@@ -118,8 +118,9 @@ test('active research in an upgrading data center advances at half speed', () =>
 
   const result = advanceResearchOneDay(state, { 0: { demand: 5.6, delivered: 5.6, ratio: 1 } });
 
-  expect(result.jobs.solar2).toMatchObject({ status: 'running', advancedDays: 0.5 });
-  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(0.5);
+  expect(result.jobs.solar2).toMatchObject({ status: 'upgrade_paused', advancedDays: 0 });
+  expect(state.research.jobs.solar2.elapsedEffectiveDays).toBe(0);
+  expect(state.research.jobs.solar2.dataCenterIndex).toBe(0);
 });
 
 test('an upgrading cooling facility provides only its construction-stage cooling effect', () => {

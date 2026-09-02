@@ -1,4 +1,5 @@
-import { GRID_RESERVE_RULES, SIMULATION } from '../core/Constants.js';
+import { DAILY_CARBON_TARGETS, GRID_RESERVE_RULES, TIME } from '../core/Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { createHexCoordinates } from './HexGridSystem.js';
 import { calendarAtElapsedDay } from './CalendarSystem.js';
 import { roundCredits } from '../core/Money.js';
@@ -13,10 +14,12 @@ import { advanceClimateQuest } from './ClimateQuestSystem.js';
 const round1 = (value) => Math.round(value * 10) / 10;
 const GENERATION_TYPES = new Set(['thermal', 'nuclear', 'solar', 'wind', 'tidal']);
 
+// 기초 6단계는 전환 목표(12), 준비 10단계까지는 10, 기후전부터는 안전 기준 8이다.
 export function dailyCarbonTargetForQuest(questIndex) {
-  if (Number(questIndex) <= 6) return 12;
-  if (Number(questIndex) <= 11) return 10;
-  return 8;
+  const index = Number(questIndex);
+  if (index <= CAMPAIGN_QUEST_INDEXES.FOUNDATION_END) return DAILY_CARBON_TARGETS.FOUNDATION;
+  if (index <= CAMPAIGN_QUEST_INDEXES.PREPARATION_END) return DAILY_CARBON_TARGETS.PREPARATION;
+  return DAILY_CARBON_TARGETS.CLIMATE;
 }
 
 export function createDaySettler({
@@ -60,6 +63,8 @@ export function createDaySettler({
       grid: state.grid,
       coords,
       facilityPower: power.facilityPower,
+      generationAvailableByIndex: power.generationAvailableByIndex,
+      generationDispatchedByIndex: power.generationDispatchedByIndex,
       credits: state.credits,
       modifierContext,
     });
@@ -108,9 +113,10 @@ export function createDaySettler({
       .map((cell, index) => (isOperationalCell(cell)
         && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type)) ? index : null))
       .filter((index) => index != null);
+    // 필수시설이 하나도 없는 도시는 정전이 아니라 "공급할 필수 부하가 없는" 상태다.
     const essentialSupplyPercent = essentialIndices.length
       ? essentialIndices.reduce((sum, index) => sum + (power.facilityPower[index]?.ratio ?? 0), 0) / essentialIndices.length * 100
-      : 0;
+      : 100;
     const essentialOutage = essentialIndices.some((index) => (power.facilityPower[index]?.ratio ?? 0) < 0.9);
     summary.transmissionEfficiency = round1(transmissionEfficiency);
     summary.essentialSupplyPercent = round1(essentialSupplyPercent);
@@ -180,7 +186,7 @@ export function createDaySettler({
 
 export function createSimulationController({
   settle,
-  intervalMs = SIMULATION.DAY_MS,
+  intervalMs = TIME.BASE_DAY_MS,
   getIntervalMs = (timeScale) => (timeScale === 0 ? null : intervalMs / timeScale),
   setTimer = globalThis.setTimeout.bind(globalThis),
   clearTimer = globalThis.clearTimeout.bind(globalThis),

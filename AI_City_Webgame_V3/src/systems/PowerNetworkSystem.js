@@ -150,6 +150,12 @@ export function calculatePowerNetwork({
     const facilityPower = {};
     const batteryOperations = {};
     const routes = [];
+    // 발전 시설의 실제 가동률은 급전된 전력에서만 나오므로 원별로 인출량을 누적한다.
+    const dispatched = {};
+    const drawFromSource = (source, amount) => {
+      source.available -= amount;
+      dispatched[source.index] = (dispatched[source.index] || 0) + amount;
+    };
     let deliveredTotal = 0;
     let lowCarbonDelivered = 0;
 
@@ -168,7 +174,7 @@ export function calculatePowerNetwork({
         if (remaining <= 0) return;
         const possible = Math.min(remaining, source.available * efficiency);
         if (possible <= 0) return;
-        source.available -= possible / efficiency;
+        drawFromSource(source, possible / efficiency);
         delivered += possible;
         remaining -= possible;
         if (source.lowCarbon) lowCarbonDelivered += possible;
@@ -196,7 +202,10 @@ export function calculatePowerNetwork({
       };
       deliveredTotal += delivered;
     });
-    return { sources, facilityPower, batteryOperations, routes, deliveredTotal, lowCarbonDelivered };
+    return {
+      sources, facilityPower, batteryOperations, routes, dispatched, drawFromSource,
+      deliveredTotal, lowCarbonDelivered,
+    };
   };
 
   let allocation = allocateBatteryAuxiliaryDemand(initiallyPermittedSources);
@@ -210,7 +219,9 @@ export function calculatePowerNetwork({
     allocation = allocateBatteryAuxiliaryDemand(sourceDefinitions.filter(({ type }) => type !== 'nuclear'));
   }
 
-  const { sources, facilityPower, batteryOperations, routes } = allocation;
+  const {
+    sources, facilityPower, batteryOperations, routes, dispatched, drawFromSource,
+  } = allocation;
   const activeBatteries = batteries.filter(({ index }) => batteryOperations[index]?.canOperate);
 
   consumers.sort((a, b) => (PRIORITY[a.priority] ?? 1) - (PRIORITY[b.priority] ?? 1)
@@ -276,7 +287,7 @@ export function calculatePowerNetwork({
       const throughput = battery ? battery.throughputLeft : Infinity;
       const possible = Math.min(remaining, source.available * candidate.efficiency, throughput);
       if (possible <= 0) continue;
-      source.available -= possible / candidate.efficiency;
+      drawFromSource(source, possible / candidate.efficiency);
       if (battery) battery.throughputLeft -= possible;
       if (source.lowCarbon) lowCarbonDelivered += possible;
       delivered += possible;
@@ -311,7 +322,7 @@ export function calculatePowerNetwork({
         const efficiency = routeEfficiency(source.index, battery.index) * batteryHubEfficiency;
         const charge = Math.min(room - (battery.lowCarbon + battery.fossil - stored), battery.throughputLeft, source.available * efficiency);
         if (charge <= 0) continue;
-        source.available -= charge / efficiency;
+        drawFromSource(source, charge / efficiency);
         battery.throughputLeft -= charge;
         if (source.lowCarbon) battery.lowCarbon += charge;
         else battery.fossil += charge;
@@ -334,6 +345,9 @@ export function calculatePowerNetwork({
     lowCarbonDelivered: round2(lowCarbonDelivered),
     generationAvailable: round2(generationAvailable),
     generationAvailableByIndex,
+    generationDispatchedByIndex: Object.fromEntries(sourceDefinitions.map(({ index, available }) => (
+      [index, round2(Math.max(0, Math.min(available, dispatched[index] || 0)))]
+    ))),
     lowCarbonSurplus: round2(sources
       .filter(({ lowCarbon }) => lowCarbon)
       .reduce((sum, source) => sum + Math.max(0, source.available), 0)),

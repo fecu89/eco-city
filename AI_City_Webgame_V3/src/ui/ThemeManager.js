@@ -1,5 +1,6 @@
 import { THEME_SCHEMAS, THEME_STORAGE_KEY } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { readStorage, writeStorage } from '../core/safeStorage.js';
 
 let currentTheme = 'dark';
 let themeButton = null;
@@ -11,14 +12,14 @@ function renderThemeControl() {
   themeButton.title = nextIsLight ? '라이트 모드' : '다크 모드';
   themeButton.setAttribute('aria-label', themeButton.title);
   themeButton.innerHTML = `<i data-lucide="${nextIsLight ? 'sun' : 'moon'}"></i>`;
-  refresh();
+  refresh(themeButton);
 }
 
 export function setTheme(theme, { persist = true } = {}) {
   const next = THEME_SCHEMAS[theme] ? theme : 'dark';
   currentTheme = next;
   document.documentElement.dataset.theme = next;
-  if (persist) localStorage.setItem(THEME_STORAGE_KEY, next);
+  if (persist) writeStorage(THEME_STORAGE_KEY, next);
   renderThemeControl();
   eventBus.emit(Events.THEME_CHANGED, { theme: next, schema: THEME_SCHEMAS[next] });
   return next;
@@ -35,7 +36,7 @@ export function getTheme() {
 export function initThemeManager(button, refreshIcons) {
   themeButton = button;
   refresh = refreshIcons || (() => {});
-  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  const saved = readStorage(THEME_STORAGE_KEY);
   setTheme(THEME_SCHEMAS[saved] ? saved : 'dark', { persist: Boolean(THEME_SCHEMAS[saved]) });
   themeButton?.addEventListener('click', toggleTheme);
 }

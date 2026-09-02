@@ -6,10 +6,19 @@ import {
   EXPANSION_UPKEEP,
   TIDAL_SITE_COORDINATES,
 } from '../core/ZoneDefinitions.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { roundCredits } from '../core/Money.js';
 import { createHexCoordinates, expandHexGrid, hexDistance } from './HexGridSystem.js';
 
 const initialIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
+
+// 6단계 보상 모달을 닫기 전에 새로고침하면 확장 선택이 통째로 사라진다.
+// 준비 퀘스트에 들어왔는데 아직 확장하지 않았다면 선택을 다시 물어야 한다.
+export function expansionChoicePending(state) {
+  return Number(state?.questIndex) >= CAMPAIGN_QUEST_INDEXES.PREPARATION_START
+    && (state?.expansion?.phase ?? 0) === 0
+    && !state?.gameOver;
+}
 
 export function expansionGroups(coords = createHexCoordinates(BOARD.EXPANDED_RADIUS)) {
   const outer = coords

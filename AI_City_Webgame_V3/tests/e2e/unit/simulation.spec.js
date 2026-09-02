@@ -3,6 +3,7 @@ import { GameState } from '../../../src/core/GameState.js';
 import { createDaySettler, createSimulationController } from '../../../src/systems/SimulationSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
+import { applyOperationalRisk } from '../../../src/systems/CityFailureSystem.js';
 
 test('one settlement advances exactly one day and applies power income once', () => {
   const state = new GameState();
@@ -155,4 +156,16 @@ test('simulation controller reset clears speed, progress, and every pause reason
     expect(timers.size).toBe(1);
     controller.dispose();
   }
+});
+
+test('a city with no essential facilities is fully supplied, not blacked out', () => {
+  const state = new GameState();
+  state.questIndex = 4;
+  const settleDay = createDaySettler({ calculatePowerNetwork, settleEconomy });
+
+  const { summary } = settleDay(state);
+
+  expect(summary.essentialSupplyPercent).toBe(100);
+  applyOperationalRisk(state, summary);
+  expect(state.operationalRisk.essentialBlackoutDays).toBe(0);
 });

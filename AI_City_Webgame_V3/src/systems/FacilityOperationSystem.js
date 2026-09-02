@@ -1,4 +1,4 @@
-import { COOLING_RULES } from '../core/Constants.js';
+import { COOLING_RULES, ECONOMY_RULES } from '../core/Constants.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
@@ -58,15 +58,19 @@ export function calculateEnvironmentalOperations({
     const operation = facilityOperations[index] || {};
     const powerRatio = Math.max(0, Math.min(1, Number(operation.powerRatio) || 0));
     const operationRatio = Math.max(0, Math.min(1, Number(operation.operationRatio) || 0));
+    // 발전 시설은 대기 운전만으로도 바닥선만큼 배출하고, 그 위로는 급전량에 비례한다.
+    const generationRatio = Math.max(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO, operationRatio);
     const carbonFactor = stats.carbon < 0
       ? 1
       : ['factory', 'data'].includes(cell.type)
         ? operationRatio
         : stats.supply > 0
-          ? Math.max(0.25, operationRatio)
+          ? generationRatio
           : 0;
     let carbon = stats.carbon * carbonFactor;
-    let water = stats.water * (stats.demand > 0 ? powerRatio : 1);
+    let water = stats.water * (stats.demand > 0
+      ? powerRatio
+      : stats.supply > 0 ? generationRatio : 1);
 
     if (['data', 'nuclear'].includes(cell.type)) {
       const coolingSupport = strongestCoolingSupport(

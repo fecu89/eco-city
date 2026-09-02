@@ -33,6 +33,130 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(5);
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
       .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);
+    // 등록되지 않은 lucide 이름은 예외 없이 콘솔 경고만 남기고 아이콘 자리를 비운다.
+    expect(page.consoleMessages.filter((text) => text.includes('icon name was not found'))).toEqual([]);
+  });
+
+  test('a modal is a labelled dialog that keeps Tab inside and closes on Escape', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="settings"]').first().click();
+    await expect(page.locator('#helpBtn')).toBeVisible();
+    await page.locator('#helpBtn').focus();
+    await expect(page.locator('#helpBtn')).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const card = page.locator('#modalCard');
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(card).toHaveAttribute('role', 'dialog');
+    await expect(card).toHaveAttribute('aria-modal', 'true');
+    await expect(card).toHaveAttribute('aria-labelledby', 'modalTitle');
+    await expect(page.locator('#modalTitle')).toContainText('기후 생존 도시');
+
+    const focusInsideCard = () => page.evaluate(() => Boolean(document.activeElement?.closest('#modalCard')));
+    expect(await focusInsideCard()).toBe(true);
+    for (let press = 0; press < 5; press++) {
+      await page.keyboard.press('Tab');
+      expect(await focusInsideCard()).toBe(true);
+    }
+    await page.keyboard.press('Shift+Tab');
+    expect(await focusInsideCard()).toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#modal')).toBeHidden();
+  });
+
+  test('closing a modal returns focus to the control that opened it', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      const state = window.__GAME_STATE__;
+      state.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+      state.lastTickSummary = { dailyCarbon: 2, dailyWater: 2, deliveredPower: 4, demand: 7, batteryStored: 0, lowCarbonPercent: 60, capacity: 10, used: 7 };
+      window.__refreshGameForTest();
+    });
+    // 상단 HUD는 모달이 열려도 계속 보이므로 포커스를 실제로 되돌려 받을 수 있다.
+    const powerMetric = page.locator('#simulationHud [data-metric="power"]');
+    await powerMetric.click();
+    await expect(page.locator('#modal')).toBeVisible();
+    expect(await page.evaluate(() => Boolean(document.activeElement?.closest('#modalCard')))).toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#modal')).toBeHidden();
+    await expect(powerMetric).toBeFocused();
+  });
+
+  test('closing a modal opened inside a HUD panel returns focus to that panel trigger', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="settings"]').first().click();
+    await expect(page.locator('#helpBtn')).toBeVisible();
+    await page.locator('#helpBtn').focus();
+    await expect(page.locator('#helpBtn')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#modal')).toBeVisible();
+    // 패널 숨김(visibility .18s)과 모달 등장(.22s) 전환이 모두 끝난 뒤에 닫아야 실제 사용 흐름이다.
+    // 전환 중에 Escape를 누르면 #helpBtn이 아직 포커스를 받을 수 있어 테스트가 무의미해진다.
+    await page.waitForTimeout(400);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#modal')).toBeHidden();
+    // 오프너가 아직 포커스를 받을 수 있으면 오프너로, 감춰졌으면 그 패널을 다시 여는 HUD 버튼으로
+    // 돌아가야 한다. 어느 쪽이든 body로 떨어지면 안 된다 — 그러면 문서 맨 위부터 Tab 해야 한다.
+    const focused = await page.evaluate(() => {
+      const active = document.activeElement;
+      if (!active) return 'none';
+      if (active.id) return `#${active.id}`;
+      if (active.dataset?.hudTarget) return `[data-hud-target="${active.dataset.hudTarget}"]`;
+      return active.tagName.toLowerCase();
+    });
+    expect(['#helpBtn', '[data-hud-target="settings"]']).toContain(focused);
+  });
+
+  test('an opener hidden with the panel falls back to the HUD button that reopens it', async ({ gamePage: page }) => {
+    await page.locator('[data-hud-target="settings"]').first().click();
+    await expect(page.locator('#helpBtn')).toBeVisible();
+    await page.locator('#helpBtn').click();
+    await expect(page.locator('#modal')).toBeVisible();
+    // 앱이 실제로 쓰는 숨김 방식 그대로다: WorldHud가 hud-panel-active를 떼면
+    // .hud-panel이 visibility:hidden으로 페이드아웃한다(레이아웃 박스는 그대로 남는다).
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('settingsPanel')).visibility === 'hidden');
+
+    // 이 상태의 오프너는 focus()를 조용히 거부한다 — 폴백이 필요한 이유를 먼저 못박는다.
+    expect(await page.evaluate(() => {
+      const opener = document.getElementById('helpBtn');
+      opener.focus();
+      return document.activeElement === opener;
+    })).toBe(false);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#modal')).toBeHidden();
+    expect(await page.evaluate(() => document.activeElement?.dataset?.hudTarget ?? document.activeElement?.tagName))
+      .toBe('settings');
+  });
+
+  test('the live region announces a climate alert change once instead of every settlement', async ({ gamePage: page }) => {
+    // 매 틱 다시 쓰이는 영역에는 aria-live가 없어야 한다.
+    expect(await page.evaluate(() => [
+      document.getElementById('simulationHud').hasAttribute('aria-live'),
+      document.getElementById('facilityDetail').hasAttribute('aria-live'),
+    ])).toEqual([false, false]);
+
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      window.__GAME_STATE__.climateAlert = 'heat_watch';
+      window.__refreshGameForTest();
+    });
+    await expect(page.locator('#srAnnouncer')).toHaveText('기후 경보: 폭염 주의');
+
+    await page.evaluate(() => {
+      document.getElementById('srAnnouncer').textContent = '';
+      window.__refreshGameForTest();
+      window.__refreshGameForTest();
+    });
+    await expect(page.locator('#srAnnouncer')).toHaveText('');
+  });
+
+  test('a blocking modal ignores Escape', async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__EVENT_BUS__.emit(window.__EVENTS__.GAME_OVER, { summary: { dailyCarbon: 30 } }));
+    await expect(page.locator('#modalCard')).toHaveAttribute('data-modal-id', 'game-over');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#modal')).toBeVisible();
   });
 
   test('large HUD values use compact units while accessible labels keep exact values', async ({ gamePage: page }) => {

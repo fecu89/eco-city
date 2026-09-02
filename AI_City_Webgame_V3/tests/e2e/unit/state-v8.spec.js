@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState, SAVE_VERSION } from '../../../src/core/GameState.js';
+import { WORKFORCE_RULES } from '../../../src/core/Constants.js';
 import { migrateSaveData, migrateV7ToV8 } from '../../../src/systems/SaveSystem.js';
 
 function v7Save(overrides = {}) {
@@ -40,7 +41,13 @@ test('v7 save preserves its displayed date and real remaining durations', () => 
 
   const migrated = migrateSaveData(old);
 
-  expect(migrated).toMatchObject({ v: 9, elapsedGameDays: 5, workforceRebalanceGraceDays: 24 });
+  // v7 시(hour) 틱은 v8 일(day) 틱으로 1:1 이름만 바뀌었다. 공사·연구·위기 카운터가 모두
+  // 1:1로 옮겨지므로 경과 시간만 24로 나누면 저장된 도시의 날짜만 어긋난다.
+  expect(migrated).toMatchObject({
+    v: 9,
+    elapsedGameDays: 120,
+    workforceRebalanceGraceDays: WORKFORCE_RULES.REBALANCE_GRACE_DAYS,
+  });
   expect(migrated.grid[0].project).toMatchObject({ durationDays: 8, elapsedDays: 3 });
   expect(migrated.research.jobs.solar2).toMatchObject({ durationDays: 120, elapsedEffectiveDays: 30 });
   expect(migrated.research.techLevels.green).toBe(1);

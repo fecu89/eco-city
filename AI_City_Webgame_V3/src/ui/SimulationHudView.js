@@ -1,9 +1,14 @@
 import { gameState } from '../core/GameState.js';
-import { CARBON_CRISIS } from '../core/Constants.js';
+import { CARBON_CRISIS, CITY_FAILURE_RULES } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { exactNumberLabel, formatCompactNumber, formatCredits, round1 } from './format.js';
 
 let els;
+// #simulationHud 전체를 aria-live로 두면 매 틱 정산 수치가 그대로 읽혀 스크린리더가 폭주한다.
+// 기후 경보 단계가 실제로 바뀔 때만 전용 라이브 영역에 한 줄을 쓴다.
+const CLIMATE_ALERT_LABELS = { normal: '평상시', heat_watch: '폭염 주의', extreme_heat: '극한 폭염' };
+let announcedClimateAlert = 'normal';
+
 export function initSimulationHudView(elements) {
   els = elements;
   if (els.root && !els.root.dataset.metricCausesBound) {
@@ -82,7 +87,7 @@ export function renderSimulationHud() {
   setMetricRisk(els.carbonRate, { danger: dailyCarbon > CARBON_CRISIS.SAFE_DAILY });
   setMetricRisk(els.water, { danger: waterLimit != null && dailyWater > waterLimit });
   els.carbon.textContent = `${summary?.lowCarbonPercent ?? 0}%`;
-  const labels = { normal: '평상시', heat_watch: '폭염 주의', extreme_heat: '극한 폭염' };
+  const labels = CLIMATE_ALERT_LABELS;
   const carbonActive = gameState.carbonCrisisDays > 0;
   const risk = gameState.operationalRisk;
   const operationalAlert = risk.negativeCreditDays > 0 || risk.essentialBlackoutDays > 0;
@@ -90,8 +95,15 @@ export function renderSimulationHud() {
     ? `탄소 위험 ${gameState.carbonCrisisDays}/${CARBON_CRISIS.GAME_OVER_DAYS}일`
     : operationalAlert
       ? risk.negativeCreditDays >= risk.essentialBlackoutDays
-        ? `적자 위험 ${risk.negativeCreditDays}/24일`
-        : `필수전력 위험 ${risk.essentialBlackoutDays}/12일`
+        ? `적자 위험 ${risk.negativeCreditDays}/${CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS}일`
+        : `필수전력 위험 ${risk.essentialBlackoutDays}/${CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS}일`
     : labels[gameState.climateAlert] || labels.normal;
   els.alert.className = `sr-only ${carbonActive || operationalAlert ? 'climate-carbon_crisis' : `climate-${gameState.climateAlert}`}`;
+  announceClimateAlert();
+}
+
+function announceClimateAlert() {
+  if (!els.announcer || gameState.climateAlert === announcedClimateAlert) return;
+  announcedClimateAlert = gameState.climateAlert;
+  els.announcer.textContent = `기후 경보: ${CLIMATE_ALERT_LABELS[announcedClimateAlert] || CLIMATE_ALERT_LABELS.normal}`;
 }

@@ -1,4 +1,12 @@
-import { BOARD, FACILITIES, STAGES } from '../core/Constants.js';
+import {
+  BOARD,
+  DEMOLITION_REFUND_RATIO,
+  FACILITIES,
+  GRID_EXPANSION_SETTLE_MS,
+  SCORING,
+  STAGES,
+  UPGRADE_COST_RATIOS,
+} from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
@@ -6,6 +14,7 @@ import { formatCredits } from '../core/Money.js';
 import { QUESTS, questForState } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import {
+  CAMPAIGN_QUEST_INDEXES,
   levelThreeUnlockQuestForFacility,
   upgradePermitLevelForFacility,
 } from '../core/CampaignProgression.js';
@@ -36,6 +45,10 @@ import {
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (v) => Math.round(v * 10) / 10;
 const BATTERY_CONSUMER_TYPES = Object.freeze(['residential', 'factory', 'data', 'cooling']);
+
+function researchJobForDataCenter(state, index) {
+  return Object.values(state.research?.jobs || {}).find((job) => job.dataCenterIndex === index) || null;
+}
 
 function batteryHasConsumerNeighbor(grid, batteryIndex, coords) {
   return grid.some((cell, consumerIndex) => cell
@@ -157,36 +170,37 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
     const ns = neighborIndices(i, coords);
     if (cell.type === 'factory') {
       if (ns.some((n) => grid[n] && ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(grid[n].type))) {
-        const b = 12 * cell.level;
+        const b = SCORING.SYNERGY.FACTORY_NEXT_TO_POWER_PER_LEVEL * cell.level;
         dev += b; synergyScore += b; synergyLinks++;
       }
     }
     if (cell.type === 'data') {
       if (ns.some((n) => grid[n]?.type === 'cooling')) {
-        const b = 10 * cell.level;
+        const b = SCORING.SYNERGY.DATA_NEXT_TO_COOLING_PER_LEVEL * cell.level;
         dev += b; synergyScore += b; synergyLinks++;
       }
       ns.forEach((n) => { if (grid[n]?.type === 'data' && n > i) heatCluster++; });
     }
     if (cell.type === 'residential' && ns.some((n) => grid[n]?.type === 'green')) {
-      dev += 4 * cell.level; synergyScore += 4 * cell.level; synergyLinks++;
+      const b = SCORING.SYNERGY.RESIDENTIAL_NEXT_TO_GREEN_PER_LEVEL * cell.level;
+      dev += b; synergyScore += b; synergyLinks++;
     }
     if (cell.type === 'battery' && batteryHasConsumerNeighbor(grid, i, coords)) {
-      consumerHubBatteries.add(i); synergyLinks++; synergyScore += 3 * cell.level;
+      consumerHubBatteries.add(i); synergyLinks++; synergyScore += SCORING.SYNERGY.BATTERY_HUB_PER_LEVEL * cell.level;
     }
     if (cell.type === 'nuclear' && ns.some((n) => grid[n]?.type === 'cooling')) {
-      synergyLinks++; synergyScore += 2;
+      synergyLinks++; synergyScore += SCORING.SYNERGY.NUCLEAR_NEXT_TO_COOLING;
     }
     if (['factory', 'thermal'].includes(cell.type)) {
-      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= 3; } });
+      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= SCORING.CONFLICT_DEV_PENALTY.HEAVY_NEXT_TO_RESIDENTIAL; } });
     }
     // 원전 인접 주거지: 안전 불안이라는 사회적 갈등 — 발전점수 손실이 더 크다.
     if (cell.type === 'nuclear') {
-      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= 4; } });
+      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= SCORING.CONFLICT_DEV_PENALTY.NUCLEAR_NEXT_TO_RESIDENTIAL; } });
     }
     // 데이터센터 인접 주거지: 소음·발열 민원.
     if (cell.type === 'data') {
-      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= 2; } });
+      ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= SCORING.CONFLICT_DEV_PENALTY.DATA_NEXT_TO_RESIDENTIAL; } });
     }
     // 오염 시설이 녹지를 훼손 — 탄소 부담이 늘어난 것처럼 취급.
     if (['thermal', 'factory'].includes(cell.type)) {
@@ -204,13 +218,22 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
   grid.forEach((cell, i) => {
     if (!cell || !['solar', 'wind'].includes(cell.type)) return;
     const s = cellStats(cell);
-    renewablePenalty += s.supply * (linkedRenewables.has(i) ? 0.05 : 0.25);
+    renewablePenalty += s.supply * (linkedRenewables.has(i)
+      ? SCORING.RENEWABLE_PENALTY_RATIO.LINKED
+      : SCORING.RENEWABLE_PENALTY_RATIO.UNLINKED);
   });
   const reliableSupply = Math.max(0, supply - renewablePenalty);
   const balance = reliableSupply - demand;
   const overload = Math.max(0, demand - reliableSupply);
-  const sustainability = clamp(100 - carbon * 3.6 - Math.max(0, water - 10) * 2.5 - overload * 6 - conflictPairs * 4, 0, 100);
-  const reliability = clamp(68 + balance * 3 + linkedRenewables.size * 6 - heatCluster * 5, 0, 100);
+  const sustainability = clamp(SCORING.SUSTAINABILITY.BASE
+    - carbon * SCORING.SUSTAINABILITY.CARBON_WEIGHT
+    - Math.max(0, water - SCORING.SUSTAINABILITY.FREE_WATER) * SCORING.SUSTAINABILITY.WATER_WEIGHT
+    - overload * SCORING.SUSTAINABILITY.OVERLOAD_WEIGHT
+    - conflictPairs * SCORING.SUSTAINABILITY.CONFLICT_WEIGHT, 0, 100);
+  const reliability = clamp(SCORING.RELIABILITY.BASE
+    + balance * SCORING.RELIABILITY.BALANCE_WEIGHT
+    + linkedRenewables.size * SCORING.RELIABILITY.LINKED_RENEWABLE_WEIGHT
+    - heatCluster * SCORING.RELIABILITY.HEAT_CLUSTER_WEIGHT, 0, 100);
 
   return {
     dev: Math.round(dev), demand: round1(demand), supply: round1(supply), reliableSupply: round1(reliableSupply), balance: round1(balance),
@@ -226,19 +249,23 @@ export function stageLevelCap(facilityType = null) {
     : gameState.upgradePermitLevel;
 }
 
+const upgradeCostRatio = (fromLevel) => (
+  fromLevel === 1 ? UPGRADE_COST_RATIOS.FROM_LEVEL_1 : UPGRADE_COST_RATIOS.FROM_LEVEL_2_PLUS
+);
+
 export function upgradeCost(cell) {
   const f = FACILITIES[cell.type];
-  return Math.ceil(f.cost * (cell.level === 1 ? 1.0 : 1.45));
+  return Math.ceil(f.cost * upgradeCostRatio(cell.level));
 }
 
 export function investedCost(cell) {
   let sum = FACILITIES[cell.type].cost;
-  for (let l = 1; l < cell.level; l++) sum += Math.ceil(FACILITIES[cell.type].cost * (l === 1 ? 1.0 : 1.45));
+  for (let l = 1; l < cell.level; l++) sum += Math.ceil(FACILITIES[cell.type].cost * upgradeCostRatio(l));
   return sum;
 }
 
 export function demolitionRefund(cell) {
-  return Math.floor(investedCost(cell) * 0.5);
+  return Math.floor(investedCost(cell) * DEMOLITION_REFUND_RATIO);
 }
 
 export function refreshMetrics() {
@@ -319,6 +346,9 @@ export function validateUpgrade(state, index) {
   if (!cell) return { ok: false, reason: 'invalid_cell' };
   if (cell.project) return { ok: false, reason: 'project_in_progress', facility: FACILITIES[cell.type] };
   const facility = FACILITIES[cell.type];
+  if (cell.type === 'data' && researchJobForDataCenter(state, index)) {
+    return { ok: false, reason: 'research_in_progress', facility };
+  }
   if (cell.level >= facility.maxLevel) return { ok: false, reason: 'max_level', facility };
   const nextLevel = cell.level + 1;
   if (nextLevel > upgradePermitLevelForFacility(state, cell.type)) {
@@ -326,7 +356,9 @@ export function validateUpgrade(state, index) {
       ok: false,
       reason: 'city_permit_required',
       requiredLevel: nextLevel,
-      unlockQuestIndex: nextLevel >= 3 ? levelThreeUnlockQuestForFacility(cell.type) : 7,
+      unlockQuestIndex: nextLevel >= 3
+        ? levelThreeUnlockQuestForFacility(cell.type)
+        : CAMPAIGN_QUEST_INDEXES.PREPARATION_START,
       facility,
     };
   }
@@ -350,9 +382,12 @@ export function validateUpgrade(state, index) {
 export function upgradeRequirementMessage(state, validation) {
   if (validation.ok) return '강화할 수 있습니다.';
   if (validation.reason === 'city_permit_required') {
-    const questIndex = validation.requiredLevel === 2 ? 7 : validation.unlockQuestIndex;
-    const quest = QUESTS[questIndex - 1];
-    return `퀘스트 ${quest.index} ‘${quest.title}’를 완료하면 Lv.${validation.requiredLevel} 강화 허가가 열립니다.`;
+    const questIndex = validation.requiredLevel === 2
+      ? CAMPAIGN_QUEST_INDEXES.PREPARATION_START
+      : validation.unlockQuestIndex;
+    // 서부 분기는 7~9단계 제목이 다르다. 분기에 맞는 퀘스트를 보여준다.
+    const quest = questForState(state, questIndex);
+    return `퀘스트 ${questIndex} ‘${quest.title}’를 완료하면 Lv.${validation.requiredLevel} 강화 허가가 열립니다.`;
   }
   if (validation.reason === 'technology_required') {
     const cell = state.grid.find((item) => item?.type === validation.facility && item) || null;
@@ -370,6 +405,9 @@ export function upgradeRequirementMessage(state, validation) {
   }
   if (validation.reason === 'insufficient_workforce') {
     return `강화 후 인력이 ${validation.shortage}명 부족합니다. 주거지를 먼저 건설하거나 강화하세요.`;
+  }
+  if (validation.reason === 'research_in_progress') {
+    return '이 데이터센터의 연구를 완료하거나 취소한 뒤 강화할 수 있습니다.';
   }
   if (validation.reason === 'max_level') return '이미 최대 레벨입니다.';
   if (validation.reason === 'project_in_progress') return '현재 공사가 끝난 뒤 다시 시도하세요.';
@@ -472,8 +510,6 @@ export function expandGrid(side = null) {
   setTimeout(() => {
     gameState.expandedCells.clear();
     eventBus.emit(Events.BOARD_EXPANDED, { ...result, metrics: gameState.metrics, settled: true });
-  }, 4200);
+  }, GRID_EXPANSION_SETTLE_MS);
   return result;
 }
-
-export const GRID_EXPANSION_SETTLE_MS = 4200;

@@ -1,11 +1,14 @@
 import { CARBON_CRISIS } from '../core/Constants.js';
 
+// 경보 마일스톤은 주의 -> 위험 -> 심각 순서로 정의돼 있다.
+const [WATCH_DAYS, DANGER_DAYS, SEVERE_DAYS] = CARBON_CRISIS.WARNING_DAYS;
+
 export function carbonPressureForDays(unsafeDays = 0) {
   const days = Math.max(0, Number(unsafeDays) || 0);
-  if (days >= 168) return { tier: 'extreme', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 5 };
-  if (days >= 144) return { tier: 'severe', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 5 };
-  if (days >= 72) return { tier: 'danger', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 0 };
-  if (days >= 24) return { tier: 'watch', unsafeDays: days, healthMultiplier: 1.25, residentialIncomeMultiplier: 1, waterMultiplier: 1, reportPenalty: 0 };
+  if (days >= CARBON_CRISIS.GAME_OVER_DAYS) return { tier: 'extreme', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 5 };
+  if (days >= SEVERE_DAYS) return { tier: 'severe', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 5 };
+  if (days >= DANGER_DAYS) return { tier: 'danger', unsafeDays: days, healthMultiplier: 1.5, residentialIncomeMultiplier: 0.9, waterMultiplier: 1.05, reportPenalty: 0 };
+  if (days >= WATCH_DAYS) return { tier: 'watch', unsafeDays: days, healthMultiplier: 1.25, residentialIncomeMultiplier: 1, waterMultiplier: 1, reportPenalty: 0 };
   return { tier: 'normal', unsafeDays: days, healthMultiplier: 1, residentialIncomeMultiplier: 1, waterMultiplier: 1, reportPenalty: 0 };
 }
 
@@ -25,6 +28,9 @@ export function applyCarbonCrisis(state, dailyCarbon) {
   state.carbonCrisisDays = unsafe
     ? previousDays + 1
     : Math.max(0, previousDays - CARBON_CRISIS.RECOVERY_PER_SAFE_DAY);
+
+  // 위기 일수를 0까지 되돌린 도시는 경보 이력도 함께 지운다. 다시 나빠지면 처음처럼 경고한다.
+  if (state.carbonCrisisDays === 0) state.carbonWarningMilestones.clear();
 
   const warnings = CARBON_CRISIS.WARNING_DAYS.filter((milestone) => (
     previousDays < milestone

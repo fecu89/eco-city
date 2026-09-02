@@ -20,6 +20,9 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   eventBus.on(Events.BUILD_PLAN_CHANGED, renderDock);
   eventBus.on(Events.BUILD_PLAN_CLEARED, renderDock);
   eventBus.on(Events.BUILD_PLAN_COMMITTED, renderDock);
+  eventBus.on(Events.GAME_RESET, () => {
+    detailFacilityKey = null;
+  });
 }
 
 const compactMetric = (value) => Number(Number(value || 0).toFixed(2)).toString();
@@ -77,7 +80,9 @@ function renderFacilityDetail(requestedKey = null) {
   const powerLabel = reference.supply ? '최대 발전' : reference.demand ? '정상 수요' : '전력';
   const locked = !gameState.unlockedFacilities.has(key)
     || (key === 'tidal' && (gameState.research.techLevels.tidal || 0) < 1);
-  detailEl.innerHTML = `
+  // 이 영역은 호버·포커스뿐 아니라 renderDock()을 타고 매 틱 다시 그려진다.
+  // 시설 버튼(아래)과 같은 방식으로 내용이 실제로 달라질 때만 DOM을 교체한다.
+  const markup = `
     <div class="facility-detail-copy"><strong>${facility.icon} ${facility.name}</strong><p title="${facility.desc}">${facility.desc}</p><small class="facility-detail-basis">${basisText}</small>${locked ? `<em>${facilityUnlockMessage(gameState, key)}</em>` : ''}</div>
     <div class="facility-detail-stats">
       <span data-metric="credit" aria-label="크레딧" title="전력·인력·취업률과 공간 페널티 적용 전 Lv.1 기준"><small aria-hidden="true">💰 ${economyLabel}</small><b>${money}</b></span>
@@ -87,6 +92,7 @@ function renderFacilityDetail(requestedKey = null) {
       <span data-metric="labor" aria-label="인력" title="인력"><small aria-hidden="true">👥</small><b>${laborText}</b></span>
     </div>
   `;
+  if (detailEl.innerHTML !== markup) detailEl.innerHTML = markup;
 }
 
 function orderedFacilities() {

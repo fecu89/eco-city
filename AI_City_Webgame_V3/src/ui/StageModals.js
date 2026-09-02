@@ -1,8 +1,8 @@
 import anime from 'animejs';
-import { CARBON_CRISIS, FACILITIES, RESEARCH_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, RESEARCH_RULES, STRESS_TEST_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { setModal, closeModal, getModalState, $modal, $$modal } from './Modal.js';
+import { setModal, closeModal, getModalState, MODAL_PRIORITY, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits, round1 } from './format.js';
 import {
   cellStats,
@@ -84,6 +84,9 @@ export function initStageModals(refreshCallback, options = {}) {
     }
   });
   eventBus.on(Events.EXPANSION_CHOICE_REQUESTED, openExpansionChoiceModal);
+  eventBus.on(Events.GAME_RESET, () => {
+    inspectorIndex = null;
+  });
 }
 
 export function openExpansionChoiceModal() {
@@ -103,7 +106,7 @@ export function openExpansionChoiceModal() {
         <b>9칸 개방 · ${FACILITIES[side.facility].name} 해금 · 유지비 +1.00 💰/일</b>
       </button>`).join('')}
     </div>
-  `, { id: 'expansion-choice', pausesSimulation: true, dismissible: false });
+  `, { id: 'expansion-choice', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.IMPORTANT });
   $$modal('[data-expansion-side]').forEach((button) => button.addEventListener('click', () => {
     const result = expandGrid(button.dataset.expansionSide);
     if (!result.ok) return;
@@ -140,7 +143,7 @@ function refreshOpenInspector(tickProgress = 0) {
     progressEl.textContent = `${percent}%`;
     remainingEl.textContent = `남은 ${remaining}일`;
     barEl.style.width = `${progress * 100}%`;
-    barEl.closest('.construction-project-bar')?.setAttribute('aria-valuenow', progress.toFixed(3));
+    barEl.closest('.construction-project-bar')?.setAttribute('aria-valuenow', String(percent));
     return;
   }
   if ($modal('[data-construction-console]')) {
@@ -259,7 +262,7 @@ function metricCauseData(metric) {
     const limit = hasLimit ? Number(summary.waterLimit) : null;
     data.current = `현재 ${round1(summary.dailyWater || 0)}/일${limit != null ? ` · 한도 ${round1(limit)}/일` : ''}`;
     groupedFacilityValues(summary.facilityEnvironment, 'water').forEach((label) => data.causes.push(`${label}/일`));
-    if (pressure?.type === 'drought') data.causes.push('물 부족 예보 · 도시 물 한도 25% 감소');
+    if (pressure?.type === 'drought') data.causes.push('가뭄 예보 · 물 사용량을 예보 직전 수준 이하로 유지해야 합니다');
     data.action = '데이터센터·발전소 가까이에 냉각순환 시설을 배치하고 운영 모드를 조정하세요.';
   }
   if (!data.causes.length) data.causes.push('직전 정산에서 추가 원인이 기록되지 않았습니다. 다음 일일 정산 후 다시 확인하세요.');
@@ -539,7 +542,7 @@ function projectOperationDescription(cell) {
   const profile = operationProfileForCell(cell);
   if (cell.type === 'residential') return '기존 인구·수입·전력·물 성능의 80%로 운영하며, 운영비는 100% 유지됩니다.';
   if (cell.type === 'battery') return '저장량과 기존 용량은 유지되며 충·방전 출력이 50%로 제한됩니다.';
-  if (cell.type === 'data') return '전력 70% · 연구 50% · 수입 60%로 가동하며, 운영비와 인력은 100% 유지됩니다.';
+  if (cell.type === 'data') return '전력 70% · 수입 60%로 가동하며 연구는 공사 완료까지 중단됩니다. 운영비와 인력은 100% 유지됩니다.';
   return `기존 레벨 성능의 ${Math.round(profile.supply * 100)}%로 가동하며, 운영비와 인력은 100% 유지됩니다.`;
 }
 
@@ -713,10 +716,11 @@ export function openStressTestModal(onStarted = null) {
     <div class="modal-head"><div><span class="eyebrow">CHAPTER 4 · FINAL TEST</span><h2>도시 스트레스 테스트</h2></div><button class="icon-btn close-modal" aria-label="닫기"><i data-lucide="x"></i></button></div>
     <p class="expansion-choice-intro">지금까지 만든 도시를 ${totalDays}일 동안 복합 위기에 노출합니다. 도시를 멈추지 않고 운영 결정을 내려 생존시키세요.</p>
     <div class="stress-phase-list">
-      ${STRESS_PHASES.map((phase, index) => `<article><span>${index + 1}</span><i data-lucide="${phase.icon}"></i><strong>${phase.label}</strong><b>${phase.durationDays}일</b></article>`).join('')}
+      ${STRESS_PHASES.map((phase, index) => `<article><span>${index + 1}</span><i data-lucide="${phase.icon}"></i><strong>${phase.label}</strong><b>${phase.durationDays}일</b>${phase.preparation ? `<small>${escapeHtml(phase.preparation)}</small>` : ''}</article>`).join('')}
     </div>
     <div class="callout"><strong>테스트 중에도 가능한 행동</strong><p>운영 모드·전력 우선순위·배터리 정책·연구·강화·긴급 건설을 계속 사용할 수 있습니다. 단, 신규 건설비는 20% 증가합니다.</p></div>
-    <div class="callout"><strong>8개 통과 조건</strong><p>평균 공급 82% 이상 · 최저 공급 50% 이상 · 연속 적자 4일 미만 · 종료 크레딧 0 이상 · 물 초과 6일 이하 · 복구 3일 이내 · 조력 8E 이상 · CO₂ 평균 8/일 이하(35일 안전, 10 초과 최대 3일)</p></div>
+    <div class="callout"><strong>8개 통과 조건</strong><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 연속 적자 ${STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS}일 미만 · 종료 크레딧 0 이상 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하 · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내 · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E 이상 · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 이하(${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 안전, ${STRESS_TEST_RULES.HIGH_CARBON_RATE} 초과 최대 ${STRESS_TEST_RULES.MAX_HIGH_CARBON_DAYS}일)</p></div>
+    <div class="callout"><strong>물 한도 기준</strong><p>물 한도는 고정값이 아니라 <b>시험 시작 시 도시가 쓰던 사용량</b>입니다. 건조 위기 구간에는 냉각 부담이 커지는데도 그 사용량을 넘기면 안 됩니다. 순환냉각 연결과 절전 모드로 늘어난 물을 다시 눌러야 합니다.</p></div>
     ${previous && !previous.passed ? `<div class="demolition-warning"><strong>이전 시도 진단</strong><p>${escapeHtml(previous.diagnosis?.label || '도시 운영을 보완한 뒤 다시 시도하세요.')}</p></div>` : ''}
     <div class="modal-actions"><button class="btn secondary close-modal">아직 준비하기</button><button class="btn primary" id="startStressTestBtn">${previous ? '테스트 재시작' : '테스트 시작'}</button></div>
   `, { id: 'stress-test-start', pausesSimulation: true });
@@ -759,7 +763,7 @@ export function openStressResultModal(result, { onReport = null, onClose = null 
       <div class="summary-card"><span>복구 달성</span><strong>${Number.isFinite(result.recoveryAchievedAtDay) ? `${result.recoveryAchievedAtDay}일` : '미달'}</strong></div>
     </div>
     <div class="modal-actions"><button class="btn ${result.passed ? 'secondary' : 'primary'}" id="stressResultClose">${result.passed ? '도시 계속 보기' : '도시 보완하기'}</button>${result.passed ? '<button class="btn primary" id="stressResultReport">최종 운영 보고서</button>' : ''}</div>
-  `, { id: 'stress-test-result', pausesSimulation: true });
+  `, { id: 'stress-test-result', pausesSimulation: true, priority: MODAL_PRIORITY.CRITICAL });
   $modal('#stressResultClose').addEventListener('click', () => {
     closeModal();
     onClose?.();
@@ -817,14 +821,14 @@ export function openCarbonGameOverModal({ dailyCarbon = 0, onReset } = {}) {
     ? {
       kicker: 'ECONOMIC FAILURE',
       title: '도시 재정이 회복 불능 상태입니다',
-      strong: '크레딧 적자가 24일 연속 지속되어 필수 운영 계약이 중단됐습니다.',
+      strong: `크레딧 적자가 ${CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS}일 연속 지속되어 필수 운영 계약이 중단됐습니다.`,
       detail: '공장 절전·증산 모드와 확장 유지비를 조정하고, 긴급지원은 위기 초기에 사용하세요.',
     }
     : reason === 'essential_blackout'
       ? {
         kicker: 'GRID FAILURE',
         title: '필수시설 전력망이 붕괴했습니다',
-        strong: '필수시설 공급률 5% 이하가 12일 지속되어 도시 운영이 중단됐습니다.',
+        strong: `필수시설 공급률 ${CITY_FAILURE_RULES.ESSENTIAL_BLACKOUT_PERCENT}% 이하가 ${CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS}일 지속되어 도시 운영이 중단됐습니다.`,
         detail: '주거지·냉각시설 우선순위를 높이고 저장 전력을 소비지 가까이에 배치하세요.',
       }
       : {
@@ -841,7 +845,7 @@ export function openCarbonGameOverModal({ dailyCarbon = 0, onReset } = {}) {
     </div>
     <div class="callout"><strong>다음 도시의 생존 전략</strong><p>화력·공장 증설만 반복하지 말고 태양광·풍력·저장 허브와 녹지를 먼저 연결하세요.</p></div>
     <div class="modal-actions"><button class="btn danger" id="restartAfterGameOver">새 도시 시작</button></div>
-  `, { id: 'game-over', pausesSimulation: true, dismissible: false });
+  `, { id: 'game-over', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.CRITICAL });
   $modal('#restartAfterGameOver').addEventListener('click', () => onReset?.());
 }
 
@@ -854,6 +858,6 @@ export function openOperationalRiskModal({ reason } = {}) {
       <p>${credit ? '공장을 절전 모드로 전환하거나 확장·시설 운영비를 줄이고 흑자 시설을 확보하세요.' : '주거지·냉각 우선순위를 높이고 발전·저장 예비력을 확보하세요.'}</p>
     </div>
     <div class="modal-actions"><button class="btn primary" id="acknowledgeOperationalRisk">운영 조정하기</button></div>
-  `, { id: 'operational-risk', pausesSimulation: true, dismissible: false });
+  `, { id: 'operational-risk', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.CRITICAL });
   $modal('#acknowledgeOperationalRisk').addEventListener('click', closeModal);
 }

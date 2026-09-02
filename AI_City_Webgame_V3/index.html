@@ -35,7 +35,7 @@
           <div class="brand-copy"><strong>기후 생존 도시</strong><span id="phaseText">복구 퀘스트 1 / 6</span></div>
         </div>
 
-        <div class="simulation-hud" id="simulationHud" aria-live="polite">
+        <div class="simulation-hud" id="simulationHud">
           <span class="sim-date"><b id="simTime">2040-01-01</b><small>일자</small></span>
           <button type="button" class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/일</em></span></button>
           <button type="button" class="sim-metric" data-metric="power" aria-label="전력 여유" title="전력 여유"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">±0 E</b></button>
@@ -68,7 +68,7 @@
         <aside class="right-panel hud-panel-host" id="rightPanel">
           <section class="glass panel-block hud-panel build-panel" id="buildPanel" data-hud-panel="build" aria-label="건설 도구">
             <div class="facility-dock" id="facilityDock"></div>
-            <div class="facility-detail" id="facilityDetail" aria-live="polite"></div>
+            <div class="facility-detail" id="facilityDetail"></div>
           </section>
 
           <section class="glass panel-block hud-panel quest-panel" id="questPanel" data-hud-panel="quest">
@@ -159,11 +159,13 @@
   </main>
 
   <div class="quest-celebration" id="questCelebration" role="status" aria-live="assertive"></div>
+  <!-- 매 틱 다시 쓰이는 HUD 대신, 상태가 실제로 바뀔 때만 이 영역에 한 줄을 넣어 읽어 준다. -->
+  <div id="srAnnouncer" class="sr-only" aria-live="polite"></div>
   <div class="toast-stack" id="toastStack"></div>
 
   <div class="modal hidden" id="modal">
     <div class="modal-backdrop"></div>
-    <div class="modal-card" id="modalCard"></div>
+    <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

@@ -1,19 +1,25 @@
-import { BOARD, FACILITIES, GAME, TIME } from '../core/Constants.js';
+import { BOARD, FACILITIES, GAME, TIME, WORKFORCE_RULES } from '../core/Constants.js';
 import { SAVE_VERSION, normalizeCell } from '../core/GameState.js';
 import { gameState } from '../core/GameState.js';
 import { roundCredits } from '../core/Money.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { axialToWorld, createHexCoordinates, hexDistance } from './HexGridSystem.js';
-import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { axialToWorld, createHexCoordinates, expandHexGrid, hexDistance } from './HexGridSystem.js';
+import { refreshMetrics } from './BoardSystem.js';
+import { readStorage, removeStorage, writeStorage } from '../core/safeStorage.js';
+import { CAMPAIGN_QUEST_INDEXES, PREPARATION_QUEST_IDS } from '../core/CampaignProgression.js';
+import { QUESTS } from '../core/QuestDefinitions.js';
+import { EXPANSION_SIDES } from '../core/ZoneDefinitions.js';
+
+// 현재 버전보다 새로운 저장을 보관하는 백업 키.
+const NEWER_SAVE_KEY = `${GAME.AUTOSAVE_KEY}-newer`;
 
 let saveTimer = null;
 let simulationSaveTimer = null;
 let lastSimulationSaveAt = 0;
-const SIMULATION_SAVE_INTERVAL_MS = 10000;
 
 function persist() {
   try {
-    localStorage.setItem(GAME.AUTOSAVE_KEY, JSON.stringify(gameState.serialize()));
+    writeStorage(GAME.AUTOSAVE_KEY, JSON.stringify(gameState.serialize()));
   } catch (err) {
     console.warn('자동저장 실패:', err);
   }
@@ -24,9 +30,22 @@ function scheduleSave() {
   saveTimer = setTimeout(persist, GAME.AUTOSAVE_DEBOUNCE_MS);
 }
 
+// 탭을 숨기거나 페이지를 떠날 때 호출한다. 디바운스(600ms)와 정산 스로틀(10초) 때문에
+// 그냥 두면 마지막 건설이나 최대 10게임일치 정산이 통째로 사라진다.
+export function flushSave() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (simulationSaveTimer != null) {
+    clearTimeout(simulationSaveTimer);
+    simulationSaveTimer = null;
+  }
+  lastSimulationSaveAt = Date.now();
+  persist();
+}
+
 function scheduleSimulationSave() {
   const elapsed = Date.now() - lastSimulationSaveAt;
-  if (elapsed >= SIMULATION_SAVE_INTERVAL_MS) {
+  if (elapsed >= GAME.SIMULATION_SAVE_THROTTLE_MS) {
     lastSimulationSaveAt = Date.now();
     persist();
     return;
@@ -36,7 +55,7 @@ function scheduleSimulationSave() {
     simulationSaveTimer = null;
     lastSimulationSaveAt = Date.now();
     persist();
-  }, SIMULATION_SAVE_INTERVAL_MS - elapsed);
+  }, GAME.SIMULATION_SAVE_THROTTLE_MS - elapsed);
 }
 
 // 수업 중 실수로 새로고침해도 진행 상황이 남도록, 상태가 바뀔 만한 이벤트마다 디바운스 저장한다.
@@ -61,16 +80,29 @@ const AUTOSAVE_EVENTS = [
 export function initSaveSystem() {
   AUTOSAVE_EVENTS.forEach((evt) => eventBus.on(evt, scheduleSave));
   eventBus.on(Events.SIMULATION_TICKED, scheduleSimulationSave);
+  window.addEventListener('pagehide', flushSave);
 }
 
 export function loadSavedGame() {
   try {
-    const raw = localStorage.getItem(GAME.AUTOSAVE_KEY);
+    const raw = readStorage(GAME.AUTOSAVE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
+    // 더 새로운 버전으로 저장된 판은 되돌릴 수 없다. 새 도시로 시작하되 원본을 덮어쓰지 않고
+    // 백업 키에 남겨, 예전 버전을 열었다가 진행 상황을 잃는 일이 없게 한다.
+    if (Number(parsed?.v) > SAVE_VERSION) {
+      writeStorage(NEWER_SAVE_KEY, raw);
+      gameState.reset();
+      return false;
+    }
     const data = migrateSaveData(parsed);
     const ok = gameState.hydrate(data);
-    if (ok) eventBus.emit(Events.GAME_LOADED, {});
+    // metrics는 저장되지 않는다. 다시 계산해 두지 않으면 새로고침 직후 레이더 차트가 비고
+    // BOARD_PLACED 페이로드가 metrics: null을 싣는다.
+    if (ok) {
+      refreshMetrics();
+      eventBus.emit(Events.GAME_LOADED, {});
+    }
     return ok;
   } catch (err) {
     console.warn('저장된 게임을 불러오지 못했습니다:', err);
@@ -197,16 +229,20 @@ export function migrateV2ToV3(data) {
   };
 }
 
+// 지금은 쓰지 않는 옛 저장 필드. 접두사 규칙 대신 이름을 명시한다 —
+// 'ai'로 시작한다는 이유만으로 지우면 나중에 airQuality 같은 정상 상태까지 사라진다.
+const OBSOLETE_SAVE_KEYS = Object.freeze([
+  // v1 레거시(AI 어드바이저·증거 수집)
+  'evidence', 'badges', 'advisorQuestions', 'transcripts', 'aiAdvice', 'aiHistory', 'gridSize',
+  // v3까지 쓰던 시(hour) 기반 시계
+  'simulationDay', 'simulationHour',
+  // v6에서 제거한 진단 스캐너
+  'diagnosisFound', 'diagnosisHintUsed', 'diagnosisScannerActive',
+]);
+
 export function stripObsoleteState(data) {
   const clean = { ...data };
-  const obsolete = new Set([
-    'evidence', 'badges', 'advisorQuestions', 'transcripts', 'aiAdvice', 'aiHistory',
-    'simulationDay', 'simulationHour', 'gridSize',
-    'diagnosisFound', 'diagnosisHintUsed', 'diagnosisScannerActive',
-  ]);
-  Object.keys(clean).forEach((key) => {
-    if (obsolete.has(key) || key.toLowerCase().startsWith('ai')) delete clean[key];
-  });
+  OBSOLETE_SAVE_KEYS.forEach((key) => { delete clean[key]; });
   return clean;
 }
 
@@ -218,7 +254,7 @@ export function migrateV3ToV4(data) {
     ...data,
     v: 4,
     elapsedGameHours,
-    timeScale: 1,
+    timeScale: TIME.DEFAULT_SCALE,
     lastSettlementDelta: 0,
     onboardingVersionSeen: 0,
     tutorialStep: 'build-button',
@@ -261,6 +297,8 @@ export function migrateV4ToV5(data) {
   };
 }
 
+// 아래 마이그레이션들의 퀘스트 번호는 모두 옛 15퀘스트 체계다. 지금의
+// CAMPAIGN_QUEST_INDEXES와 의미가 다르므로 상수로 바꾸면 안 된다.
 function legacyProgression(data, changedReady) {
   const questIndex = Math.max(1, Math.min(15, Math.trunc(Number(data.questIndex) || 1)));
   const campaignComplete = Boolean(data.campaignComplete);
@@ -482,7 +520,8 @@ export function migrateV7ToV8(data) {
     questIndex,
     questStatus: campaignComplete ? 'claimed' : 'active',
     questProgress,
-    elapsedGameDays: Math.floor(Math.max(0, Number(data.elapsedGameHours) || 0) / 24),
+    // v7 시(hour) 틱은 v8 일(day) 틱으로 1:1 이름만 바뀌었다.
+    elapsedGameDays: Math.max(0, Number(data.elapsedGameHours) || 0),
     grid: (data.grid || []).map((cell) => cell ? {
       ...cell,
       project: migrateLegacyProject(cell.project),
@@ -517,10 +556,9 @@ export function migrateV7ToV8(data) {
         tidal: Math.max(0, Number(data.research?.techLevels?.tidal) || 0),
         green: 1,
       },
-      quizAccelerationBankDays: Math.max(0, Number(data.research?.quizAccelerationBankHours) || 0),
     },
     carbonCrisisDays: Math.max(0, Number(data.carbonCrisisHours) || 0),
-    workforceRebalanceGraceDays: 24,
+    workforceRebalanceGraceDays: WORKFORCE_RULES.REBALANCE_GRACE_DAYS,
     simulationTotals,
   };
   delete migrated.elapsedGameHours;
@@ -549,6 +587,60 @@ function resetClimateStateForPreparation(data) {
       currentMetrics: null,
       lastResult: null,
     },
+  };
+}
+
+const allCellIndices = () => Array.from({ length: BOARD.MAX_CELLS }, (_, index) => index);
+
+// 준비 퀘스트가 주는 강화 허가 레벨(7단계 보상 Lv.2). 퀘스트 정의가 유일한 출처다.
+const PREPARATION_UPGRADE_PERMIT_LEVEL = QUESTS.reduce((level, quest) => (
+  PREPARATION_QUEST_IDS.includes(quest.id)
+    ? Math.max(level, Number(quest.reward.upgradePermitLevel) || 0)
+    : level
+), 1);
+
+// v8은 준비 퀘스트(7~10)가 없었다. 기후전으로 옮겨지는 저장은 그 보상을 받은 적이 없으므로
+// tidal1 연구도, 2차 확장도, 풍력·태양광도 영원히 잠긴 채 18단계 브리핑에서 막힌다.
+// 준비 단계를 통과한 것으로 간주하고 보상을 채워 넣는다.
+function grantSkippedPreparation(data, questIndex) {
+  const claimed = new Set(data.claimedQuestIds || []);
+  const unlocked = new Set(data.unlockedFacilities || ['residential']);
+  let expansion = structuredClone(data.expansion || {
+    phase: 0,
+    firstChoice: null,
+    activeCellIndices: Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index),
+  });
+  let grid = data.grid;
+  let boardRadius = data.boardRadius;
+  let upgradePermitLevel = data.upgradePermitLevel;
+
+  if (questIndex >= CAMPAIGN_QUEST_INDEXES.CLIMATE_START) {
+    PREPARATION_QUEST_IDS.forEach((id) => claimed.add(id));
+    ['battery', 'solar', 'wind'].forEach((type) => unlocked.add(type));
+    // 완료로 채워 넣은 준비 퀘스트의 보상도 함께 줘야 도시가 기후전 내내 Lv.1에 묶이지 않는다.
+    upgradePermitLevel = Math.max(Number(upgradePermitLevel) || 1, PREPARATION_UPGRADE_PERMIT_LEVEL);
+    if (expansion.phase === 1) {
+      expansion = { ...expansion, phase: 2, activeCellIndices: allCellIndices() };
+    }
+  }
+  if (expansion.phase >= 1) {
+    // 확장 방향 보상은 activateExpansionSide에서만 주어지므로 마이그레이션이 직접 채운다.
+    const chosen = EXPANSION_SIDES[expansion.firstChoice];
+    if (chosen) unlocked.add(chosen.facility);
+    if (expansion.phase >= 2) Object.values(EXPANSION_SIDES).forEach((side) => unlocked.add(side.facility));
+    if (Array.isArray(grid) && grid.length === BOARD.INITIAL_CELLS) {
+      grid = expandHexGrid(grid, BOARD.INITIAL_RADIUS, BOARD.EXPANDED_RADIUS);
+    }
+    boardRadius = Math.max(Number(boardRadius) || BOARD.INITIAL_RADIUS, BOARD.EXPANDED_RADIUS);
+  }
+
+  return {
+    claimedQuestIds: [...claimed],
+    unlockedFacilities: [...unlocked],
+    expansion,
+    grid,
+    boardRadius,
+    upgradePermitLevel,
   };
 }
 
@@ -590,6 +682,7 @@ export function migrateV8ToV9(data) {
     questStatus: unfinishedFirstClimate ? 'active' : data.questStatus || 'active',
     questProgress: unfinishedFirstClimate ? {} : { ...(data.questProgress || {}) },
     progression,
+    ...grantSkippedPreparation(data, questIndex),
     ...(resetClimate || {}),
   };
 }
@@ -614,9 +707,5 @@ export function migrateV1Save(data) {
 }
 
 export function clearSavedGame() {
-  try {
-    localStorage.removeItem(GAME.AUTOSAVE_KEY);
-  } catch (err) {
-    // ignore
-  }
+  removeStorage(GAME.AUTOSAVE_KEY);
 }

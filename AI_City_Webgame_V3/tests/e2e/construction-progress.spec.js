@@ -33,11 +33,14 @@ test('confirmed construction remains a zero-effect build site until its completi
   await expect(page.locator('[data-construction-console]')).toBeVisible();
   await expect(page.locator('[data-project-progress]')).toContainText('0%');
   await expect(page.locator('[data-project-remaining]')).toContainText('5일');
+  // aria-valuemin/max가 0~100이므로 aria-valuenow도 같은 척도의 백분율이어야 한다.
+  await expect(page.locator('.construction-project-bar')).toHaveAttribute('aria-valuenow', '0');
 
   await page.evaluate(() => {
     for (let day = 0; day < 4; day += 1) window.__settleSimulationDay();
   });
   expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].project.elapsedDays)).toBe(4);
+  await expect(page.locator('.construction-project-bar')).toHaveAttribute('aria-valuenow', '80');
   expect(await page.evaluate(() => window.__constructionCompletions)).toBe(0);
   expect(await page.evaluate(() => window.__getCityRendererStats().constructionStages)).toEqual({ shell: 1 });
 

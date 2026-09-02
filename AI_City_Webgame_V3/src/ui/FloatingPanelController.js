@@ -1,11 +1,12 @@
 import { QUEST_PANEL_LAYOUT } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { readStorage, writeStorage } from '../core/safeStorage.js';
 
 const INTERACTIVE_SELECTOR = 'button,a,input,select,textarea,[role="button"],[contenteditable="true"]';
 
 function readPosition(storageKey) {
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    const stored = JSON.parse(readStorage(storageKey) || '{}');
     return {
       x: Number.isFinite(stored.x) ? stored.x : null,
       y: Number.isFinite(stored.y) ? stored.y : null,
@@ -18,11 +19,11 @@ function readPosition(storageKey) {
 function writePosition(storageKey, position) {
   let stored = {};
   try {
-    stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    stored = JSON.parse(readStorage(storageKey) || '{}');
   } catch {
     stored = {};
   }
-  localStorage.setItem(storageKey, JSON.stringify({ ...stored, ...position }));
+  writeStorage(storageKey, JSON.stringify({ ...stored, ...position }));
 }
 
 export function createFloatingPanelController({

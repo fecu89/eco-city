@@ -13,6 +13,8 @@ import {
   researchEffects,
   startResearch,
 } from '../../../src/systems/ResearchSystem.js';
+import { createUpgradeProject } from '../../../src/systems/ConstructionProjectSystem.js';
+import { startResearchQuiz } from '../../../src/systems/QuizSystem.js';
 
 function stateWithDataCenter({ credits = 60, index = 3, level = 1 } = {}) {
   const state = new GameState();
@@ -48,6 +50,21 @@ test('one center and one research id cannot be occupied twice', () => {
   expect(startResearch(state, 'solar2', 3).ok).toBe(true);
   expect(startResearch(state, 'wind2', 3)).toEqual({ ok: false, reason: 'data_center_busy' });
   expect(startResearch(state, 'solar2', 5)).toEqual({ ok: false, reason: 'research_active' });
+});
+
+test('an upgrading data center cannot start a research job', () => {
+  const state = stateWithDataCenter();
+  state.unlockedFacilities.add('solar');
+  state.grid[3].operationMode = 'normal';
+  state.grid[3].project = createUpgradeProject({ cell: state.grid[3], paidCost: 6 });
+  const creditsBefore = state.credits;
+
+  expect(startResearch(state, 'solar2', 3)).toEqual({
+    ok: false,
+    reason: 'data_center_upgrading',
+  });
+  expect(state.credits).toBe(creditsBefore);
+  expect(state.research.jobs).toEqual({});
 });
 
 test('underpowered research pauses without stopping another powered center', () => {
@@ -230,4 +247,26 @@ test('finishing one job applies its technology once and leaves other jobs runnin
   expect(state.research.jobs.solar2).toBeUndefined();
   expect(state.research.jobs.wind2).toBeDefined();
   expect(activeResearchJobs(state).map(({ id }) => id)).toEqual(['wind2']);
+});
+
+test('cancelling a research clears its quiz credit so a restart can be accelerated again', () => {
+  const state = stateWithDataCenter();
+  state.unlockedFacilities.add('solar');
+  expect(startResearch(state, 'solar2', 3)).toMatchObject({ ok: true });
+  state.research.quizCreditQuestionIds.solar2 = RESEARCH_QUIZZES.solar2.map(({ id }) => id);
+
+  expect(cancelResearch(state, 'solar2')).toMatchObject({ ok: true });
+  expect(state.research.quizCreditQuestionIds.solar2).toBeUndefined();
+
+  expect(startResearch(state, 'solar2', 3)).toMatchObject({ ok: true });
+  expect(startResearchQuiz(state, 'solar2', () => 0.5)).toMatchObject({
+    ok: true,
+    total: RESEARCH_QUIZZES.solar2.length,
+  });
+});
+
+test('research state carries no always-zero quiz acceleration bank', () => {
+  const state = stateWithDataCenter();
+  expect(state.research).not.toHaveProperty('quizAccelerationBankDays');
+  expect(state.serialize().research).not.toHaveProperty('quizAccelerationBankDays');
 });

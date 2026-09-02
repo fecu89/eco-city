@@ -197,7 +197,10 @@ function stressState(placements) {
 }
 
 function runStress(state) {
+  // 실제 플레이처럼 하루를 먼저 정산해 시험 물 기준선이 도시의 진짜 사용량으로 잡히게 한다.
+  settleDays(state, 1);
   expect(startStressTest(state)).toMatchObject({ ok: true });
+  expect(state.stressTest.waterBaseline).toBe(state.lastTickSummary.dailyWater);
   settleDays(state, 41);
   expect(state.stressTest.status).not.toBe('running');
   return state.stressTest.result;
@@ -235,8 +238,23 @@ test('the 41-day reference city passes without green or residential level three'
   expect(state.grid.filter((cell) => cell?.type === 'green').map(({ level }) => level).sort()).toEqual([1, 1, 2]);
   expect(state.grid.filter((cell) => cell?.type === 'residential').map(({ level }) => level).sort()).toEqual([1, 1, 2, 2]);
   expect(result, JSON.stringify(result)).toMatchObject({ passed: true, days: 41 });
+  // 건조 위기 5일은 데이터센터·핵발전 물을 15% 밀어올린다. 두 시설에 붙은 순환냉각이
+  // 그만큼을 되돌려 주기 때문에 기준선을 그대로 지킨다.
+  expect(result.waterViolationDays).toBe(0);
   expect(result.tidalEnergyDelivered).toBeGreaterThanOrEqual(8);
   expect(state.campaignComplete).toBe(true);
+});
+
+test('the same city fails the dry emergency once its cooling is gone', () => {
+  const state = stressState(REFERENCE_CITY.filter(([, type]) => type !== 'cooling'));
+  const result = runStress(state);
+
+  // 냉각이 없으면 건조 위기의 +15% 냉각수를 상쇄할 방법이 없어 5일 내내 기준선을 넘는다.
+  expect(result, JSON.stringify(result)).toMatchObject({
+    passed: false,
+    waterViolationDays: 5,
+    diagnosis: { id: 'water' },
+  });
 });
 
 test('green level three cannot rescue a city whose essential power is insufficient', () => {

@@ -1,4 +1,5 @@
 import { REPORT_RULES, REPORT_TIERS } from '../core/Constants.js';
+import { STRESS_PHASES } from '../core/EventDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
 import { carbonPressureForDays } from './CarbonCrisisSystem.js';
@@ -67,8 +68,11 @@ function fallbackStress(operations, state) {
   };
 }
 
+// 최종시험 길이는 8개 구간 정의가 유일한 출처다. 상수로 굳히면 구간이 바뀔 때 비율이 어긋난다.
+const STRESS_EXAM_DAYS = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
+
 function scoreAxes(operations, stress, state) {
-  const stressDays = 27;
+  const stressDays = STRESS_EXAM_DAYS;
   const outageSafety = clamp(100 - percent(stress.blackoutDays || 0, stressDays));
   const powerStability = clamp(
     (stress.averageEssentialSupply || 0) * 0.5
@@ -210,7 +214,6 @@ export function computeReport() {
     quizTotal: finalQuiz?.total || 4,
     // v5 report consumers retain readable aliases while new UI uses the fields above.
     operationsScore: operatingTotal,
-    designScore: 0,
     knowledgeScore: quizBonus,
     knowledgeAccuracy: finalQuiz ? Math.round(quizCorrect / 4 * 100) : 0,
     total: totalWithBonus,

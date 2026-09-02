@@ -26,6 +26,7 @@ function realDurationLabel(days) {
 function jobStatus(job) {
   if (job.status === 'underpowered') return '⚠ 전력 부족 · 연구 일시정지 · 90% 필요';
   if (job.status === 'mode_paused') return '절전 모드 · 연구 일시정지';
+  if (job.status === 'upgrade_paused') return '강화 공사 중 · 연구 일시정지';
   if (job.dataCenterIndex == null) return '담당 시설 없음 · 재배정 필요';
   return `데이터센터 #${job.dataCenterIndex}`;
 }
@@ -34,7 +35,7 @@ function activeJobMarkup(job, dataCenterIndex) {
   const definition = RESEARCH[job.id];
   const assignedHere = job.dataCenterIndex === dataCenterIndex;
   return `
-    <article class="research-active ${['underpowered', 'mode_paused'].includes(job.status) ? 'underpowered' : ''}" data-research-job="${job.id}">
+    <article class="research-active ${['underpowered', 'mode_paused', 'upgrade_paused'].includes(job.status) ? 'underpowered' : ''}" data-research-job="${job.id}">
       <div><strong>${definition.name}</strong><span data-research-live-status>${jobStatus(job)}</span></div>
       <div class="research-progress"><span data-research-live-progress style="width:${progressFor(job)}%"></span></div>
       <small data-research-live-days>${Math.round(job.elapsedEffectiveDays)} / ${definition.durationDays}일</small>
@@ -121,7 +122,7 @@ export function refreshResearchPanelLive(root) {
       return;
     }
     const definition = RESEARCH[job.id];
-    article.classList.toggle('underpowered', ['underpowered', 'mode_paused'].includes(job.status));
+    article.classList.toggle('underpowered', ['underpowered', 'mode_paused', 'upgrade_paused'].includes(job.status));
     article.querySelector('[data-research-live-status]').textContent = jobStatus(job);
     article.querySelector('[data-research-live-progress]').style.width = `${progressFor(job)}%`;
     article.querySelector('[data-research-live-days]').textContent = `${Math.round(job.elapsedEffectiveDays)} / ${definition.durationDays}일`;

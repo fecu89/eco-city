@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
+import { FACILITY_LIMITS_BY_QUEST } from '../../../src/core/Constants.js';
+import { expandBoard, validatePlacement } from '../../../src/systems/BoardSystem.js';
 
 const Permits = await import('../../../src/systems/FacilityPermitSystem.js').catch(() => ({}));
 
@@ -33,7 +35,28 @@ test('legacy objective state cannot override the single quest-based permit curso
   state.unlockedFacilities.add('wind');
 
   expect(getFacilityPermit(state, 'battery')).toMatchObject({ ok: true, limit: 2 });
-  expect(getFacilityPermit(state, 'wind')).toMatchObject({ ok: false, limit: 0 });
+  // 조력은 10단계에서 처음 열린다. 7단계 커서는 목표 세트와 무관하게 0을 유지해야 한다.
+  expect(getFacilityPermit(state, 'tidal')).toMatchObject({ ok: false, limit: 0 });
+});
+
+test('the west branch can actually build the wind turbine its quest seven text promises', () => {
+  const state = new GameState();
+  state.credits = 20;
+  const expansion = expandBoard(state, 'west');
+  expect(expansion).toMatchObject({ ok: true, unlockedFacility: 'wind' });
+  state.questIndex = 7;
+
+  expect(getFacilityLimits(7).wind).toBe(2);
+  expect(validatePlacement(state, 'wind', expansion.addedIndices[0])).toMatchObject({ ok: true });
+});
+
+test('quest permit rows exist only where they actually raise a limit', () => {
+  // 11·12행은 7~10행의 복사본이라 어떤 한도도 올리지 않는다.
+  expect(Object.keys(FACILITY_LIMITS_BY_QUEST).map(Number)).toEqual([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18, 19,
+  ]);
+  expect(getFacilityLimits(11)).toEqual(getFacilityLimits(10));
+  expect(getFacilityLimits(12)).toEqual(getFacilityLimits(10));
 });
 
 test('final test permits come from quest nineteen even if legacy objective state is present', () => {

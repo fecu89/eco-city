@@ -1,5 +1,21 @@
 import { CONSTRUCTION, FACILITIES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
+import {
+  constructionDurationDays,
+  isBuildProject,
+  isOperationalCell,
+  normalizeConstructionProject,
+  upgradeDurationDays,
+} from '../core/ConstructionProject.js';
+
+// 순수 헬퍼는 core/ConstructionProject.js가 소유한다. 기존 import 경로를 유지하려고 다시 내보낸다.
+export {
+  constructionDurationDays,
+  isBuildProject,
+  isOperationalCell,
+  normalizeConstructionProject,
+  upgradeDurationDays,
+};
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -35,14 +51,6 @@ const ZERO_OPERATION_PROFILE = Object.freeze({
   batteryThroughput: 0,
 });
 
-export function constructionDurationDays(type) {
-  return CONSTRUCTION.BUILD_DAYS[type] ?? null;
-}
-
-export function upgradeDurationDays(fromLevel) {
-  return CONSTRUCTION.UPGRADE_DAYS[Math.trunc(Number(fromLevel))] ?? null;
-}
-
 export function createBuildProject({ type, paidCost }) {
   const durationDays = constructionDurationDays(type);
   if (!FACILITIES[type] || !durationDays) throw new Error(`Unknown build project type: ${type}`);
@@ -70,14 +78,6 @@ export function createUpgradeProject({ cell, paidCost }) {
     paidCost: roundCredits(Math.max(0, Number(paidCost) || 0)),
     suspendedOperationMode: cell.operationMode || 'normal',
   };
-}
-
-export function isBuildProject(cell) {
-  return cell?.project?.kind === 'build';
-}
-
-export function isOperationalCell(cell) {
-  return Boolean(cell) && !isBuildProject(cell);
 }
 
 export function operationalGrid(grid = []) {
@@ -109,7 +109,7 @@ export function operationProfileForCell(cell) {
     return { ...IDENTITY_OPERATION_PROFILE, dev: 0.8, supply: 0.8, demand: 0.8, income: 0.8, carbon: 0.8, water: 0.8, researchSpeed: 0.8, workforce: 0.8, functionality: 0.8 };
   }
   if (cell.type === 'data') {
-    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, supply: ratio, demand: 0.7, income: 0.6, carbon: 0.7, water: 0.7, researchSpeed: 0.5, functionality: 0.7 };
+    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, supply: ratio, demand: 0.7, income: 0.6, carbon: 0.7, water: 0.7, researchSpeed: 0, functionality: 0.7 };
   }
   if (cell.type === 'battery') {
     return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, batteryThroughput: 0.5 };
@@ -124,65 +124,6 @@ export function operationProfileForCell(cell) {
     water: ratio,
     researchSpeed: ratio,
     functionality: ratio,
-  };
-}
-
-export function normalizeConstructionProject(cell, rawProject) {
-  if (rawProject == null) return { valid: true, complete: false, project: null };
-  const kind = rawProject?.kind;
-  const paidCost = Number(rawProject?.paidCost);
-  const elapsedDays = Number(rawProject?.elapsedDays);
-  const durationDays = Number(rawProject?.durationDays);
-  const commonValid = ['build', 'upgrade'].includes(kind)
-    && Number.isFinite(paidCost)
-    && paidCost >= 0
-    && Number.isInteger(elapsedDays)
-    && elapsedDays >= 0
-    && Number.isInteger(durationDays)
-    && durationDays > 0;
-  if (!commonValid) {
-    return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
-  }
-
-  if (kind === 'build') {
-    const expectedDuration = constructionDurationDays(cell?.type);
-    if (!expectedDuration || durationDays !== expectedDuration) return { valid: false, kind };
-    return {
-      valid: true,
-      complete: elapsedDays >= durationDays,
-      project: {
-        kind,
-        elapsedDays: Math.min(elapsedDays, durationDays),
-        durationDays,
-        paidCost: roundCredits(paidCost),
-      },
-    };
-  }
-
-  const fromLevel = Number(rawProject?.fromLevel);
-  const toLevel = Number(rawProject?.toLevel);
-  const expectedDuration = upgradeDurationDays(fromLevel);
-  const validUpgrade = Number.isInteger(fromLevel)
-    && Number.isInteger(toLevel)
-    && fromLevel === Number(cell?.level)
-    && toLevel === fromLevel + 1
-    && toLevel <= (FACILITIES[cell?.type]?.maxLevel || 0)
-    && durationDays === expectedDuration;
-  if (!validUpgrade) {
-    return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
-  }
-  return {
-    valid: true,
-    complete: elapsedDays >= durationDays,
-    project: {
-      kind,
-      fromLevel,
-      toLevel,
-      elapsedDays: Math.min(elapsedDays, durationDays),
-      durationDays,
-      paidCost: roundCredits(paidCost),
-      suspendedOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal',
-    },
   };
 }
 

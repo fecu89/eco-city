@@ -117,7 +117,8 @@ test('research acceleration does not bank when its selected job is missing', () 
     completed: [],
     reason: 'research_not_active',
   });
-  expect(state.research.quizAccelerationBankDays).toBe(0);
+  // 가속을 적립할 곳이 없으므로 연구 목록 자체가 그대로여야 한다.
+  expect(state.research.jobs).toEqual({});
 });
 
 test('a research question grants acceleration only once across retries', () => {

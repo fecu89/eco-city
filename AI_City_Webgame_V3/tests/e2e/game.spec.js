@@ -1,10 +1,13 @@
 import { test, expect } from '../fixtures/game-test.js';
 import { clickCell, clickHudAction, gameStateSnapshot, openHudPanel } from '../helpers/playthrough.js';
+import { GAME } from '../../src/core/Constants.js';
 
 test.describe('boot and agent contract', () => {
   test('boots at level 1 on 2040-01-01 with controllable time', async ({ gamePage: page }) => {
     const snapshot = await gameStateSnapshot(page);
-    expect(snapshot).toMatchObject({ mode: 'playing', stage: 1, quest: 1, credits: 10 });
+    expect(snapshot).toMatchObject({ mode: 'playing', quest: 1, credits: 10 });
+    expect(snapshot).not.toHaveProperty('stage');
+    expect(snapshot).not.toHaveProperty('turn');
     expect(snapshot.gameTime).toMatchObject({ year: 2040, month: 1, day: 1, timeScale: 1 });
     expect(snapshot.gameTime).not.toHaveProperty('hour');
     expect(await page.evaluate(() => typeof window.advanceTime)).toBe('function');
@@ -249,5 +252,58 @@ test.describe('quest operations, celebration, reset, and save', () => {
     await page.waitForFunction(() => window.__GAME_STATE__?.questIndex === 9, { timeout: 10000 });
     const restored = await page.evaluate(() => window.__GAME_STATE__.grid[0]);
     expect(restored).toMatchObject({ type: 'battery', level: 2, batteryStoredLowCarbon: 9, batteryStoredFossil: 3 });
+  });
+
+  test('reloading a saved city recomputes metrics so the city chart is drawn', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
+    await clickCell(page, 0);
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      window.__EVENT_BUS__.emit(window.__EVENTS__.SAVE_REQUESTED, {});
+    });
+    await page.waitForTimeout(800);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__?.grid?.filter(Boolean).length === 1, { timeout: 10000 });
+    await page.waitForFunction(() => document.getElementById('loadingScreen')?.classList.contains('done'), { timeout: 10000 });
+
+    expect((await gameStateSnapshot(page)).metrics).not.toBeNull();
+
+    await openHudPanel(page, 'status');
+    await page.waitForTimeout(300);
+    const paintedPixels = await page.locator('#cityChart').evaluate((canvas) => {
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let opaque = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) opaque += 1;
+      return opaque;
+    });
+    expect(paintedPixels).toBeGreaterThan(0);
+  });
+
+  test('hiding the tab flushes the debounced autosave before the page can unload', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
+    await clickCell(page, 0);
+    // 저장 키를 비운 직후 같은 동기 실행 안에서 다시 읽으므로, 디바운스 타이머가 끼어들 수 없다.
+    const flushed = await page.evaluate((key) => {
+      localStorage.removeItem(key);
+      Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      return JSON.parse(localStorage.getItem(key) || 'null');
+    }, GAME.AUTOSAVE_KEY);
+    expect(flushed?.grid?.[0]).toMatchObject({ type: 'residential' });
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__GAME_STATE__, { timeout: 10000 });
+    expect(await page.evaluate(() => window.__GAME_STATE__.grid[0]?.type)).toBe('residential');
+  });
+
+  test('pagehide flushes the debounced autosave', async ({ gamePage: page }) => {
+    await openHudPanel(page, 'build');
+    await clickCell(page, 0);
+    const flushed = await page.evaluate((key) => {
+      localStorage.removeItem(key);
+      window.dispatchEvent(new Event('pagehide'));
+      return JSON.parse(localStorage.getItem(key) || 'null');
+    }, GAME.AUTOSAVE_KEY);
+    expect(flushed?.grid?.[0]).toMatchObject({ type: 'residential' });
   });
 });

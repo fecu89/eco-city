@@ -1,4 +1,5 @@
 import { WORLD_LIGHTING_MODES, WORLD_LIGHTING_STORAGE_KEY } from '../core/Constants.js';
+import { readStorage, writeStorage } from '../core/safeStorage.js';
 
 let currentMode = 'day';
 let controlsEl = null;
@@ -11,14 +12,14 @@ function renderControl() {
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
-  refresh();
+  refresh(controlsEl);
 }
 
 export function setWorldLightingMode(mode, { persist = true } = {}) {
   const next = WORLD_LIGHTING_MODES[mode] ? mode : 'day';
   currentMode = next;
   applyHour(WORLD_LIGHTING_MODES[next].visualHour);
-  if (persist) localStorage.setItem(WORLD_LIGHTING_STORAGE_KEY, next);
+  if (persist) writeStorage(WORLD_LIGHTING_STORAGE_KEY, next);
   renderControl();
   return currentMode;
 }
@@ -35,7 +36,7 @@ export function initWorldLightingManager(root, applyWorldHour, refreshIcons) {
     const button = event.target.closest('[data-world-lighting]');
     if (button) setWorldLightingMode(button.dataset.worldLighting);
   });
-  const saved = localStorage.getItem(WORLD_LIGHTING_STORAGE_KEY);
+  const saved = readStorage(WORLD_LIGHTING_STORAGE_KEY);
   setWorldLightingMode(WORLD_LIGHTING_MODES[saved] ? saved : 'day', {
     persist: Boolean(WORLD_LIGHTING_MODES[saved]),
   });

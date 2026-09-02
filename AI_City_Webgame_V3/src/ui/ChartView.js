@@ -1,6 +1,6 @@
 import Chart from 'chart.js/auto';
 import { gameState } from '../core/GameState.js';
-import { CHART_MOTION, SIMULATION } from '../core/Constants.js';
+import { CHART_MOTION, TIME } from '../core/Constants.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -31,7 +31,7 @@ export function chartValues(state = gameState) {
 
 export function chartAnimationOptions({ panelVisible, reducedMotion, timeScale }) {
   const duration = panelVisible && !reducedMotion && timeScale > 0
-    ? Math.round((SIMULATION.DAY_MS / timeScale) * CHART_MOTION.ACTIVE_INTERVAL_FRACTION)
+    ? Math.round((TIME.BASE_DAY_MS / timeScale) * CHART_MOTION.ACTIVE_INTERVAL_FRACTION)
     : 0;
   return { duration, easing: CHART_MOTION.EASING };
 }

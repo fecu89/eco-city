@@ -20,29 +20,38 @@ function hasAdjacent(state, index, types) {
   ));
 }
 
+// 현재 도시 상태만으로 판정하는 퀘스트들. 조건이 다시 깨지면 준비 상태도 해제된다.
+// 연속 일수 퀘스트는 applySimulationQuestProgress가 따로 관리한다.
+const STATE_QUEST_PREDICATES = Object.freeze({
+  1: (state) => facilities(state, 'residential').length >= 2,
+  3: (state) => facilities(state, 'green').length >= 1,
+  [CAMPAIGN_QUEST_INDEXES.PREPARATION_START]: (state) => state.research.completedIds.has(
+    state.expansion?.firstChoice === 'west' ? 'wind2' : 'solar2',
+  ),
+  [CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST]: (state) => state.research.completedIds.has('smartGrid')
+    && state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2),
+});
+
 export function evaluateCurrentQuest(state) {
   if (isClimateQuestActive(state)) return currentClimateQuestEvaluation(state);
   const wasReady = state.questStatus === 'ready_to_claim';
-  let ready = state.questStatus === 'ready_to_claim';
-  if (state.questIndex === 1) ready = facilities(state, 'residential').length >= 2;
-  if (state.questIndex === 3) ready = facilities(state, 'green').length >= 1;
-  if (state.questIndex === 7) {
-    const researchId = state.expansion?.firstChoice === 'west' ? 'wind2' : 'solar2';
-    ready = state.research.completedIds.has(researchId);
-  }
-  if (state.questIndex === 8) ready = state.research.completedIds.has('smartGrid')
-    && state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2);
+  const predicate = STATE_QUEST_PREDICATES[state.questIndex];
+  const ready = predicate ? predicate(state) : wasReady;
   if (ready) {
     state.questStatus = 'ready_to_claim';
     if (!wasReady) eventBus.emit(Events.QUEST_READY, { quest: questForState(state) });
+  } else if (wasReady) {
+    state.questStatus = 'active';
   }
   return { ready, quest: questForState(state), progress: state.questProgress };
 }
 
-function stageForQuest(questIndex) {
-  if (questIndex <= 5) return STAGES.EXECUTION;
-  if (questIndex < CAMPAIGN_QUEST_INDEXES.FINAL_TEST) return STAGES.REDESIGN;
-  return STAGES.REPORT;
+// 최종시험(19단계)도 재설계 단계다. 시험 중에도 건설·강화·철거로 도시를 고칠 수 있어야 한다.
+// STAGES.REPORT는 캠페인이 끝난 뒤에만 설정한다.
+export function stageForQuest(questIndex) {
+  return questIndex <= CAMPAIGN_QUEST_INDEXES.EXECUTION_STAGE_LAST_QUEST
+    ? STAGES.EXECUTION
+    : STAGES.REDESIGN;
 }
 
 export function claimCurrentQuest(state) {
@@ -52,21 +61,22 @@ export function claimCurrentQuest(state) {
   if (state.claimedQuestIds.has(quest.id)) return { ok: false, reason: 'already_claimed' };
   if (state.questStatus !== 'ready_to_claim') return { ok: false, reason: 'not_ready' };
   state.claimedQuestIds.add(quest.id);
-  state.progression.tutorialQuestIndex = Math.min(6, quest.index);
+  state.progression.tutorialQuestIndex = Math.min(CAMPAIGN_QUEST_INDEXES.FOUNDATION_END, quest.index);
   state.progression.tutorialQuestStatus = 'complete';
   state.credits = roundCredits(state.credits + quest.reward.credits);
   quest.reward.unlockFacilities.forEach((facility) => state.unlockedFacilities.add(facility));
   if (quest.reward.upgradePermitLevel) {
     state.upgradePermitLevel = Math.max(state.upgradePermitLevel, quest.reward.upgradePermitLevel);
   }
-  if (state.questIndex === 4) {
+  if (state.questIndex === CAMPAIGN_QUEST_INDEXES.BASELINE_CAPTURE_QUEST) {
     state.firstCitySnapshot = state.grid.map((cell) => (cell ? { ...cell } : null));
     state.baseline = { ...(state.metrics || {}), ...(state.lastTickSummary || {}) };
+    state.researchMenuUnlocked = true;
   }
-  if (state.questIndex === 4) state.researchMenuUnlocked = true;
   if (state.questIndex === CAMPAIGN_QUEST_INDEXES.FINAL_TEST) {
     state.campaignComplete = true;
     state.questStatus = 'claimed';
+    state.stage = STAGES.REPORT;
     const result = { ok: true, credits: quest.reward.credits, unlockedFacility: null, unlockedFacilities: [], nextQuest: null, campaignComplete: true };
     eventBus.emit(Events.QUEST_CLAIMED, { quest, result });
     return result;
@@ -84,13 +94,15 @@ export function claimCurrentQuest(state) {
     upgradePermitLevel: quest.reward.upgradePermitLevel || null,
     upgradePermitFacilities: [...(quest.reward.upgradePermitFacilities || [])],
     nextQuest: state.questIndex,
-    expandGrid: quest.index === 6,
-    expandSecondGrid: quest.index === 8 && state.expansion?.phase === 1,
-    secondExpansionSide: quest.index === 8 && state.expansion?.phase === 1
+    expandGrid: quest.index === CAMPAIGN_QUEST_INDEXES.FOUNDATION_END,
+    expandSecondGrid: quest.index === CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST
+      && state.expansion?.phase === 1,
+    secondExpansionSide: quest.index === CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST
+      && state.expansion?.phase === 1
       ? state.expansion.firstChoice === 'east' ? 'west' : 'east'
       : null,
   };
-  if (quest.index === 6) {
+  if (quest.index === CAMPAIGN_QUEST_INDEXES.FOUNDATION_END) {
     state.progression.chapter = 2;
     state.progression.objectiveSetId = null;
     state.progression.objectiveProgress = {};
@@ -112,7 +124,7 @@ export function claimCurrentQuest(state) {
       progress: {},
       lastResult: null,
     };
-  } else if (quest.index < 6) {
+  } else if (quest.index < CAMPAIGN_QUEST_INDEXES.FOUNDATION_END) {
     state.progression.tutorialQuestIndex = state.questIndex;
     state.progression.tutorialQuestStatus = 'active';
   }
@@ -120,14 +132,9 @@ export function claimCurrentQuest(state) {
   return result;
 }
 
-const allRatios = (state, type, summary) => state.grid
-  .map((cell, index) => (isOperationalCell(cell) && cell.type === type ? summary.facilityPower?.[index]?.ratio ?? 0 : null))
-  .filter((ratio) => ratio != null);
-
 export function applySimulationQuestProgress(state, summary) {
   if (isClimateQuestActive(state)) return currentClimateQuestEvaluation(state);
   let condition = false;
-  let required = 3;
   switch (state.questIndex) {
     case 2:
       condition = Object.entries(summary.facilityEconomy || {}).some(([index, item]) => state.grid[index]?.type === 'factory'
@@ -196,33 +203,12 @@ export function applySimulationQuestProgress(state, summary) {
           && Number(route.delivered) >= 0.1
         ));
       break;
-    case 11:
-      condition = summary.netCredits > 0 && state.grid.some((cell, index) => isOperationalCell(cell) && cell.type === 'residential' && hasAdjacent(state, index, new Set(['green'])));
-      break;
-    case 12: {
-      const ratios = state.grid
-        .map((cell, index) => (isOperationalCell(cell) && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type))
-          ? summary.facilityPower?.[index]?.ratio ?? 0
-          : null))
-        .filter((ratio) => ratio != null);
-      condition = state.climateAlert === 'extreme_heat' && ratios.length > 0 && ratios.every((ratio) => ratio >= 0.9);
-      break;
-    }
-    case 13:
-      condition = summary.hour >= 19 && summary.hour <= 23 && summary.deliveredPower >= summary.demand && summary.batteryStored >= 5;
-      break;
-    case 14:
-      condition = (state.research.completedIds.has('renewable3') || state.grid.some((cell) => isOperationalCell(cell) && cell.level >= 3))
-        && summary.lowCarbonPercent >= 70
-        && summary.dailyWater < (state.baseline?.dailyWater ?? Infinity)
-        && summary.netCredits > 0;
-      break;
     default:
       return evaluateCurrentQuest(state);
   }
+  // 여기까지 오는 퀘스트는 모두 연속 운영일 조건이다. 나머지는 위에서 조기 반환한다.
   state.questProgress.consecutiveDays = condition ? (state.questProgress.consecutiveDays || 0) + 1 : 0;
-  if ([2, 4, 5, 6, 9, 10].includes(state.questIndex)) required = QUEST_REQUIREMENTS.OPERATING_DAYS;
-  const ready = state.questProgress.consecutiveDays >= required;
+  const ready = state.questProgress.consecutiveDays >= QUEST_REQUIREMENTS.OPERATING_DAYS;
   if (ready && state.questStatus !== 'ready_to_claim') {
     state.questStatus = 'ready_to_claim';
     eventBus.emit(Events.QUEST_READY, { quest: questForState(state) });

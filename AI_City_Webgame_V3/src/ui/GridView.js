@@ -178,6 +178,12 @@ export function initGridView(gridElement, sizeChipElement, clickHandler, confirm
   eventBus.on(Events.BUILD_PLAN_COMMITTED, () => {
     facilityArmed = false;
   });
+  // 초기화하면 이전 도시에서 고른 시설이 계속 무장돼 있어 새 도시에 고스트가 뜬다.
+  // placementPreviewVisible은 현재 열린 패널을 그대로 비추는 값이라 HUD_PANEL_CHANGED가
+  // 계속 소유한다 — 여기서 강제로 끄면 열려 있는 건설 패널로 배치를 할 수 없게 된다.
+  eventBus.on(Events.GAME_RESET, () => {
+    facilityArmed = false;
+  });
 }
 
 function buildCellConfigs() {

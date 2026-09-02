@@ -83,14 +83,15 @@ export const CLIMATE_EVENT_DEFINITIONS = Object.freeze({
     label: '가뭄',
     icon: 'droplets',
     durationDays: 6,
-    description: '도시 물 허용량이 줄고 데이터센터와 핵발전의 냉각 부담이 증가합니다.',
-    preparation: '순환냉각을 연결하고 물 소비가 큰 시설의 운영모드를 조정하세요.',
+    description: '데이터센터와 핵발전의 냉각 부담이 커지는 동안 도시 물 사용량을 예보 직전 수준 이하로 유지해야 합니다.',
+    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 데이터센터를 절전 모드로 돌리세요.',
     facilityModifiers: {
       data: { water: 1.15 },
       nuclear: { water: 1.15 },
       cooling: { effectiveness: 1.25 },
     },
-    cityModifiers: { waterLimitRatio: 0.7 },
+    // 한도는 "예보 직전 사용량 그대로". 냉각 강화로 늘어난 부담을 상쇄해야 지킬 수 있다.
+    cityModifiers: { waterLimitRatio: 1.0 },
   }),
   stagnantAir: climateEvent({
     id: 'stagnantAir',
@@ -274,11 +275,13 @@ export const CLIMATE_QUESTS = Object.freeze({
   }),
 });
 
-const finalPhase = ({ id, label, icon, durationDays, facilityModifiers = {}, cityModifiers = {}, greenAbsorptionByLevel = null }) => Object.freeze({
+const finalPhase = ({ id, label, icon, durationDays, description = null, preparation = null, facilityModifiers = {}, cityModifiers = {}, greenAbsorptionByLevel = null }) => Object.freeze({
   id,
   label,
   icon,
   durationDays,
+  description,
+  preparation,
   facilityModifiers: freezeModifiers(facilityModifiers),
   cityModifiers: Object.freeze({ ...cityModifiers }),
   greenAbsorptionByLevel: greenAbsorptionByLevel ? Object.freeze([...greenAbsorptionByLevel]) : null,
@@ -289,7 +292,6 @@ export const FINAL_CLIMATE_PHASES = Object.freeze([
   finalPhase({
     id: 'heatDome', label: '열돔', icon: 'thermometer-sun', durationDays: 6,
     facilityModifiers: { residential: { demand: 1.35 }, data: { water: 1.3 }, nuclear: { water: 1.15 }, solar: { supply: 1.1 } },
-    cityModifiers: { waterLimitRatio: 0.7 },
   }),
   finalPhase({
     id: 'monsoonFront', label: '장마전선', icon: 'cloud-rain-wind', durationDays: 5,
@@ -309,7 +311,10 @@ export const FINAL_CLIMATE_PHASES = Object.freeze([
   }),
   finalPhase({
     id: 'dryEmergency', label: '건조 위기', icon: 'flame', durationDays: 5,
-    cityModifiers: { carbonFlat: 2 },
+    description: '도시 고정 탄소가 늘고 냉각 부담이 커지는 동안 물 사용량을 구간 직전 수준 이하로 유지해야 합니다.',
+    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 데이터센터를 절전 모드로 돌리세요.',
+    facilityModifiers: { data: { water: 1.15 }, nuclear: { water: 1.15 }, cooling: { effectiveness: 1.25 } },
+    cityModifiers: { carbonFlat: 2, waterLimitRatio: 1.0 },
     greenAbsorptionByLevel: [1, 0.5, 0.75, 1],
   }),
   finalPhase({ id: 'recovery', label: '최종 복구', icon: 'heart-pulse', durationDays: 5 }),

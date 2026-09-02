@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../../../src/core/CampaignProgression.js';
 import { CITY_EVENTS, EVENT_FORECAST_DAYS, EVENT_GAP_DAYS } from '../../../src/core/EventDefinitions.js';
 import {
   activeEventContext,
@@ -51,9 +52,10 @@ test('all Korean climate modifiers apply only to their matching facilities', () 
   state.events.schedule = [{ id: 'dry-1', type: 'drought', announceAt: 0, startAt: 6, endAt: 12 }];
   state.elapsedGameDays = 6;
   advanceCityEvents(state);
+  // 가뭄 한도는 측정된 사용량 그대로다. 냉각 부담이 15% 늘어난 채로 그 선을 지켜야 한다.
   expect(activeEventContext(state).city).toMatchObject({
-    waterLimit: 5.6,
-    waterLimitRatio: 0.7,
+    waterLimit: 8,
+    waterLimitRatio: 1,
     coolingEffectiveness: 1.25,
   });
 });
@@ -100,16 +102,30 @@ test('event result records operating metrics and diagnoses the worst outcome', (
   expect(ended.diagnosis.metric).toBe('essential');
 });
 
+test('the final test never builds a random event deck', () => {
+  const state = eventState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
+  state.progression.chapter = 4;
+
+  expect(advanceCityEvents(state)).toMatchObject({ active: null, forecast: null, started: null });
+  expect(state.events.schedule).toEqual([]);
+
+  state.elapsedGameDays = 40;
+  advanceCityEvents(state);
+  expect(state.events.schedule).toEqual([]);
+});
+
 test('campaign briefing owns the event schedule and prevents random events from being appended', () => {
   const state = eventState();
-  state.questIndex = 7;
+  // 기후 캠페인은 11단계부터 시작한다. 7단계는 준비 퀘스트라 브리핑 상태가 될 수 없다.
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.CLIMATE_START;
   state.climateCampaign.status = 'briefing';
   advanceCityEvents(state);
   expect(state.events.schedule).toEqual([]);
 
   state.climateCampaign.status = 'preparation';
   state.events.schedule = [{
-    id: 'climate-q7-a1', source: 'campaign', type: 'heatwave', announceAt: 0, startAt: 24, endAt: 32,
+    id: 'climate-q11-a1', source: 'campaign', type: 'heatwave', announceAt: 0, startAt: 24, endAt: 32,
   }];
   advanceCityEvents(state);
   expect(state.events.schedule).toHaveLength(1);

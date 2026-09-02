@@ -1,10 +1,10 @@
 import './style.css';
-import { CARBON_CRISIS, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
 import { assessConstructionPlan, commitConstructionPlan } from './systems/ConstructionPlanSystem.js';
-import { initSaveSystem, loadSavedGame, clearSavedGame } from './systems/SaveSystem.js';
+import { clearSavedGame, flushSave, initSaveSystem, loadSavedGame } from './systems/SaveSystem.js';
 import { calculatePowerNetwork } from './systems/PowerNetworkSystem.js';
 import { settleEconomy } from './systems/EconomySystem.js';
 import { createDaySettler, createSimulationController } from './systems/SimulationSystem.js';
@@ -14,8 +14,9 @@ import { calendarAtElapsedDay, formatCalendar, intervalForTimeScale } from './sy
 import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { buildCityModifierContext } from './systems/CityModifierSystem.js';
 import { forecastConstruction, forecastUpgrade } from './systems/SimulationForecastSystem.js';
+import { expansionChoicePending } from './systems/ZoneSystem.js';
 
-import { closeModal, initModal, refreshIcons } from './ui/Modal.js';
+import { clearModalQueue, closeModal, getModalState, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
 import { finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
@@ -32,7 +33,7 @@ import { initFeedbackBridge } from './ui/FeedbackBridge.js';
 import { initQuestCelebration } from './ui/QuestCelebration.js';
 import { initQuestPanelController } from './ui/QuestPanelController.js';
 import { createFloatingPanelController } from './ui/FloatingPanelController.js';
-import { getOnboardingState, initOnboardingView, openStory, syncTutorialHighlight } from './ui/OnboardingView.js';
+import { ONBOARDING_VERSION, getOnboardingState, initOnboardingView, openStory, syncTutorialHighlight } from './ui/OnboardingView.js';
 import {
   initStageModals,
   openHelpModal,
@@ -126,6 +127,7 @@ const els = {
   storyReplayBtn: $('#storyReplayBtn'),
   worldLightingControls: $('#worldLightingControls'),
   forecastStrip: $('#forecastStrip'),
+  srAnnouncer: $('#srAnnouncer'),
 
   mobileBar: document.querySelector('.mobile-bar'),
   toastStack: $('#toastStack'),
@@ -219,7 +221,7 @@ function refreshTimeControls() {
   toggle.setAttribute('aria-label', paused ? '재생' : '일시정지');
   toggle.title = paused ? '재생' : '일시정지';
   fast.classList.toggle('active', (paused ? resumeTimeScale : gameState.timeScale) === TIME.FAST_SCALE);
-  refreshIcons();
+  refreshIcons(els.timeControls);
 }
 
 function setPlayerTimeScale(scale) {
@@ -274,6 +276,8 @@ function forecastOperationsForGrid(grid) {
     grid,
     coords,
     facilityPower: power.facilityPower,
+    generationAvailableByIndex: power.generationAvailableByIndex,
+    generationDispatchedByIndex: power.generationDispatchedByIndex,
     credits: gameState.credits,
     modifierContext,
   });
@@ -407,6 +411,12 @@ function handleReset() {
 }
 
 function resetGame({ title, text }) {
+  // gameState.reset()이 onboardingVersionSeen을 0으로 되돌리므로 "안내를 아직 못 봤는가"는
+  // 초기화 전에 읽어야 한다. 이렇게 해야 스토리를 이미 끝낸 플레이어는 초기화해도 다시 보지 않고,
+  // 게임오버 저장으로 부팅해 스토리가 대기열에만 있던 플레이어는 새 도시에서 스토리를 본다.
+  const onboardingUnseen = gameState.onboardingVersionSeen < ONBOARDING_VERSION;
+  // 대기열을 먼저 비운다 — 이전 도시에서 밀려 있던 모달이 새 도시 위로 튀어나오면 안 된다.
+  clearModalQueue();
   closeModal();
   gameState.reset();
   clearSavedGame();
@@ -417,6 +427,7 @@ function resetGame({ title, text }) {
   refreshAll();
   refreshTimeControls();
   eventBus.emit(Events.TOAST_SHOW, { title, text });
+  if (onboardingUnseen) openStory();
 }
 
 function resetAfterGameOver() {
@@ -445,13 +456,13 @@ function bindEvents() {
   els.soundBtn.addEventListener('click', () => {
     eventBus.emit(Events.AUDIO_TOGGLE_MUTE, {});
     els.soundBtn.innerHTML = `<i data-lucide="${gameState.sound ? 'volume-2' : 'volume-x'}"></i>`;
-    refreshIcons();
+    refreshIcons(els.soundBtn);
   });
 
   els.musicBtn.addEventListener('click', () => {
     toggleMusic();
     refreshAudioControls();
-    refreshIcons();
+    refreshIcons(els.musicBtn);
   });
 
 }
@@ -506,7 +517,7 @@ function boot() {
     refreshAll();
     if (change?.phase === 'claimed' && change.result?.campaignComplete) openReportModal();
   });
-  initSimulationHudView({ root: $('#simulationHud'), time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, battery: els.simBattery, water: els.simWater, labor: els.statusWorkforce, carbon: els.simCarbon, alert: els.simAlert });
+  initSimulationHudView({ root: $('#simulationHud'), time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, battery: els.simBattery, water: els.simWater, labor: els.statusWorkforce, carbon: els.simCarbon, alert: els.simAlert, announcer: els.srAnnouncer });
   initForecastView(els.forecastStrip);
   initChartView(els.cityChart);
   initStageModals(refreshAll, { getUpgradeForecast: upgradeForecastForIndex });
@@ -616,8 +627,8 @@ function boot() {
     eventBus.emit(Events.TOAST_SHOW, {
       title: credit ? '도시 재정 경고' : '필수시설 전력 경고',
       text: credit
-        ? `연속 적자 ${risk.negativeCreditDays}/24일`
-        : `필수시설 공급 5% 이하 ${risk.essentialBlackoutDays}/12일`,
+        ? `연속 적자 ${risk.negativeCreditDays}/${CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS}일`
+        : `필수시설 공급 ${CITY_FAILURE_RULES.ESSENTIAL_BLACKOUT_PERCENT}% 이하 ${risk.essentialBlackoutDays}/${CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS}일`,
       meta: '안전한 일일 정산 1회마다 위험 기간이 1일씩 회복됩니다.',
       priority: true,
     });
@@ -627,8 +638,13 @@ function boot() {
     openCarbonGameOverModal({ dailyCarbon: summary?.dailyCarbon, onReset: resetAfterGameOver });
   });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) simulationController.pause('hidden');
-    else simulationController.resume('hidden');
+    if (document.hidden) {
+      // 탭을 숨기는 순간이 사실상 마지막 기회다 — 디바운스·스로틀 대기 중인 저장을 밀어낸다.
+      flushSave();
+      simulationController.pause('hidden');
+    } else {
+      simulationController.resume('hidden');
+    }
   });
   simulationController.start();
   continuousClockView.start();
@@ -638,6 +654,12 @@ function boot() {
 
   bindEvents();
   refreshAll();
+  // index.html에 정적으로 박혀 있는 <i data-lucide>를 한 번만 문서 전체로 치환한다.
+  // 이후 부분 렌더는 각자 다시 그린 노드만 refreshIcons(node)로 넘긴다.
+  refreshIcons();
+  // 확장 선택 모달을 닫기 전에 새로고침한 저장은 확장 없이 7단계에 갇힌다. 부팅 때 다시 묻는다.
+  // 아래 openStory()보다 먼저 열리므로, 스토리에 덮이지 않으려면 모달 우선순위 큐가 필요하다.
+  if (expansionChoicePending(gameState)) eventBus.emit(Events.EXPANSION_CHOICE_REQUESTED, {});
   refreshTimeControls();
   syncTutorialHighlight();
 
@@ -667,6 +689,7 @@ window.__renderCityForTest = () => renderGrid();
 window.__refreshGameForTest = () => refreshAll();
 window.__settleSimulationDay = () => settleSimulationDay();
 window.__getSimulationState = () => simulationController?.getState();
+window.__getModalState = () => getModalState();
 window.__setTimeScale = (scale) => {
   const applied = setPlayerTimeScale(scale);
   refreshAll();
@@ -683,10 +706,10 @@ window.render_game_to_text = () => {
   const coords = createHexCoordinates(gameState.boardRadius);
   const calendar = calendarAtElapsedDay(gameState.elapsedGameDays);
   const visualCalendar = calendarAtElapsedDay(gameState.elapsedGameDays + (simulationController?.getProgress() || 0));
+  const tick = gameState.lastTickSummary;
   const payload = {
     coords: 'axial pointy-top hex grid; index 0 is center; radius 2=19 cells, radius 3=37 cells',
     mode: gameState.gameOver ? 'game_over' : 'playing',
-    stage: gameState.stage,
     quest: gameState.questIndex,
     questStatus: gameState.questStatus,
     progression: {
@@ -725,7 +748,6 @@ window.render_game_to_text = () => {
     climateAlert: gameState.climateAlert,
     carbonCrisisDays: gameState.carbonCrisisDays,
     carbonCrisisLimit: CARBON_CRISIS.GAME_OVER_DAYS,
-    turn: gameState.turn,
     credits: gameState.credits,
     devScore: m ? m.dev : 0,
     metrics: m,
@@ -748,17 +770,25 @@ window.render_game_to_text = () => {
       jobs: gameState.research.jobs,
       completedIds: [...gameState.research.completedIds],
       techLevels: gameState.research.techLevels,
-      quizAccelerationBankDays: gameState.research.quizAccelerationBankDays,
     },
     island: getCityRendererStats().environment,
-    simulation: gameState.lastTickSummary,
-    netCreditsPerDay: gameState.lastTickSummary?.netCredits ?? 0,
-    deliveredPower: gameState.lastTickSummary?.deliveredPower ?? 0,
-    demand: gameState.lastTickSummary?.demand ?? 0,
-    lowCarbonPercent: gameState.lastTickSummary?.lowCarbonPercent ?? 0,
-    workforce: gameState.lastTickSummary?.workforce ?? 0,
-    jobs: gameState.lastTickSummary?.jobs ?? 0,
-    facilityPowerRatios: Object.fromEntries(Object.entries(gameState.lastTickSummary?.facilityPower || {}).map(([index, item]) => [index, item.ratio])),
+    // 마지막 정산 요약 전체(routes·facilityPower·modifiers)를 덤프하지 않고 핵심만 싣는다.
+    simulation: tick ? {
+      netCredits: tick.netCredits,
+      deliveredPower: tick.deliveredPower,
+      demand: tick.demand,
+      lowCarbonPercent: tick.lowCarbonPercent,
+      dailyCarbon: tick.dailyCarbon,
+      dailyWater: tick.dailyWater,
+      essentialSupplyPercent: tick.essentialSupplyPercent,
+    } : null,
+    netCreditsPerDay: tick?.netCredits ?? 0,
+    deliveredPower: tick?.deliveredPower ?? 0,
+    demand: tick?.demand ?? 0,
+    lowCarbonPercent: tick?.lowCarbonPercent ?? 0,
+    workforce: tick?.workforce ?? 0,
+    jobs: tick?.jobs ?? 0,
+    facilityPowerRatios: Object.fromEntries(Object.entries(tick?.facilityPower || {}).map(([index, item]) => [index, item.ratio])),
   };
   return JSON.stringify(payload);
 };

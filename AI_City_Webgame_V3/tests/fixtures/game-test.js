@@ -2,6 +2,11 @@ import { test as base } from '@playwright/test';
 
 export const test = base.extend({
   gamePage: async ({ page }, use) => {
+    // 부팅 도중의 콘솔 경고(누락 아이콘 등)까지 담으려면 goto 전에 붙여야 한다.
+    // 수집한 메시지는 page.consoleMessages로 읽는다.
+    const consoleMessages = [];
+    page.on('console', (message) => consoleMessages.push(message.text()));
+    page.consoleMessages = consoleMessages;
     await page.goto('/');
     await page.waitForFunction(() => window.__GAME_STATE__ && typeof window.render_game_to_text === 'function', {
       timeout: 10000,

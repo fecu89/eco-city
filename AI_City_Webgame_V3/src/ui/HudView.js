@@ -105,6 +105,7 @@ export function renderHud() {
   els.phaseText.textContent = header.phase;
   els.missionTitle.textContent = header.mission;
   els.teacherNote.innerHTML = `<i data-lucide="${header.guidance.icon}"></i><p>${header.guidance.text}</p>`;
-  refreshIcons();
+  // 방금 다시 그린 노드만 넘긴다 — 문서 전체로 부르면 매 틱 페이지의 모든 아이콘이 새로 만들어진다.
+  refreshIcons(els.teacherNote);
   onStageUiChanged();
 }

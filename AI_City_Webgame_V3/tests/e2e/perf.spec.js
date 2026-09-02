@@ -274,4 +274,22 @@ test.describe('performance', () => {
 
     expect(await page.evaluate(() => window.__GPU_BUFFER_COUNTS__)).toEqual({ created: 0, deleted: 0 });
   });
+
+  test('simulation ticks do not re-create the page icons', async ({ gamePage: page }) => {
+    // lucide의 createIcons는 [data-lucide]를 전부 다시 그린다 — 이미 만들어진 SVG에도 그 속성이
+    // 남아 있어, 문서 전체로 부르면 매 틱 페이지의 모든 아이콘이 새 노드로 교체된다.
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      window.__iconProbe = document.querySelector('#simulationHud [data-metric="power"] svg[data-lucide]');
+    });
+    const before = await page.evaluate(() => document.querySelectorAll('svg[data-lucide]').length);
+    expect(before).toBeGreaterThan(5);
+
+    await page.evaluate(() => { for (let day = 0; day < 20; day++) window.__settleSimulationDay(); });
+
+    expect(await page.evaluate(() => ({
+      count: document.querySelectorAll('svg[data-lucide]').length,
+      sameNode: window.__iconProbe === document.querySelector('#simulationHud [data-metric="power"] svg[data-lucide]'),
+    }))).toEqual({ count: before, sameNode: true });
+  });
 });

@@ -13,6 +13,7 @@ export const GAME = {
   INITIAL_CREDITS: 10,
   AUTOSAVE_KEY: 'ai-city-save-v1',
   AUTOSAVE_DEBOUNCE_MS: 600,
+  SIMULATION_SAVE_THROTTLE_MS: 10000,
   EVENT_SEED: 20400101,
 };
 
@@ -57,10 +58,6 @@ export const COAST_PROP_ROTATION_OFFSETS = Object.freeze({
   dock: -(Math.PI * 2) / 3,
 });
 
-export const SIMULATION = {
-  DAY_MS: 1000,
-};
-
 export const CHART_MOTION = Object.freeze({
   ACTIVE_INTERVAL_FRACTION: 0.9,
   EASING: 'linear',
@@ -79,6 +76,46 @@ export const TIME = Object.freeze({
   DEFAULT_SCALE: 1,
   FAST_SCALE: 4,
 });
+
+// 보드 점수(BoardSystem.calcMetrics) 가중치.
+export const SCORING = Object.freeze({
+  SYNERGY: Object.freeze({
+    FACTORY_NEXT_TO_POWER_PER_LEVEL: 12,
+    DATA_NEXT_TO_COOLING_PER_LEVEL: 10,
+    RESIDENTIAL_NEXT_TO_GREEN_PER_LEVEL: 4,
+    BATTERY_HUB_PER_LEVEL: 3,
+    NUCLEAR_NEXT_TO_COOLING: 2,
+  }),
+  // 갈등 인접쌍이 깎는 발전점수.
+  CONFLICT_DEV_PENALTY: Object.freeze({
+    HEAVY_NEXT_TO_RESIDENTIAL: 3,
+    NUCLEAR_NEXT_TO_RESIDENTIAL: 4,
+    DATA_NEXT_TO_RESIDENTIAL: 2,
+  }),
+  // 소비지와 연결된 저장 허브가 없으면 재생에너지 공급을 더 크게 할인한다.
+  RENEWABLE_PENALTY_RATIO: Object.freeze({ LINKED: 0.05, UNLINKED: 0.25 }),
+  SUSTAINABILITY: Object.freeze({
+    BASE: 100,
+    CARBON_WEIGHT: 3.6,
+    FREE_WATER: 10,
+    WATER_WEIGHT: 2.5,
+    OVERLOAD_WEIGHT: 6,
+    CONFLICT_WEIGHT: 4,
+  }),
+  RELIABILITY: Object.freeze({
+    BASE: 68,
+    BALANCE_WEIGHT: 3,
+    LINKED_RENEWABLE_WEIGHT: 6,
+    HEAT_CLUSTER_WEIGHT: 5,
+  }),
+});
+
+// 강화 비용 배수(현재 레벨 기준)와 철거 환급률.
+export const UPGRADE_COST_RATIOS = Object.freeze({ FROM_LEVEL_1: 1.0, FROM_LEVEL_2_PLUS: 1.45 });
+export const DEMOLITION_REFUND_RATIO = 0.5;
+
+// 확장 연출(새 대지 하이라이트)이 가라앉기를 기다리는 시간.
+export const GRID_EXPANSION_SETTLE_MS = 4200;
 
 export const CONSTRUCTION = Object.freeze({
   BUILD_DAYS: Object.freeze({
@@ -137,7 +174,6 @@ export const AUDIO = Object.freeze({
 export const QUEST_REQUIREMENTS = Object.freeze({
   OPERATING_DAYS: 2,
   WATER_CYCLE_POWER_RATIO: 0.9,
-  FIRST_SOLAR_LOW_CARBON_PERCENT: 30,
   TRANSITION_LOW_CARBON_PERCENT: 40,
   TRANSITION_CARBON_MAX: 12,
 });
@@ -155,12 +191,11 @@ export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   4: Object.freeze({ residential: 5, thermal: 2, data: 1 }),
   5: Object.freeze({ nuclear: 1 }),
   6: Object.freeze({ residential: 6, factory: 3, data: 2, cooling: 2, green: 2 }),
-  7: Object.freeze({ residential: 7, solar: 2, battery: 2 }),
+  // 7행은 동·서 분기 공용이다. 서부 분기는 풍력이 먼저 해금되므로 두 발전원을 함께 연다.
+  7: Object.freeze({ residential: 7, solar: 2, wind: 2, battery: 2 }),
   8: Object.freeze({ data: 2, solar: 3, wind: 2 }),
   9: Object.freeze({ data: 3, wind: 3, green: 3 }),
   10: Object.freeze({ residential: 8, tidal: 1, battery: 3 }),
-  11: Object.freeze({ residential: 7, solar: 2, battery: 2 }),
-  12: Object.freeze({ solar: 3, wind: 2 }),
   13: Object.freeze({ residential: 8, factory: 4, data: 3, cooling: 3, wind: 2, green: 3 }),
   14: Object.freeze({ nuclear: 2, solar: 4, battery: 3, wind: 3 }),
   15: Object.freeze({ residential: 9, green: 5, tidal: 1 }),
@@ -168,26 +203,6 @@ export const FACILITY_LIMITS_BY_QUEST = Object.freeze({
   17: Object.freeze({ residential: 10, battery: 4, green: 6 }),
   18: Object.freeze({ cooling: 5, solar: 6, wind: 5, green: 7, tidal: 3 }),
   19: Object.freeze({}),
-});
-
-// Q6 이후 새 목표 세트는 legacy questIndex를 올리지 않으므로 별도 누적 허가표를 사용한다.
-export const FACILITY_LIMITS_BY_OBJECTIVE_STAGE = Object.freeze({
-  'transition-choice': Object.freeze({
-    residential: 7, green: 2, factory: 3, thermal: 2, data: 2, nuclear: 1,
-    cooling: 2, solar: 2, battery: 0, wind: 0, tidal: 0,
-  }),
-  specialization: Object.freeze({
-    residential: 8, green: 3, factory: 4, thermal: 2, data: 3, nuclear: 1,
-    cooling: 3, solar: 3, battery: 2, wind: 2, tidal: 1,
-  }),
-  resilience: Object.freeze({
-    residential: 9, green: 6, factory: 5, thermal: 2, data: 4, nuclear: 2,
-    cooling: 4, solar: 5, battery: 4, wind: 4, tidal: 2,
-  }),
-  stress: Object.freeze({
-    residential: 10, green: 7, factory: 5, thermal: 2, data: 4, nuclear: 2,
-    cooling: 5, solar: 6, battery: 4, wind: 5, tidal: 3,
-  }),
 });
 
 export const RESEARCH_RULES = Object.freeze({
@@ -202,6 +217,13 @@ export const RESEARCH_RULES = Object.freeze({
     ADVANCED: 150,
     CAPSTONE: 180,
   }),
+});
+
+// 캠페인 구간별 일일 CO₂ 목표. 기초는 전환선, 준비 단계는 도시 안전선, 기후전부터는 강화 기준이다.
+export const DAILY_CARBON_TARGETS = Object.freeze({
+  FOUNDATION: 12,
+  PREPARATION: 10,
+  CLIMATE: 8,
 });
 
 export const CARBON_CRISIS = Object.freeze({
@@ -236,6 +258,12 @@ export const GRID_RESERVE_RULES = Object.freeze({
   BATTERY_SUBSTITUTE_QUEST_ID: 'extreme-heat',
 });
 
+export const WATER_RULES = Object.freeze({
+  // 물 한도는 언제나 "그 시점 도시의 실제 사용량"을 기준으로 잡는다. 기준을 아직 측정하지
+  // 못한 저장·초기 상태에서만 이 기본값을 쓴다.
+  DEFAULT_BASELINE: 10,
+});
+
 export const STRESS_TEST_RULES = Object.freeze({
   PHASE_DAYS: Object.freeze({
     BASELINE: 3,
@@ -257,7 +285,7 @@ export const STRESS_TEST_RULES = Object.freeze({
   MIN_SAFE_CARBON_DAYS: 35,
   MAX_HIGH_CARBON_DAYS: 3,
   MAX_AVERAGE_CARBON: 8,
-  MAX_WATER_VIOLATION_DAYS: 6,
+  MAX_WATER_VIOLATION_DAYS: 3,
   RECOVERY_DEADLINE_DAYS: 3,
   MIN_TIDAL_DELIVERY: 8,
   DEFAULT_WATER_LIMIT: 10,
@@ -291,6 +319,11 @@ export const FACILITY_ECONOMY = {
   tidal: { income: 0, upkeep: 0.3 },
 };
 
+export const WORKFORCE_RULES = Object.freeze({
+  // 인력이 모자란 상태로 넘어온 도시가 바로 실패하지 않도록 주는 재배치 유예 기간(일).
+  REBALANCE_GRACE_DAYS: 24,
+});
+
 export const WORKFORCE_LEVELS = {
   residential: [0, 6, 10, 15],
   factory: [0, 4, 6, 8],
@@ -315,6 +348,8 @@ export const ECONOMY_RULES = {
   CARBON_SAFE_RATE: 10,
   CLIMATE_RECOVERY_RATE: 0.25,
   UPKEEP_LEVEL_MULTIPLIERS: [0, 1, 1.4, 1.8],
+  // 발전 시설은 급전량이 0이어도 대기 운전만큼의 탄소와 냉각수를 계속 쓴다.
+  GENERATION_IDLE_EMISSION_RATIO: 0.25,
 };
 
 export const CITY_CAMERA = {

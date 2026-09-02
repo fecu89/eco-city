@@ -220,10 +220,7 @@ export function buildCityModifierContext(state, {
   const byFacility = {};
   const boardCoords = coordinatesFor(state, coords);
   const activeEvent = activeEventContext(state);
-  const baselineWater = Number(state.baseline?.dailyWater);
-  const stressCity = stressCityModifier(state, {
-    baselineWater: Number.isFinite(baselineWater) && baselineWater > 0 ? baselineWater : 10,
-  });
+  const stressCity = stressCityModifier(state);
   const carbonPressure = carbonPressureForDays(state.carbonCrisisDays);
   const effects = researchEffects(state);
   const greenCluster = hasGreenCluster(state, boardCoords);

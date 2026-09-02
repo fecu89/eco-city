@@ -9,10 +9,10 @@ function crisisState({ questIndex = 6, carbonCrisisDays = 0 } = {}) {
   return state;
 }
 
-test('carbon above 10 accumulates and operation at 10 recovers two hours', () => {
+test('carbon above 10 accumulates and operation at 10 recovers two days', () => {
   const state = crisisState({ carbonCrisisDays: 10 });
-  expect(applyCarbonCrisis(state, 10.01).hours).toBe(11);
-  expect(applyCarbonCrisis(state, 10).hours).toBe(9);
+  expect(applyCarbonCrisis(state, 10.01).days).toBe(11);
+  expect(applyCarbonCrisis(state, 10).days).toBe(9);
 });
 
 test('warnings occur once at 24, 72, and 144 hours', () => {
@@ -35,7 +35,7 @@ test('168 crisis hours transitions to carbon game over once', () => {
 test('carbon crisis is inactive until quest 5 has been completed', () => {
   for (const questIndex of [1, 2, 3, 4, 5]) {
     const state = crisisState({ questIndex });
-    expect(applyCarbonCrisis(state, 99)).toMatchObject({ active: false, hours: 0 });
+    expect(applyCarbonCrisis(state, 99)).toMatchObject({ active: false, days: 0 });
   }
 });
 
@@ -48,4 +48,16 @@ test('carbon pressure tiers change exactly at 24, 72, 144, and 168 hours', () =>
   expect(carbonPressureForDays(144)).toMatchObject({ tier: 'severe', reportPenalty: 5 });
   expect(carbonPressureForDays(167).tier).toBe('severe');
   expect(carbonPressureForDays(168).tier).toBe('extreme');
+});
+
+test('a city that recovers to zero crisis days can be warned a second time', () => {
+  const state = crisisState({ carbonCrisisDays: 23 });
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([24]);
+
+  // 안전 운전으로 위기 일수를 0까지 되돌린다.
+  while (state.carbonCrisisDays > 0) applyCarbonCrisis(state, 8);
+  expect(state.carbonWarningMilestones.size).toBe(0);
+
+  state.carbonCrisisDays = 23;
+  expect(applyCarbonCrisis(state, 11).warnings).toEqual([24]);
 });

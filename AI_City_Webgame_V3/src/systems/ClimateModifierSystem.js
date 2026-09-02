@@ -34,9 +34,10 @@ export function facilityModifierForClimate(definition, facilityType, level = 1) 
 
 export function cityModifierForClimate(definition, { baselineWater = 10 } = {}) {
   const city = definition?.cityModifiers || {};
-  const waterLimitRatio = Number.isFinite(Number(city.waterLimitRatio))
-    ? Number(city.waterLimitRatio)
-    : 1;
+  // 물 한도는 정의가 명시적으로 선언한 구간에만 생긴다. 비율이 1이어도 "행사 직전 사용량을
+  // 그대로 유지하라"는 실제 제한이므로 한도를 만들어야 한다.
+  const declaresWaterLimit = Number.isFinite(Number(city.waterLimitRatio));
+  const waterLimitRatio = declaresWaterLimit ? Number(city.waterLimitRatio) : 1;
   const coolingEffectiveness = Number(
     city.coolingEffectiveness
       ?? definition?.facilityModifiers?.cooling?.effectiveness
@@ -45,7 +46,7 @@ export function cityModifierForClimate(definition, { baselineWater = 10 } = {}) 
   return Object.freeze({
     ...city,
     waterLimitRatio,
-    waterLimit: waterLimitRatio < 1 ? round(Math.max(0, Number(baselineWater) || 0) * waterLimitRatio) : null,
+    waterLimit: declaresWaterLimit ? round(Math.max(0, Number(baselineWater) || 0) * waterLimitRatio) : null,
     coolingEffectiveness: Number.isFinite(coolingEffectiveness) ? coolingEffectiveness : 1,
     carbonFlat: Number(city.carbonFlat) || 0,
   });

@@ -5,9 +5,14 @@ import {
   claimCurrentQuest,
   evaluateCurrentQuest,
   requestEmergencySupport,
+  stageForQuest,
 } from '../../../src/systems/QuestSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
 import { QUESTS } from '../../../src/core/QuestDefinitions.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../../../src/core/CampaignProgression.js';
+import { FACILITIES, STAGES, STRESS_TEST_RULES } from '../../../src/core/Constants.js';
+import { validatePlacement } from '../../../src/systems/BoardSystem.js';
+import { assessConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
 import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
@@ -234,6 +239,38 @@ test('quest eight requires a completed level-two data center and smart-grid rese
   expect(evaluateCurrentQuest(state).ready).toBe(true);
 });
 
+test('a state quest that loses its condition stops being claimable', () => {
+  const state = new GameState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST;
+  state.research.completedIds.add('smartGrid');
+  state.grid[0] = { type: 'data', level: 2 };
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  expect(state.questStatus).toBe('ready_to_claim');
+
+  state.grid[0] = null;
+  expect(evaluateCurrentQuest(state).ready).toBe(false);
+  expect(state.questStatus).toBe('active');
+  expect(claimCurrentQuest(state)).toMatchObject({ ok: false, reason: 'not_ready' });
+
+  state.grid[0] = { type: 'data', level: 2 };
+  expect(evaluateCurrentQuest(state).ready).toBe(true);
+  expect(claimCurrentQuest(state)).toMatchObject({ ok: true });
+});
+
+test('a consecutive-day quest keeps its earned readiness after a single bad day', () => {
+  const state = new GameState();
+  state.questIndex = 4;
+  state.grid[0] = { type: 'data', level: 1 };
+  const tick = summary({ facilityPower: { 0: powered(0.95) } });
+  applySimulationQuestProgress(state, tick);
+  applySimulationQuestProgress(state, tick);
+  expect(state.questStatus).toBe('ready_to_claim');
+
+  applySimulationQuestProgress(state, summary({ facilityPower: { 0: powered(0.1) } }));
+  expect(state.questProgress.consecutiveDays).toBe(0);
+  expect(state.questStatus).toBe('ready_to_claim');
+});
+
 test('quest nine requires completed wind research and real wind delivery for two consecutive days', () => {
   const state = new GameState();
   state.questIndex = 9;
@@ -265,6 +302,33 @@ test('quest ten requires completed tidal research, an operational plant, and rea
   applySimulationQuestProgress(state, delivered);
   applySimulationQuestProgress(state, delivered);
   expect(state.questStatus).toBe('ready_to_claim');
+});
+
+test('the final test keeps the board editable so its construction cost rule applies', () => {
+  const state = new GameState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
+  state.stage = stageForQuest(state.questIndex);
+  state.stressTest.status = 'running';
+
+  expect(state.isEditable).toBe(true);
+  expect(validatePlacement(state, 'residential', 1)).toMatchObject({ ok: true });
+
+  state.constructionPlan = [{ index: 1, type: 'residential' }];
+  expect(assessConstructionPlan(state).totalCost).toBeCloseTo(
+    FACILITIES.residential.cost * STRESS_TEST_RULES.CONSTRUCTION_COST_MULTIPLIER,
+    2,
+  );
+});
+
+test('claiming the final quest closes the campaign and locks the board into the report stage', () => {
+  const state = new GameState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
+  state.stage = stageForQuest(state.questIndex);
+  state.questStatus = 'ready_to_claim';
+
+  expect(claimCurrentQuest(state)).toMatchObject({ ok: true, campaignComplete: true, nextQuest: null });
+  expect(state.stage).toBe(STAGES.REPORT);
+  expect(state.isEditable).toBe(false);
 });
 
 test('emergency support is limited to once per campaign at one credit or less', () => {

@@ -12,6 +12,7 @@ import { operationalGrid } from './ConstructionProjectSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
 const round2 = (value) => Math.round(value * 100) / 100;
+const clamp01 = (value) => Math.max(0, Math.min(1, value));
 
 export const calculateLabor = calculateWorkforce;
 
@@ -26,6 +27,8 @@ export function settleEconomy({
   grid,
   coords = null,
   facilityPower = {},
+  generationAvailableByIndex = {},
+  generationDispatchedByIndex = {},
   credits = 0,
   modifierContext = null,
 }) {
@@ -68,11 +71,22 @@ export function settleEconomy({
     const employmentMultiplier = cell.type === 'residential'
       ? ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO + (1 - ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO) * labor.employmentRate
       : 1;
-    const operationRatio = running ? powerRatio * laborMultiplier : 0;
+    // 발전 시설의 가동률은 인력·전력 수요가 아니라 이 틱에 실제로 급전된 전력에서 나온다.
+    // 급전 정보 없이 부르는 정적 미리보기에서는 발전 시설을 만가동으로 본다.
+    const isGeneration = stats.supply > 0 && !stats.demand;
+    const generationAvailable = isGeneration ? Number(generationAvailableByIndex[index]) : NaN;
+    const generationOperationRatio = !Number.isFinite(generationAvailable)
+      ? 1
+      : generationAvailable > 0
+        ? clamp01((Number(generationDispatchedByIndex[index]) || 0) / generationAvailable)
+        : 0;
+    const operationRatio = isGeneration
+      ? generationOperationRatio
+      : running ? powerRatio * laborMultiplier : 0;
     const residentialTaxRatio = ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO
       + (employmentMultiplier - ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO) * powerRatio;
     const income = stats.income * (cell.type === 'residential' ? residentialTaxRatio : operationRatio) * pollutionMultiplier;
-    const upkeep = round1(stats.upkeep);
+    const upkeep = roundCredits(stats.upkeep);
     grossIncome += income;
     maintenance += upkeep;
     facilityEconomy[index] = { income: round2(income), upkeep, powerRatio: round1(powerRatio), operationRatio: round1(operationRatio), laborMultiplier, pollutionMultiplier };
@@ -104,7 +118,7 @@ export function settleEconomy({
     labor,
     facilityEconomy,
     grossIncome: round2(grossIncome),
-    maintenance: round1(maintenance),
+    maintenance: roundCredits(maintenance),
     overcrowding: round1(overcrowding),
     health: round1(health),
     expansionUpkeep,

@@ -1,7 +1,7 @@
 import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
-import { FACILITIES, QUEST_REQUIREMENTS, RESEARCH_RULES } from '../core/Constants.js';
+import { FACILITIES, QUEST_REQUIREMENTS, RESEARCH_RULES, STRESS_TEST_RULES } from '../core/Constants.js';
 import { claimCurrentQuest, evaluateCurrentQuest, requestEmergencySupport } from '../systems/QuestSystem.js';
 import { markQuestQuizResult } from '../systems/QuestSystem.js';
 import {
@@ -16,7 +16,6 @@ import { expandGrid } from '../systems/BoardSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { clearObjectivePanelMode } from './ObjectiveView.js';
 import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
 import {
   acknowledgeClimateBriefing,
@@ -101,6 +100,10 @@ export function initQuestView(elements, changed) {
   els.expand?.addEventListener('click', () => {
     detailsExpanded = !detailsExpanded;
     renderQuest();
+  });
+  eventBus.on(Events.GAME_RESET, () => {
+    detailsExpanded = false;
+    researchQuizReturnIndex = null;
   });
 }
 
@@ -193,9 +196,14 @@ function climateDetailsMarkup(evaluation, quest) {
     <div><span>퀘스트 보상</span><b>${escapeHtml(rewardText(quest))}</b></div>`;
 }
 
+// 최종시험 패널이 감춰 둔 펼치기 버튼을 일반 퀘스트 렌더 전에 되돌린다.
+function resetQuestPanelMode() {
+  els.expand?.classList.remove('hidden');
+}
+
 export function renderQuest() {
   if (!els) return;
-  clearObjectivePanelMode(els);
+  resetQuestPanelMode();
   if (renderStressTestPanel()) return;
   const evaluation = evaluateCurrentQuest(gameState);
   const quest = questForState(gameState);
@@ -285,13 +293,10 @@ function renderStressTestPanel() {
           ? '최종 보고서 보기'
           : `${phase.label} 진행 중`;
   });
-  eachNode(els.root, (node) => {
-    node.classList.toggle('quest-ready', stress.status !== 'running');
-    node.classList.add('objective-mode');
-  });
+  eachNode(els.root, (node) => node.classList.toggle('quest-ready', stress.status !== 'running'));
   eachNode(els.contextAction, (node) => node.classList.add('hidden'));
   if (els.details) {
-    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationDays}일</small></span>`).join('')}</div><p>평균 공급 82% · 최저 공급 50% · CO₂ 평균 8/일 · 안전일 35일 · 물 초과 6일 이하 · 조력 8E · 복구 3일 이내</p>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
+    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationDays}일</small></span>`).join('')}</div><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 · 안전일 ${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하(건조 위기 구간, 시험 시작 시 사용량 기준) · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내</p>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
     els.details.classList.remove('hidden');
   }
   els.expand?.classList.add('hidden');

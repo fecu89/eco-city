@@ -1,6 +1,6 @@
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { closeModal, $modal, setModal } from './Modal.js';
+import { closeModal, MODAL_PRIORITY, $modal, setModal } from './Modal.js';
 
 export const ONBOARDING_VERSION = 3;
 
@@ -32,6 +32,7 @@ let storyPage = 0;
 
 function renderStory() {
   const page = STORY_PAGES[storyPage];
+  // 스토리는 가장 낮은 우선순위다 — 부팅 때 게임오버 모달이 열려 있으면 그 뒤로 대기한다.
   setModal(`
     <section class="story-dossier" aria-labelledby="storyTitle">
       <div class="story-signal"><span>${page.chapter}</span><b>${page.date}</b></div>
@@ -49,7 +50,7 @@ function renderStory() {
         ${storyPage === STORY_PAGES.length - 1 ? '도시 복구 시작' : '다음 기록'}
       </button>
     </section>
-  `, { id: 'story', pausesSimulation: true });
+  `, { id: 'story', pausesSimulation: true, priority: MODAL_PRIORITY.NORMAL });
   $modal('#storyNext').addEventListener('click', () => {
     if (storyPage < STORY_PAGES.length - 1) {
       storyPage += 1;
@@ -110,6 +111,9 @@ export function initOnboardingView() {
     gameState.tutorialComplete = true;
     gameState.tutorialStep = 'complete';
     clearTutorialHighlights();
+  });
+  eventBus.on(Events.GAME_RESET, () => {
+    storyPage = 0;
   });
 }
 

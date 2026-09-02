@@ -13,6 +13,7 @@ import {
 } from '../../../src/systems/QuestSystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 import { cloneSimulationState, forecastSimulation } from '../../../src/systems/SimulationForecastSystem.js';
+import { activeEventContext } from '../../../src/systems/CityEventSystem.js';
 
 function climateState(index) {
   const state = new GameState();
@@ -289,7 +290,8 @@ test('daily settlement advances the active climate quest from event start throug
 
   const first = settleDay(state);
   expect(first.summary).toMatchObject({
-    dailyCarbonTarget: 10,
+    // 준비 단계(10단계)까지가 목표 10이고, 기후전 11단계부터는 강화 기준 8이다.
+    dailyCarbonTarget: 8,
     climateQuest: { status: 'active', consecutiveDays: 1 },
   });
   while (state.elapsedGameDays < event.endAt) settleDay(state);
@@ -333,4 +335,19 @@ test('a 24-day climate prediction matches an actual cloned run without mutating 
     campaign: actual.climateCampaign,
   });
   expect(source.serialize()).toEqual(before);
+});
+
+test('the drought limit is the water the city used at briefing time, not the old quest four baseline', () => {
+  const state = climateState(15);
+  // 4단계 보상 시점에 기록된 옛 기준선은 더 이상 한도를 정하지 않는다.
+  state.baseline = { dailyWater: 6 };
+  state.lastTickSummary = { dailyWater: 13.4 };
+
+  expect(acknowledgeClimateBriefing(state)).toMatchObject({ ok: true, eventType: 'drought' });
+  expect(state.climateCampaign.progress.waterBaseline).toBe(13.4);
+
+  const event = state.events.schedule[0];
+  state.elapsedGameDays = event.startAt;
+  state.events.activeId = event.id;
+  expect(activeEventContext(state).city).toMatchObject({ waterLimit: 13.4, waterLimitRatio: 1 });
 });

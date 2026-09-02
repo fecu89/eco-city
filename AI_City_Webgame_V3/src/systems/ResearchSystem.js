@@ -89,6 +89,10 @@ function dataCenterJob(state, index, excludedResearchId = null) {
   ));
 }
 
+function dataCenterUpgradeInProgress(state, index) {
+  return state.grid[index]?.project?.kind === 'upgrade';
+}
+
 export function startResearch(state, researchId, dataCenterIndex) {
   const definition = RESEARCH[researchId];
   const jobs = researchJobs(state);
@@ -99,11 +103,11 @@ export function startResearch(state, researchId, dataCenterIndex) {
   const availability = listResearchAvailability(state).find(({ id }) => id === researchId);
   if (!availability.available) return { ok: false, reason: 'prerequisite', reasonCodes: availability.reasonCodes };
   if (!validDataCenter(state, dataCenterIndex)) return { ok: false, reason: 'invalid_data_center' };
+  if (dataCenterUpgradeInProgress(state, dataCenterIndex)) return { ok: false, reason: 'data_center_upgrading' };
   if (dataCenterJob(state, dataCenterIndex)) return { ok: false, reason: 'data_center_busy' };
   if (state.credits < definition.cost) return { ok: false, reason: 'insufficient_credits', cost: definition.cost };
 
   state.credits = roundCredits(state.credits - definition.cost);
-  state.research.quizAccelerationBankDays = 0;
   jobs[researchId] = {
     id: researchId,
     dataCenterIndex,
@@ -122,6 +126,8 @@ export function cancelResearch(state, researchId) {
   const refund = Math.floor((active.paidCost ?? definition.cost) * RESEARCH_RULES.CANCEL_REFUND_RATIO);
   state.credits = roundCredits(state.credits + refund);
   delete jobs[researchId];
+  // 취소한 연구는 퀴즈 가속 크레딧도 함께 반납한다. 다시 시작하면 문제 풀이로 또 앞당길 수 있다.
+  if (state.research.quizCreditQuestionIds) delete state.research.quizCreditQuestionIds[researchId];
   return { ok: true, researchId: active.id, refund };
 }
 
@@ -129,6 +135,7 @@ export function assignResearchDataCenter(state, researchId, index) {
   const active = researchJobs(state)[researchId];
   if (!active) return { ok: false, reason: 'no_active_research' };
   if (!validDataCenter(state, index)) return { ok: false, reason: 'invalid_data_center' };
+  if (dataCenterUpgradeInProgress(state, index)) return { ok: false, reason: 'data_center_upgrading' };
   if (dataCenterJob(state, index, researchId)) return { ok: false, reason: 'data_center_busy' };
   active.dataCenterIndex = index;
   active.status = 'running';
@@ -139,7 +146,8 @@ export function researchDemandByIndex(state) {
   return activeResearchJobs(state).reduce((demand, job) => {
     const cell = state.grid[job.dataCenterIndex];
     if (validDataCenter(state, job.dataCenterIndex)
-      && (cell.project?.kind === 'upgrade' || cell.operationMode !== 'eco')) {
+      && !cell.project
+      && cell.operationMode !== 'eco') {
       demand[job.dataCenterIndex] = RESEARCH_RULES.EXTRA_DEMAND * operationProfileForCell(cell).demand;
     }
     return demand;
@@ -210,6 +218,17 @@ export function advanceResearchOneDay(state, facilityPower, modifierContext = nu
       results[active.id] = { status: 'unassigned', advancedDays: 0, completed: false };
       continue;
     }
+    const cell = state.grid[active.dataCenterIndex];
+    if (cell.project?.kind === 'upgrade') {
+      active.status = 'upgrade_paused';
+      results[active.id] = {
+        status: 'upgrade_paused',
+        advancedDays: 0,
+        completed: false,
+        dataCenterIndex: active.dataCenterIndex,
+      };
+      continue;
+    }
     const ratio = facilityPower?.[active.dataCenterIndex]?.ratio ?? 0;
     if (ratio < RESEARCH_RULES.POWER_THRESHOLD) {
       active.status = 'underpowered';
@@ -224,7 +243,6 @@ export function advanceResearchOneDay(state, facilityPower, modifierContext = nu
       };
       continue;
     }
-    const cell = state.grid[active.dataCenterIndex];
     const researchSpeed = effectiveFacilityStats(
       cell,
       facilityModifierAt(modifierContext, active.dataCenterIndex),
