@@ -54,6 +54,11 @@
         <span class="sr-only" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
       </header>
 
+      <button type="button" class="quest-strip" id="questStrip" aria-label="현재 퀘스트 열기" hidden>
+        <i data-lucide="map" aria-hidden="true"></i>
+        <span class="quest-strip-copy"><small id="questStripLevel"></small><b id="questStripTitle"></b></span>
+        <span class="quest-strip-progress" aria-hidden="true"><span id="questStripBar"></span></span>
+      </button>
       <div class="forecast-strip" id="forecastStrip" hidden>
         <i data-lucide="cloud-sun" aria-hidden="true"></i>
         <span><small>도시 기후 예보</small><b>예보 대기</b></span>
@@ -111,14 +116,6 @@
             <div class="panel-title floating-panel-header" tabindex="0" aria-label="설정 창. 방향키로 이동 가능"><div><span class="eyebrow">SYSTEM</span><h3>설정과 운영 가이드</h3></div><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div>
             <div class="mission-header"><div class="mission-copy"><span class="eyebrow">MISSION</span><h2 id="missionTitle">저탄소 도시로 전환하라</h2></div><div class="turn-box"><span>건설</span><strong id="turnCount">0</strong></div></div>
             <div class="teacher-note" id="teacherNote"><i data-lucide="building-2"></i><p>주거, 전력, 일자리를 연결하세요.</p></div>
-            <div class="graphics-setting">
-              <div><span class="eyebrow">GRAPHICS</span><strong>도시 조명</strong></div>
-              <div class="segmented-control" id="worldLightingControls" aria-label="도시 조명 시간대">
-                <button type="button" data-world-lighting="day"><i data-lucide="sun"></i><span>낮</span></button>
-                <button type="button" data-world-lighting="dusk"><i data-lucide="cloud-sun"></i><span>노을</span></button>
-                <button type="button" data-world-lighting="night"><i data-lucide="moon"></i><span>밤</span></button>
-              </div>
-            </div>
             <div class="top-actions">
               <button class="icon-btn" id="helpBtn" title="운영 가이드"><i data-lucide="circle-help"></i></button>
               <button class="icon-btn" id="storyReplayBtn" title="스토리 다시 보기"><i data-lucide="presentation"></i></button>

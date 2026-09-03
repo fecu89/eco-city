@@ -1,5 +1,5 @@
 import './style.css';
-import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, LOADING_SCREEN, TIME } from './core/Constants.js';
+import { BOARD_TAP_COPY, CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, LOADING_SCREEN, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -15,11 +15,12 @@ import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { buildCityModifierContext } from './systems/CityModifierSystem.js';
 import { forecastConstruction, forecastUpgrade } from './systems/SimulationForecastSystem.js';
 import { expansionChoicePending } from './systems/ZoneSystem.js';
+import { createEnvironment, tidalRangeAt, windDirectionAt } from './systems/EnvironmentSystem.js';
 
 import { clearModalQueue, closeModal, getModalState, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { disposeCityScene3D, finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setBuildPreviewMode, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
+import { disposeCityScene3D, finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setBuildPreviewMode, setCityCameraOrbitForTest, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
@@ -28,7 +29,6 @@ import { initChartView, requestChartResize, updateChart } from './ui/ChartView.j
 import { initThreeBackground } from './ui/ThreeBackground.js';
 import { getWorldHudState, initWorldHud, syncWorldHud } from './ui/WorldHud.js';
 import { getTheme, initThemeManager } from './ui/ThemeManager.js';
-import { getWorldLightingMode, initWorldLightingManager } from './ui/WorldLightingManager.js';
 import { initFeedbackBridge } from './ui/FeedbackBridge.js';
 import { initQuestCelebration } from './ui/QuestCelebration.js';
 import { initQuestPanelController } from './ui/QuestPanelController.js';
@@ -44,6 +44,7 @@ import {
   openConstructionRiskModal,
   openOperationalRiskModal,
   openHudMetricCausesModal,
+  openDirectionModal,
   openStressTestModal,
   openStressResultModal,
   refreshStageConstructionProgress,
@@ -125,8 +126,11 @@ const els = {
   simAlert: $('#simAlert'),
   timeControls: $('#timeControls'),
   storyReplayBtn: $('#storyReplayBtn'),
-  worldLightingControls: $('#worldLightingControls'),
   forecastStrip: $('#forecastStrip'),
+  questStrip: $('#questStrip'),
+  questStripLevel: $('#questStripLevel'),
+  questStripTitle: $('#questStripTitle'),
+  questStripBar: $('#questStripBar'),
   srAnnouncer: $('#srAnnouncer'),
 
   mobileBar: document.querySelector('.mobile-bar'),
@@ -301,9 +305,10 @@ function constructionForecastForGrid(projectedGrid) {
 
 function constructionForecastForAssessment(assessment) {
   const current = forecastOperationsForGrid(gameState.grid);
-  const plannedProjects = assessment.items.map(({ index, type }) => ({
+  const plannedProjects = assessment.items.map(({ index, type, rotation }) => ({
     index,
     type,
+    rotation,
     paidCost: assessment.paidCostByIndex[index],
   }));
   const forecast = forecastConstruction(gameState, plannedProjects, { settleDay });
@@ -385,25 +390,27 @@ function confirmActiveConstructionPlan() {
   return completeConstructionPlan();
 }
 
+// 보드 안내 토스트는 세션당 한 번씩만 — 매번 잔소리하면 빈 칸을 눌러 선택을 푸는 것도 성가시다.
+const shownBoardHints = new Set();
+
+function showBoardHintOnce(id) {
+  if (shownBoardHints.has(id)) return;
+  shownBoardHints.add(id);
+  eventBus.emit(Events.TOAST_SHOW, { ...BOARD_TAP_COPY[id] });
+}
+
 function onCellClick(index) {
-  gameState.selectedCell = index;
   const existing = gameState.grid[index];
   if (existing) {
+    gameState.selectedCell = index;
     openFacilityInspectorModal(index);
     renderGrid();
     return;
   }
-  if (getWorldHudState().activePanel !== 'build') {
-    eventBus.emit(Events.TOAST_SHOW, {
-      title: '건설 메뉴를 먼저 여세요',
-      text: '오른쪽 건설 버튼을 누르면 빈 대지에 시설을 지을 수 있습니다.',
-    });
-    return;
-  }
-  eventBus.emit(Events.TOAST_SHOW, {
-    title: '대지를 다시 선택하세요',
-    text: '건설 패널이 열려 있으면 빈 대지를 눌러 계획에 추가할 수 있습니다.',
-  });
+  // 빈 칸 탭은 선택 해제다.
+  gameState.selectedCell = null;
+  renderGrid();
+  showBoardHintOnce(getWorldHudState().activePanel !== 'build' ? 'BUILD_MENU' : 'PICK_FACILITY');
 }
 
 function handleReset() {
@@ -423,6 +430,7 @@ function resetGame({ title, text }) {
   closeModal();
   gameState.reset();
   clearSavedGame();
+  shownBoardHints.clear();
   resumeTimeScale = TIME.DEFAULT_SCALE;
   simulationController.reset(gameState.timeScale);
   continuousClockView?.renderNow();
@@ -506,15 +514,16 @@ function boot() {
     error: els.buildPlanError,
     getForecast: constructionForecastForAssessment,
   }, { announcer: els.srAnnouncer });
-  initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
   initDockView(els.facilityDock, els.facilityDetail, els.buildPanel);
   initHudView(els, syncWorldHud);
   initQuestView({
     root: document.querySelector('.quest-panel-current'),
-    level: els.questPanelLevel,
-    title: els.questPanelTitle,
+    // 모바일 퀘스트 스트립은 패널과 같은 값을 같은 렌더 경로로 받는다.
+    level: [els.questPanelLevel, els.questStripLevel],
+    title: [els.questPanelTitle, els.questStripTitle],
     goal: els.questPanelGoal,
-    bar: els.questPanelProgressBar,
+    bar: [els.questPanelProgressBar, els.questStripBar],
+    strip: els.questStrip,
     reward: els.questPanelReward,
     emergency: els.questPanelEmergencyBtn,
     claim: els.questPanelClaimBtn,
@@ -550,6 +559,8 @@ function boot() {
   eventBus.on(Events.STRESS_TEST_START_REQUESTED, () => openStressTestModal(refreshAll));
   eventBus.on(Events.REPORT_OPEN_REQUESTED, openReportModal);
   eventBus.on(Events.HUD_METRIC_CAUSES_REQUESTED, ({ metric }) => openHudMetricCausesModal(metric));
+  // 보드 위 위젯의 나침반 버튼 — 계획 중인 태양광·풍력의 방향별 발전량을 연다.
+  eventBus.on(Events.BUILD_DIRECTION_INFO_REQUESTED, ({ index, type }) => openDirectionModal(index, type));
   eventBus.on(Events.STRESS_PHASE_CHANGED, ({ phaseStarted }) => {
     if (!phaseStarted) return;
     eventBus.emit(Events.TOAST_SHOW, {
@@ -697,7 +708,6 @@ window.__getCityLevelVisuals = () => LEVEL_VISUALS.slice(1).map((level) => ({ ..
 window.__getCityRendererStats = () => getCityRendererStats();
 window.__getWorldHudState = () => getWorldHudState();
 window.__getTheme = () => getTheme();
-window.__getWorldLightingMode = () => getWorldLightingMode();
 window.__getOnboardingState = () => getOnboardingState();
 window.__openStoryForTest = () => openStory({ replay: true });
 window.__renderCityForTest = () => renderGrid();
@@ -711,6 +721,17 @@ window.__setTimeScale = (scale) => {
   refreshAll();
   return applied;
 };
+// 칸별 풍향·해안 조차를 고정 씨앗으로 다시 뽑는다(테스트와 수업 시연용).
+window.__setEnvironmentSeed = (seed) => {
+  gameState.environment = createEnvironment(seed);
+  refreshAll();
+  return gameState.environment.seed;
+};
+// 이 칸의 자연 조건(풍향 인덱스와 해안 조차)을 그대로 읽는다 — 방향 안내 UI 검증용.
+window.__getEnvironmentAt = (index) => ({
+  windDirection: windDirectionAt(gameState, index),
+  tidalRange: tidalRangeAt(gameState, index),
+});
 window.__renderCityConfigsForTest = (configs, size) => renderCityScene3D(configs, size);
 window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVisit(greenIndex, birdCount);
 window.__finishBirdVisitForTest = () => finishBirdVisit();
@@ -775,18 +796,20 @@ window.render_game_to_text = () => {
     devScore: m ? m.dev : 0,
     metrics: m,
     boardRadius: gameState.boardRadius,
+    // 이 판의 자연 조건 씨앗. 같은 씨앗이면 칸별 풍향과 해안 조차가 그대로 재현된다.
+    environment: { seed: gameState.environment?.seed ?? null },
     entities: gameState.grid
       .map((cell, index) => (cell ? {
         index,
         ...coords[index],
         type: cell.type,
         level: cell.level,
+        rotation: cell.rotation ?? null,
         priority: cell.priority || 'normal',
-        operationMode: cell.operationMode || 'normal',
         project: cell.project ? { ...cell.project } : null,
       } : null))
       .filter(Boolean),
-    constructionPlan: gameState.constructionPlan.map(({ index, type }) => ({ index, type })),
+    constructionPlan: gameState.constructionPlan.map(({ index, type, rotation }) => ({ index, type, rotation })),
     selectedFacility: gameState.selectedFacility,
     selectedCell: gameState.selectedCell,
     research: {

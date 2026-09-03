@@ -6,11 +6,7 @@ import {
   RESEARCH_TUNING,
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
-import {
-  BATTERY_POLICIES,
-  isOperationModeAvailable,
-  operationModeDefinition,
-} from '../core/OperationDefinitions.js';
+import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
 import { createHexCoordinates, hexDistance, neighborIndices } from './HexGridSystem.js';
 import { expansionUpkeep, zoneModifierForCell } from './ZoneSystem.js';
 import { activeEventContext } from './CityEventSystem.js';
@@ -18,6 +14,7 @@ import { carbonPressureForDays } from './CarbonCrisisSystem.js';
 import { researchEffects } from './ResearchEffectSystem.js';
 import { stressCityModifier, stressModifierForFacility } from './StressTestSystem.js';
 import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
+import { directionFactor, tidalFactor } from './EnvironmentSystem.js';
 
 const MULTIPLICATIVE_FIELDS = Object.freeze([
   'supply', 'demand', 'income', 'upkeep', 'carbon', 'water', 'negative', 'researchSpeed', 'workforce',
@@ -90,13 +87,13 @@ function baseFacilityStats(cell) {
 
 function normalizeModifier(modifier = {}) {
   if (modifier.combined) return composeModifiers(modifier.combined);
-  if (modifier.mode || modifier.event || modifier.zone || modifier.research || modifier.stress) {
+  if (modifier.event || modifier.zone || modifier.research || modifier.stress || modifier.site) {
     return composeModifiers(
-      modifier.mode,
       modifier.event,
       modifier.zone,
       modifier.research,
       modifier.stress,
+      modifier.site,
     );
   }
   return composeModifiers(modifier);
@@ -176,38 +173,11 @@ function strongestResidentialGreenModifier(state, index, coords) {
   return { income, heatDemand, supported: income > 1 };
 }
 
-function resolvedOperationMode(cell) {
-  if (cell.operationMode !== 'auto') return cell.operationMode || 'normal';
-  return cell.automaticOperationMode || 'normal';
-}
-
 function lowCarbonSurplus(state) {
   const summary = state.lastTickSummary;
   if (!summary) return 0;
   if (Number.isFinite(Number(summary.lowCarbonSurplus))) return Math.max(0, Number(summary.lowCarbonSurplus));
   return Math.max(0, (Number(summary.lowCarbonDelivered) || 0) - (Number(summary.demand) || 0));
-}
-
-export function applyAutomaticOperationModes(state) {
-  const effects = researchEffects(state);
-  if (!effects.demandResponse) return [];
-  const margin = (Number(state.lastTickSummary?.deliveredPower) || 0)
-    - (Number(state.lastTickSummary?.demand) || 0);
-  const changes = [];
-  state.grid.forEach((cell, index) => {
-    if (!isOperationalCell(cell) || cell.project || cell.operationMode !== 'auto' || (Number(cell.level) || 1) < 3) return;
-    let resolvedMode = 'normal';
-    if (cell.type === 'residential') resolvedMode = margin <= 1 ? 'forced' : 'normal';
-    else if (cell.type === 'factory') resolvedMode = margin <= 1 ? 'eco' : margin >= 5 ? 'boost' : 'normal';
-    else return;
-    if (cell.automaticOperationMode === resolvedMode) return;
-    const previousMode = cell.automaticOperationMode || 'normal';
-    cell.automaticOperationMode = resolvedMode;
-    state.decisionCounts ||= {};
-    state.decisionCounts.automaticModeChanges = (state.decisionCounts.automaticModeChanges || 0) + 1;
-    changes.push({ index, type: cell.type, previousMode, resolvedMode });
-  });
-  return changes;
 }
 
 // 풍력 완화 연구(wind2)는 원래 은퇴한 이벤트 id 'lowWind' 하나에만 걸려 있었다. 그 이벤트가
@@ -248,9 +218,6 @@ export function buildCityModifierContext(state, {
     const greenSupport = cell.type === 'residential'
       ? strongestResidentialGreenModifier(state, index, boardCoords)
       : { income: 1, heatDemand: 1.25, supported: false };
-    const mode = cell.project?.kind === 'upgrade'
-      ? identityModifier()
-      : operationModeDefinition(cell.type, resolvedOperationMode(cell))?.modifier || identityModifier();
     const eventBase = eventModifiers
       ? modifierAt(eventModifiers, index)
       : activeEvent.byFacility?.(index) || identityModifier();
@@ -281,13 +248,20 @@ export function buildCityModifierContext(state, {
     const stress = stressModifiers
       ? modifierAt(stressModifiers, index)
       : stressModifierForFacility(state, cell.type, cell.level);
+    // 이 칸의 자연 조건: 태양광·풍력은 건설 때 고른 방향이 최적 방향과 얼마나 맞는지,
+    // 조력은 그 해안 칸의 조수간만의 차가 출력을 정한다. 지역 특성(zone) 위에 곱해진다.
+    const site = {
+      supply: cell.type === 'tidal'
+        ? tidalFactor(state, index)
+        : directionFactor(state, cell.type, index, cell.rotation),
+    };
     byFacility[index] = {
-      mode,
       event,
       zone,
       research,
       stress,
-      combined: composeModifiers(mode, event, zone, research, stress),
+      site,
+      combined: composeModifiers(event, zone, research, stress, site),
     };
   });
   return {
@@ -308,7 +282,6 @@ export function buildCityModifierContext(state, {
       transmissionLossPerExtraTile: effects.transmissionLossPerTile,
       batteryReservePolicies: effects.batteryReservePolicies,
       batteryEmergencyReserve: effects.batteryEmergencyReserve,
-      demandResponse: effects.demandResponse,
       greenCluster,
       greenFactoryHealthMultiplierByIndex,
     },
@@ -317,40 +290,6 @@ export function buildCityModifierContext(state, {
 
 export function facilityModifierAt(context, index) {
   return context?.byFacility?.[index] || identityModifier();
-}
-
-function modeForecast(cell, beforeMode, afterMode) {
-  const before = effectiveFacilityStats(cell, {
-    mode: operationModeDefinition(cell.type, beforeMode)?.modifier,
-  });
-  const after = effectiveFacilityStats(cell, {
-    mode: operationModeDefinition(cell.type, afterMode)?.modifier,
-  });
-  const pair = (field) => ({ before: before[field], after: after[field], delta: after[field] - before[field] });
-  return {
-    demand: pair('demand'),
-    supply: pair('supply'),
-    powerMargin: { before: -before.demand, after: -after.demand, delta: before.demand - after.demand },
-    income: pair('income'),
-    netIncome: {
-      before: before.income - before.upkeep,
-      after: after.income - after.upkeep,
-      delta: (after.income - after.upkeep) - (before.income - before.upkeep),
-    },
-    carbon: pair('carbon'),
-    water: pair('water'),
-    workforce: pair('workforce'),
-    researchSpeed: pair('researchSpeed'),
-  };
-}
-
-export function previewFacilityOperationMode(state, index, mode) {
-  const cell = state.grid[index];
-  if (!cell) return { ok: false, reason: 'invalid_facility' };
-  if (!operationModeDefinition(cell.type, mode)) return { ok: false, reason: 'unsupported_mode' };
-  if (!isOperationModeAvailable(cell, mode, state)) return { ok: false, reason: 'mode_locked' };
-  const before = cell.operationMode || 'normal';
-  return { ok: true, before, after: mode, forecast: modeForecast(cell, before, mode) };
 }
 
 export function availableBatteryPolicies(state, cell) {
@@ -391,15 +330,4 @@ export function setFacilityPriority(state, index, priority) {
     state.decisionCounts.priorityChanges = (state.decisionCounts.priorityChanges || 0) + 1;
   }
   return { ok: true, before, after: priority };
-}
-
-export function setFacilityOperationMode(state, index, mode) {
-  const preview = previewFacilityOperationMode(state, index, mode);
-  if (!preview.ok) return preview;
-  if (preview.before !== mode) {
-    state.grid[index].operationMode = mode;
-    state.decisionCounts ||= {};
-    state.decisionCounts.modeChanges = (state.decisionCounts.modeChanges || 0) + 1;
-  }
-  return preview;
 }

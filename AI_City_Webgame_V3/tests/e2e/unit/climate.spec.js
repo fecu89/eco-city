@@ -2,40 +2,22 @@ import { test, expect } from '@playwright/test';
 import {
   getSolarMultiplier,
   getWindMultiplier,
-  getWorldPhase,
   getDemandMultiplier,
   getThreeDayForecast,
-  getSkyState,
 } from '../../../src/systems/ClimateSystem.js';
 
-test('solar and world light follow deterministic game hours', () => {
+test('solar output follows deterministic game hours', () => {
   expect(getSolarMultiplier(5)).toBe(0);
+  expect(getSolarMultiplier(6)).toBe(0.5);
   expect(getSolarMultiplier(7)).toBe(0.5);
+  expect(getSolarMultiplier(8)).toBe(1);
   expect(getSolarMultiplier(12)).toBe(1);
+  expect(getSolarMultiplier(17)).toBe(0.5);
   expect(getSolarMultiplier(19)).toBe(0);
-  expect(getWorldPhase(7)).toBe('dawn');
-  expect(getWorldPhase(12)).toBe('day');
-  expect(getWorldPhase(18)).toBe('dusk');
-  expect(getWorldPhase(19)).toBe('night');
-  expect(getWorldPhase(23)).toBe('night');
-});
-
-test('sky keeps 08:00–16:00 equally bright and transitions through warm dawn and dusk', () => {
-  const dawn = getSkyState(6);
-  const morning = getSkyState(8);
-  const noon = getSkyState(12);
-  const afternoon = getSkyState(16);
-  const dusk = getSkyState(18);
-  const night = getSkyState(23);
-
-  expect(morning.illumination).toBe(afternoon.illumination);
-  expect(morning.topColor).toBe(afternoon.topColor);
-  expect(noon.topColor).toBe(morning.topColor);
-  expect(noon.bottomColor).toBe(morning.bottomColor);
-  expect(dawn.bottomColor).not.toBe(morning.bottomColor);
-  expect(dusk.bottomColor).not.toBe(afternoon.bottomColor);
-  expect(night.topColor).not.toBe(noon.topColor);
-  expect(night.illumination).toBeGreaterThanOrEqual(0.68);
+  expect(getSolarMultiplier(23)).toBe(0);
+  // 시간은 24로 감싼다 — 27시는 3시와 같다.
+  expect(getSolarMultiplier(27)).toBe(0);
+  expect(getSolarMultiplier(36)).toBe(1);
 });
 
 // 예보는 시(hour)가 아니라 게임일 단위이며, 태양광은 하루 평균(11/24)을 쓴다.

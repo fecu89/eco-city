@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { FACILITIES } from '../../../src/core/Constants.js';
 import { gameState } from '../../../src/core/GameState.js';
 import {
+  expandBoard,
   placeFacility,
   validatePlacement,
   validateUpgrade,
@@ -11,7 +12,8 @@ import {
   upgradeCell,
 } from '../../../src/systems/BoardSystem.js';
 import { evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
-import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
+import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
+import { isCoastalCell } from '../../../src/systems/EnvironmentSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { completeResearchJob, startResearch } from '../../../src/systems/ResearchSystem.js';
@@ -68,18 +70,22 @@ test('board demolition command preserves the last thermal reserve while nuclear 
   expect(gameState.grid[0]?.type).toBe('thermal');
 });
 
-test('placement validator and placement command share tidal outer-ring rules and cost', () => {
+test('placement validator and placement command share tidal coastal rules and cost', () => {
   gameState.credits = 20;
   gameState.questIndex = 11;
   gameState.unlockedFacilities.add('tidal');
   gameState.research.techLevels.tidal = 1;
   gameState.selectedFacility = 'tidal';
-  const coords = createHexCoordinates(2);
-  const outer = coords.findIndex((_, index) => isOuterRing(index, coords, 2));
-  expect(validatePlacement(gameState, 'tidal', 0)).toMatchObject({ ok: false, reason: 'outer_ring_only' });
-  expect(validatePlacement(gameState, 'tidal', outer)).toMatchObject({ ok: true });
-  expect(placeFacility(outer)).toMatchObject({ ok: true, index: outer, key: 'tidal' });
-  expect(gameState.grid[outer].project).toMatchObject({ kind: 'build', durationDays: 15, elapsedDays: 0 });
+  // 조력은 바다와 맞닿은 3링에만 설 수 있으므로 확장한 37칸 보드가 필요하다.
+  expandBoard(gameState, 'east');
+  expandBoard(gameState, 'west');
+  const coords = createHexCoordinates(3);
+  const coastal = coords.findIndex((_, index) => isCoastalCell(index));
+  const inland = coords.findIndex((_, index) => !isCoastalCell(index));
+  expect(validatePlacement(gameState, 'tidal', inland)).toMatchObject({ ok: false, reason: 'coastal_required' });
+  expect(validatePlacement(gameState, 'tidal', coastal)).toMatchObject({ ok: true });
+  expect(placeFacility(coastal)).toMatchObject({ ok: true, index: coastal, key: 'tidal' });
+  expect(gameState.grid[coastal].project).toMatchObject({ kind: 'build', durationDays: 15, elapsedDays: 0 });
   expect(gameState.credits).toBe(13);
   expect(FACILITIES.tidal).toMatchObject({ cost: 7, supply: 10, carbon: 0, water: 0 });
 });
@@ -182,7 +188,7 @@ test('completed smart grid research can upgrade the data center and satisfy ques
 test('a facility with an active project cannot be upgraded or demolished again', () => {
   gameState.credits = 100;
   gameState.upgradePermitLevel = 2;
-  gameState.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+  gameState.grid[0] = { type: 'residential', level: 1 };
   expect(upgradeCell(0)).toMatchObject({ ok: true, targetLevel: 2 });
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
   expect(demolishCell(0)).toMatchObject({ ok: false, reason: 'project_in_progress' });
@@ -193,7 +199,7 @@ test('a data center assigned to active research cannot start an upgrade', () => 
   gameState.upgradePermitLevel = 2;
   gameState.researchMenuUnlocked = true;
   gameState.unlockedFacilities.add('solar');
-  gameState.grid[0] = { type: 'data', level: 1, operationMode: 'normal' };
+  gameState.grid[0] = { type: 'data', level: 1 };
 
   expect(startResearch(gameState, 'solar2', 0)).toMatchObject({ ok: true, dataCenterIndex: 0 });
   const validation = validateUpgrade(gameState, 0);

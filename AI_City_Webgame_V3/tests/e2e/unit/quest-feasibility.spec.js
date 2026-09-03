@@ -5,6 +5,11 @@ import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.j
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
+import {
+  createEnvironment,
+  defaultRotationFor,
+  optimalRotationFor,
+} from '../../../src/systems/EnvironmentSystem.js';
 import { getFacilityLimits } from '../../../src/systems/FacilityPermitSystem.js';
 import { calculateWorkforce } from '../../../src/systems/WorkforceSystem.js';
 import { applySimulationQuestProgress, evaluateCurrentQuest } from '../../../src/systems/QuestSystem.js';
@@ -19,23 +24,40 @@ const settleDay = createDaySettler({
   evaluateQuest: applySimulationQuestProgress,
 });
 
-function facility(type, level = 1, extra = {}) {
-  return { type, level, priority: type === 'residential' ? 'essential' : 'normal', operationMode: 'normal', ...extra };
+// 자연 조건(칸별 풍향·해안 조차)이 아니라 퀘스트가 실제 규칙으로 달성 가능한지를 재는
+// 테스트다. 캠페인 기준 도시와 같은 씨앗을 써서 19번 해안 칸의 조차를 기준값(5m)에 고정한다.
+const ENVIRONMENT_SEED = 20400134;
+
+function seededState() {
+  const state = new GameState();
+  state.environment = createEnvironment(ENVIRONMENT_SEED);
+  return state;
+}
+
+function facility(state, type, index, level = 1, extra = {}) {
+  return {
+    type,
+    level,
+    // 방향은 건설할 때만 고른다. 고정 배치도 방향을 확인한 플레이어처럼 최적 방향으로 세운다.
+    rotation: optimalRotationFor(state, type, index) ?? defaultRotationFor(type),
+    priority: type === 'residential' ? 'essential' : 'normal',
+    ...extra,
+  };
 }
 
 function stateForFoundation(questIndex, placements) {
-  const state = new GameState();
+  const state = seededState();
   state.questIndex = questIndex;
   state.questStatus = 'active';
   state.credits = 500;
   placements.forEach(([index, type, level = 1, extra = {}]) => {
-    state.grid[index] = facility(type, level, extra);
+    state.grid[index] = facility(state, type, index, level, extra);
   });
   return state;
 }
 
 function climateState(questIndex, placements) {
-  const state = new GameState();
+  const state = seededState();
   state.questIndex = questIndex;
   state.questStatus = 'active';
   state.progression.chapter = 3;
@@ -49,7 +71,7 @@ function climateState(questIndex, placements) {
     progress: {}, lastResult: null, completedEventTypes: [],
   };
   placements.forEach(([index, type, level = 1, extra = {}]) => {
-    state.grid[index] = facility(type, level, extra);
+    state.grid[index] = facility(state, type, index, level, extra);
   });
   if (questIndex === 18) state.research.completedIds.add('tidal1');
 

@@ -26,9 +26,9 @@ import { isBatteryHubForConsumer } from './PowerNetworkSystem.js';
 import { buildCityModifierContext, effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import {
   createHexCoordinates,
-  isOuterRing,
   neighborIndices as hexNeighborIndices,
 } from './HexGridSystem.js';
+import { defaultRotationFor, isCoastalCell, normalizeRotation } from './EnvironmentSystem.js';
 import {
   activateExpansionSide,
   constructionCostForCell,
@@ -289,7 +289,7 @@ const PLACEMENT_MESSAGES = Object.freeze({
   occupied: '이미 시설이 있는 대지입니다.',
   locked_quest: '퀘스트 보상으로 먼저 해금해야 합니다.',
   locked_research: '연구를 완료해야 해금됩니다.',
-  outer_ring_only: '조력발전은 현재 도시의 최외곽 육각에만 건설할 수 있습니다.',
+  coastal_required: '조력발전은 바다와 맞닿은 해안 칸에만 지을 수 있습니다.',
   facility_limit: '현재 퀘스트의 시설 건설 허가 한도에 도달했습니다.',
   thermal_reserve_required: '핵발전을 건설하려면 화력발전 1기가 필요합니다. 폭염 경보 퀘스트 완료 후에는 배터리로 대체할 수 있습니다.',
   insufficient_credits: '건설 크레딧이 부족합니다.',
@@ -344,7 +344,7 @@ export function validatePlacement(state, facilityKey, index, {
   else if (!isExpansionCellActive(state, index)) reason = 'inactive_expansion';
   else if (grid[index]) reason = 'occupied';
   else if (lockReason) reason = lockReason;
-  else if (facility.placement === 'outer_ring' && !isOuterRing(index, coords, state.boardRadius)) reason = 'outer_ring_only';
+  else if (facility.placement === 'coastal' && !isCoastalCell(index)) reason = 'coastal_required';
   else if (!skipPermit && !(permit = getFacilityPermit(state, facilityKey, plan)).ok) reason = permit.reason;
   else {
     if (requireNuclearReserve && facilityKey === 'nuclear') {
@@ -470,7 +470,7 @@ export function facilityUnlockMessage(state, facilityKey) {
   return '건설할 수 있습니다.';
 }
 
-export function placeFacility(index) {
+export function placeFacility(index, rotation = defaultRotationFor(gameState.selectedFacility)) {
   const key = gameState.selectedFacility;
   const validation = validatePlacement(gameState, key, index);
   if (!validation.ok) return validation;
@@ -479,7 +479,7 @@ export function placeFacility(index) {
   gameState.grid[index] = {
     type: key,
     level: 1,
-    operationMode: 'normal',
+    rotation: normalizeRotation(rotation, key),
     ...(key === 'battery' ? { batteryPolicy: 'auto' } : {}),
     project: createBuildProject({ type: key, paidCost: validation.buildCost }),
   };

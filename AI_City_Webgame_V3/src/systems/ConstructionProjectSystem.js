@@ -76,7 +76,6 @@ export function createUpgradeProject({ cell, paidCost }) {
     elapsedDays: 0,
     durationDays,
     paidCost: roundCredits(Math.max(0, Number(paidCost) || 0)),
-    suspendedOperationMode: cell.operationMode || 'normal',
   };
 }
 
@@ -87,10 +86,7 @@ export function operationalGrid(grid = []) {
 export function completedCellForProject(cell) {
   if (!cell) return null;
   const completed = { ...cell, project: null };
-  if (cell.project?.kind === 'upgrade') {
-    completed.level = cell.project.toLevel;
-    completed.operationMode = cell.project.suspendedOperationMode || cell.operationMode || 'normal';
-  }
+  if (cell.project?.kind === 'upgrade') completed.level = cell.project.toLevel;
   return completed;
 }
 
@@ -177,10 +173,7 @@ export function advanceConstructionProjects(state) {
       level: project.kind === 'upgrade' ? project.toLevel : cell.level,
       paidCost: project.paidCost,
     };
-    if (project.kind === 'upgrade') {
-      cell.level = project.toLevel;
-      cell.operationMode = project.suspendedOperationMode || cell.operationMode || 'normal';
-    }
+    if (project.kind === 'upgrade') cell.level = project.toLevel;
     cell.project = null;
     completed.push(transition);
   });
@@ -199,7 +192,6 @@ export function cancelConstructionProject(state, index) {
     state.grid[index] = null;
   } else {
     cell.level = project.fromLevel;
-    cell.operationMode = project.suspendedOperationMode || cell.operationMode || 'normal';
     cell.project = null;
   }
   return result;

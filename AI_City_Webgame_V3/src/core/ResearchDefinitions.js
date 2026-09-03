@@ -23,7 +23,6 @@ export const RESEARCH = Object.freeze({
   wind2: research('wind2', '풍력 예측 제어', 'wind', 120, 10, all('facility:wind'), { tech: ['wind', 2], effect: 'wind_forecast' }, 'generation'),
   battery2: research('battery2', '차세대 저장 화학', 'battery-charging', 150, 15, all('facility:battery'), { tech: ['battery', 2], effect: 'battery_chemistry' }, 'storage'),
   smartGrid: research('smartGrid', '스마트 전력망', 'network', 150, 15, all('facility:data'), { effect: 'smart_grid' }, 'grid'),
-  demandResponse: research('demandResponse', '수요 반응 시스템', 'gauge', 150, 15, all('facility:data'), { effect: 'demand_response' }, 'demand'),
   tidal1: research('tidal1', '조력 발전 실증', 'waves', 150, 18, any('research:solar2', 'research:wind2'), { tech: ['tidal', 1], unlockFacility: 'tidal' }, 'generation', 'wind-pilot-grid'),
   green2: research('green2', '도시 수관 네트워크', 'trees', 90, 10, all('facility:green'), { tech: ['green', 2], effect: 'green_canopy' }, 'environment', 'extreme-heat'),
   green3: research('green3', '기후회복 생태축', 'leaf', 150, 16, all('tech:green:2'), { tech: ['green', 3], effect: 'green_corridor' }, 'environment', 'monsoon-response'),

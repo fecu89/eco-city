@@ -2,8 +2,9 @@ import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constan
 import { CAMPAIGN_QUEST_INDEXES } from './CampaignProgression.js';
 import { roundCredits } from './Money.js';
 import { normalizeConstructionProject } from './ConstructionProject.js';
+import { createEnvironment, normalizeEnvironment, normalizeRotation } from './Environment.js';
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 const initialCellIndices = () => Array.from({ length: BOARD.INITIAL_CELLS }, (_, index) => index);
 
@@ -59,8 +60,10 @@ export class GameState {
     this.selectedFacility = 'residential';
     this.selectedCell = null;
     this.boardRadius = BOARD.INITIAL_RADIUS;
-    this.grid = Array(BOARD.INITIAL_CELLS).fill(null); // {type, level}
-    this.constructionPlan = []; // 저장하지 않는 임시 건설안: { index, type }
+    this.grid = Array(BOARD.INITIAL_CELLS).fill(null); // {type, level, rotation}
+    this.constructionPlan = []; // 저장하지 않는 임시 건설안: { index, type, rotation }
+    // 이 판의 자연 조건(칸별 풍향·해안 조차). 새 게임마다 새 씨앗으로 다시 뽑고 저장에 남는다.
+    this.environment = createEnvironment();
     this.metrics = null;
     this.baseline = null;
     this.firstCitySnapshot = null;
@@ -103,11 +106,9 @@ export class GameState {
     this.operationalRisk = { negativeCreditDays: 0, essentialBlackoutDays: 0, warningIds: [] };
     this.emergencySupport = { used: false, economyScorePenalty: 0 };
     this.decisionCounts = {
-      modeChanges: 0,
       priorityChanges: 0,
       researchPauses: 0,
       emergencySupport: 0,
-      automaticModeChanges: 0,
       batteryPolicyChanges: 0,
     };
     this.onboardingVersionSeen = 0;
@@ -162,6 +163,7 @@ export class GameState {
       selectedCell: this.selectedCell,
       boardRadius: this.boardRadius,
       grid: this.grid,
+      environment: structuredClone(this.environment),
       baseline: this.baseline,
       firstCitySnapshot: this.firstCitySnapshot,
       quizPool: this.quizPool,
@@ -226,6 +228,9 @@ export class GameState {
       this.selectedCell = data.selectedCell ?? null;
       this.boardRadius = data.boardRadius ?? this.boardRadius;
       this.grid = Array.isArray(data.grid) ? data.grid.map(normalizeCell) : this.grid;
+      // 환경이 없거나 형태가 깨진 저장은 새 환경으로 시작한다 — 풍향·조차가 없으면
+      // 발전 계산이 통째로 무너지기 때문이다.
+      this.environment = normalizeEnvironment(data.environment) || createEnvironment();
       this.constructionPlan = [];
       this.baseline = data.baseline ?? this.baseline;
       this.firstCitySnapshot = data.firstCitySnapshot ?? this.firstCitySnapshot;
@@ -303,11 +308,9 @@ export class GameState {
         ...(data.emergencySupport || {}),
       };
       this.decisionCounts = {
-        modeChanges: 0,
         priorityChanges: 0,
         researchPauses: 0,
         emergencySupport: 0,
-        automaticModeChanges: 0,
         batteryPolicyChanges: 0,
         ...(data.decisionCounts || {}),
       };
@@ -352,11 +355,6 @@ export function normalizeCell(cell) {
   if (normalizedProject.valid && normalizedProject.complete && normalizedProject.project?.kind === 'upgrade') {
     level = normalizedProject.project.toLevel;
   }
-  const operationMode = normalizedProject.valid
-    ? normalizedProject.complete && normalizedProject.project?.kind === 'upgrade'
-      ? normalizedProject.project.suspendedOperationMode
-      : cell.operationMode || 'normal'
-    : normalizedProject.restoreOperationMode || cell.operationMode || 'normal';
   let batteryStoredLowCarbon = Math.max(0, Number(cell.batteryStoredLowCarbon) || 0);
   let batteryStoredFossil = Math.max(0, Number(cell.batteryStoredFossil) || 0);
   if (cell.type === 'battery') {
@@ -368,11 +366,13 @@ export function normalizeCell(cell) {
       batteryStoredFossil = Math.round((capacity - batteryStoredLowCarbon) * 100) / 100;
     }
   }
+  // 칸이 가질 수 있는 필드를 여기서 전부 다시 만든다. 예전 저장본에만 있던 필드는
+  // 이 목록에 없으므로 자연스럽게 사라진다.
   return {
-    ...cell,
+    type: cell.type,
     level,
+    rotation: normalizeRotation(cell.rotation, cell.type),
     priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
-    operationMode,
     project: normalizedProject.valid && !normalizedProject.complete ? normalizedProject.project : null,
     ...(cell.type === 'battery' ? { batteryPolicy: cell.batteryPolicy || 'auto' } : {}),
     batteryStoredLowCarbon,

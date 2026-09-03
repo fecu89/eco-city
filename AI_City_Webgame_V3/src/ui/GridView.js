@@ -1,22 +1,21 @@
 import { gameState } from '../core/GameState.js';
-import { BOARD_KEYBOARD, FACILITIES } from '../core/Constants.js';
+import { BOARD_KEYBOARD, BOARD_TAP_COPY, DIRECTION_COPY, DIRECTION_RULES, FACILITIES, FACILITY_DIRECTIONS } from '../core/Constants.js';
 import { getBoardCoordinates, neighborIndices, placementPreview, validatePlacement } from '../systems/BoardSystem.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import {
-  initCityScene3D,
-  projectCellToScreen,
-  renderCityScene3D,
-  setBuildOxWidget,
-  setBuildPreviewMode,
-  setCellClickHandler,
-  setKeyboardCursor,
-} from './CityScene3D.js';
+import { flashTappedCell, initCityScene3D, projectCellToScreen, renderCityScene3D, setBuildOxWidget, setBuildPreviewMode, setCellClickHandler, setKeyboardCursor } from './CityScene3D.js';
 import { formatCompactNumber, formatCredits, round1 } from './format.js';
 import {
   assessConstructionPlan,
   clearConstructionPlan,
+  rotatePlannedFacility,
   upsertPlannedFacility,
 } from '../systems/ConstructionPlanSystem.js';
+import {
+  defaultRotationFor,
+  directionFactor,
+  normalizeRotation,
+  tidalSiteInfo,
+} from '../systems/EnvironmentSystem.js';
 import {
   cellZoneTrait,
   constructionCostForCell,
@@ -104,6 +103,19 @@ function clearPlan() {
   return assessment;
 }
 
+// 계획 중인 시설이 이 칸의 자연 조건과 얼마나 맞는지 한 줄로 알려 준다.
+// 태양광·풍력은 고른 방향의 출력, 조력은 그 해안 칸의 조차다.
+function siteSummaryFor({ index, type, rotation }) {
+  if (DIRECTION_RULES.DIRECTIONAL_TYPES.includes(type)) {
+    const applied = normalizeRotation(rotation, type);
+    return DIRECTION_COPY.SUMMARY(
+      FACILITY_DIRECTIONS[applied].label,
+      directionFactor(gameState, type, index, applied),
+    );
+  }
+  return type === 'tidal' ? tidalSiteInfo(gameState, index)?.label || '' : '';
+}
+
 function syncBuildConfirm() {
   const assessment = assessConstructionPlan(gameState);
   if (!assessment.items.length || !placementPreviewVisible) {
@@ -115,6 +127,7 @@ function syncBuildConfirm() {
   const facility = FACILITIES[pending.type];
   setBuildOxWidget({
     index: pending.index,
+    type: pending.type,
     disabled: !assessment.ok,
     onConfirm: requestConfirmActivePlan,
     onCancel: () => {
@@ -124,9 +137,12 @@ function syncBuildConfirm() {
   });
   if (!buildConfirmEls) return;
   const firstError = assessment.errors[0];
+  const siteSummary = siteSummaryFor(pending);
+  // 한 줄이 좁아 넘치면 뒤가 잘린다. 입지 안내가 붙는 시설은 "건설 후 예상"(바 자체의
+  // aria-label과 지표 줄이 이미 말해 준다)을 빼고 그 자리에 방향·조차를 넣는다.
   buildConfirmEls.text.textContent = assessment.items.length > 1
     ? `건설 계획 ${assessment.items.length}개 · 완공 후 예상`
-    : `${facility.icon} ${facility.name} · 건설 후 예상`;
+    : `${facility.icon} ${facility.name} · ${siteSummary || '건설 후 예상'}`;
   buildConfirmEls.cost.textContent = formatCredits(assessment.totalCost, { compact: true });
   buildConfirmEls.balance.textContent = `잔액 ${formatCredits(assessment.projectedCredits, { compact: true })}`;
   buildConfirmEls.error.textContent = firstError?.message || '';
@@ -149,6 +165,23 @@ function handleSceneCellClick(index) {
     });
     return;
   }
+  // 돈이나 허가로 풀 수 없는 대지 규칙(예: 조력의 해안 칸)은 계획에 넣기 전에 막는다 —
+  // 계획에 올려 두고 확정 버튼만 잠그면 왜 안 되는지 알기 어렵다.
+  const site = validatePlacement(gameState, gameState.selectedFacility, index, {
+    availableCredits: Number.POSITIVE_INFINITY,
+    skipPermit: true,
+    requireNuclearReserve: false,
+  });
+  if (!site.ok && !pending) {
+    eventBus.emit(Events.TOAST_SHOW, {
+      title: site.reason === 'coastal_required'
+        ? DIRECTION_COPY.COASTAL_BLOCKED_TITLE
+        : BOARD_TAP_COPY.BLOCKED_SITE_TITLE,
+      text: site.message,
+      priority: true,
+    });
+    return;
+  }
   const assessment = upsertPlannedFacility(gameState, gameState.selectedFacility, index);
   if (assessment.rejected) {
     eventBus.emit(Events.TOAST_SHOW, {
@@ -162,6 +195,17 @@ function handleSceneCellClick(index) {
   gameState.selectedCell = gameState.constructionPlan.some((item) => item.index === index) ? index : null;
   eventBus.emit(Events.BUILD_PLAN_CHANGED, assessment);
   renderGrid();
+}
+
+// 계획 중인 건물을 45°씩 시계 방향으로 돌린다. 위젯의 회전 버튼과 R 키가 함께 쓴다.
+function rotatePendingFacility() {
+  const pending = gameState.constructionPlan[0];
+  if (!pending || !gameState.isEditable) return false;
+  const assessment = rotatePlannedFacility(gameState, pending.index);
+  if (assessment.rotation == null) return false;
+  eventBus.emit(Events.BUILD_PLAN_CHANGED, assessment);
+  renderGrid();
+  return true;
 }
 
 // 보드는 3D 캔버스라 DOM 칸이 없다. 포커스가 있는 동안 "지금 어느 칸인가"를 알려 주는
@@ -254,10 +298,18 @@ function handleBoardKeydown(event) {
     moveKeyboardCursor(BOARD_KEYBOARD.HOME_INDEX);
     return;
   }
+  // 계획이 떠 있는 동안에만 방향을 돌린다(대소문자 모두 받는다).
+  if (key.toLowerCase() === BOARD_KEYBOARD.ROTATE_KEY) {
+    if (!rotatePendingFacility()) return;
+    event.preventDefault();
+    return;
+  }
   if (BOARD_KEYBOARD.ACTIVATE_KEYS.includes(key)) {
     if (keyboardCursor < 0 || !isExpansionCellActive(gameState, keyboardCursor)) return;
     event.preventDefault();
+    flashTappedCell(keyboardCursor);
     handleSceneCellClick(keyboardCursor);
+    eventBus.emit(Events.BOARD_CELL_TAPPED, { index: keyboardCursor, pointerType: 'keyboard' });
     return;
   }
   // Escape는 커서만 거둔다. 전파를 막지 않아 열려 있는 HUD 패널을 닫는 전역 동작은 그대로다.
@@ -284,6 +336,8 @@ export function initGridView(gridElement, sizeChipElement, clickHandler, confirm
   gridElement.addEventListener('keydown', handleBoardKeydown);
   // 포커스를 잃으면 커서는 사라진다. 남겨 두면 조작할 수 없는 칸에 표식만 떠 있게 된다.
   gridElement.addEventListener('blur', clearKeyboardCursor);
+  // 보드 위 위젯의 회전 버튼. 방향은 계획 단계에서만 바꿀 수 있다.
+  eventBus.on(Events.BUILD_ROTATE_REQUESTED, () => rotatePendingFacility());
   // 독에서 시설을 바꿔 고르면(같은 시설 다시 클릭해도) 미리보기가 즉시 갱신되도록 한다.
   eventBus.on(Events.BOARD_FACILITY_SELECTED, () => {
     facilityArmed = true;
@@ -366,6 +420,8 @@ function buildCellConfigs() {
       empty: false,
       type: cell.type,
       level: cell.level,
+      // 3D 보드가 건물을 세울 방위. 건설할 때 고른 값이 그대로 남는다.
+      rotation: normalizeRotation(cell.rotation, cell.type),
       project: cell.project ? {
         ...cell.project,
         progress: cell.project.elapsedDays / cell.project.durationDays,
@@ -385,6 +441,8 @@ export function renderGrid() {
     candidateIndex: null,
     plannedItems: gameState.constructionPlan,
     invalidIndices: assessment.errors.filter((error) => Number.isInteger(error.index)).map((error) => error.index),
+    // 아직 계획에 없는 칸을 훑는 고스트는 계획 중인 방향(없으면 시설 기본 방향)으로 선다.
+    rotation: assessment.items[0]?.rotation ?? defaultRotationFor(gameState.selectedFacility),
   });
   syncBuildConfirm();
 }

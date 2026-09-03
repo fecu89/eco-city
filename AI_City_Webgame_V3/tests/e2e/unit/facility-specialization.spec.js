@@ -1,36 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import { createHexCoordinates, hexDistance } from '../../../src/systems/HexGridSystem.js';
-import {
-  applyAutomaticOperationModes,
-  buildCityModifierContext,
-  setBatteryPolicy,
-  setFacilityOperationMode,
-} from '../../../src/systems/CityModifierSystem.js';
+import { buildCityModifierContext, setBatteryPolicy } from '../../../src/systems/CityModifierSystem.js';
 import { batteryDischargeAvailable, calculatePowerNetwork, directEfficiency } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { calculateEnvironmentalOperations } from '../../../src/systems/FacilityOperationSystem.js';
-
-test('demand-response research unlocks residential modes and deterministic level-three automation', () => {
-  const state = new GameState();
-  state.research.completedIds.add('demandResponse');
-  state.grid[0] = { type: 'residential', level: 2, operationMode: 'normal' };
-  state.grid[1] = { type: 'factory', level: 3, operationMode: 'auto' };
-
-  expect(setFacilityOperationMode(state, 0, 'request')).toMatchObject({ ok: true });
-  expect(setFacilityOperationMode(state, 0, 'forced')).toMatchObject({ ok: true });
-  expect(setFacilityOperationMode(state, 0, 'auto')).toMatchObject({ ok: false, reason: 'mode_locked' });
-
-  state.lastTickSummary = { deliveredPower: 10, demand: 9.5 };
-  expect(applyAutomaticOperationModes(state)).toEqual(expect.arrayContaining([
-    expect.objectContaining({ index: 1, resolvedMode: 'eco' }),
-  ]));
-  state.lastTickSummary = { deliveredPower: 20, demand: 14 };
-  expect(applyAutomaticOperationModes(state)).toEqual(expect.arrayContaining([
-    expect.objectContaining({ index: 1, resolvedMode: 'boost' }),
-  ]));
-  expect(state.decisionCounts.automaticModeChanges).toBe(2);
-});
 
 test('smart grid and generation research change actual route efficiency and supply', () => {
   const state = new GameState();
@@ -148,7 +122,7 @@ test('level-three green extends a weaker housing benefit to hex distance two', (
 
 test('level-three data centers gain research speed only with three units of low-carbon surplus', () => {
   const state = new GameState();
-  state.grid[0] = { type: 'data', level: 3, operationMode: 'normal' };
+  state.grid[0] = { type: 'data', level: 3 };
   state.lastTickSummary = { lowCarbonSurplus: 2.9 };
   expect(buildCityModifierContext(state).byFacility[0].research.researchSpeed).toBe(1);
   state.lastTickSummary = { lowCarbonSurplus: 3 };

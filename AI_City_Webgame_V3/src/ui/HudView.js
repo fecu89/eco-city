@@ -67,7 +67,7 @@ function campaignHeader() {
     const text = campaign.status === 'briefing'
       ? `퀘스트 창에서 예보를 확인하고 ${EVENT_FORECAST_DAYS}일 대비를 시작하세요.`
       : campaign.status === 'preparation'
-        ? `${remaining}일 뒤 ${event?.label || quest.title}이 시작됩니다. 건설·연구·운영모드를 준비하세요.`
+        ? `${remaining}일 뒤 ${event?.label || quest.title}이 시작됩니다. 건설·연구·전력 우선순위를 준비하세요.`
         : campaign.status === 'active'
           ? `${event?.label || quest.title} 대응 중입니다. 퀘스트 조건을 실시간으로 유지하세요.`
           : campaign.lastResult?.passed

@@ -45,7 +45,7 @@ test('factory management actions remain visible in a short desktop viewport', as
     state.questIndex = 11;
     state.upgradePermitLevel = 3;
     state.credits = 100;
-    state.grid[0] = { type: 'factory', level: 2, priority: 'normal', operationMode: 'normal' };
+    state.grid[0] = { type: 'factory', level: 2, priority: 'normal' };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });

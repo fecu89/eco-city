@@ -211,13 +211,13 @@ test('old final-test and completed campaign saves move to quest nineteen', () =>
     stressTest: { status: 'passed', phaseIndex: 8, phaseDay: 0, result: { passed: true } },
   }));
   expect(completed).toMatchObject({
-    v: 9,
+    v: 10,
     questIndex: 19,
     questStatus: 'claimed',
     campaignComplete: true,
     stressTest: { status: 'passed', result: { passed: true } },
   });
-  expect(SAVE_VERSION).toBe(9);
+  expect(SAVE_VERSION).toBe(10);
 });
 
 // 기후전 구간(11~18)에서는 캠페인이 이벤트 일정을 소유한다(campaignOwnsSchedule). v8의

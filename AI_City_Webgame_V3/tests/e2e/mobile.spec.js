@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/game-test.js';
+import { BOARD, CITY_CAMERA, UI_FEEDBACK } from '../../src/core/Constants.js';
 
 test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true });
 
@@ -33,8 +34,8 @@ test.describe('mobile city controls', () => {
     });
 
     await expect(page.locator('#simNet')).toHaveText('-0.15/일');
-    await expect(page.locator('#simPower')).toHaveText('+1 E');
-    await expect(page.locator('#simBattery')).toHaveText('3.5 E');
+    await expect(page.locator('#simPower')).toHaveText('+1');
+    await expect(page.locator('#simBattery')).toHaveText('3.5');
     await expect(page.locator('#simCarbonRate')).toHaveText('4.2/일');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simWater')).toHaveText('1.8/일');
@@ -71,11 +72,17 @@ test.describe('mobile city controls', () => {
   });
 
   // 손가락으로 누르는 화면에서는 어떤 버튼도 44×44보다 작으면 안 된다(WCAG 2.5.5 기준).
-  test('every touch control keeps a 44px hit area on a coarse pointer', async ({ gamePage: page }) => {
+  // 한 줄 상단 바에서 시간 조절은 보조 조작이라 36px, 전력/저장 지표는 한 칸을 상하로 나눠 쓴다(둘을 합쳐 44px).
+  // 그 밖의 터치 조작은 44px 이상이어야 한다.
+  test('touch controls keep their hit areas on a coarse pointer', async ({ gamePage: page }) => {
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     await page.locator('.mobile-bar [data-hud-target="quest"]').click();
 
-    for (const selector of ['.quest-panel-tools .icon-btn', '#timeControls button', '#simulationHud > button']) {
+    for (const [selector, minimum] of [
+      ['.quest-panel-tools .icon-btn', 44],
+      ['#timeControls button', 36],
+      ['#simulationHud > button:not([data-metric="power"]):not([data-metric="battery"])', 44],
+    ]) {
       const targets = await page.locator(selector).evaluateAll((nodes) => nodes
         .filter((node) => node.checkVisibility())
         .map((node) => {
@@ -83,8 +90,11 @@ test.describe('mobile city controls', () => {
           return { node: node.id || node.className, width: Math.round(rect.width), height: Math.round(rect.height) };
         }));
       expect(targets.length, selector).toBeGreaterThan(0);
-      expect(targets.filter(({ width, height }) => width < 44 || height < 44), selector).toEqual([]);
+      expect(targets.filter(({ width, height }) => width < minimum || height < minimum), selector).toEqual([]);
     }
+    const stacked = await page.locator('#simulationHud [data-metric="power"], #simulationHud [data-metric="battery"]').evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height)));
+    expect(stacked).toHaveLength(2);
+    expect(stacked[0] + stacked[1]).toBeGreaterThanOrEqual(42);
   });
 
   test('mobile build cards repeat only identity and cost while one shared area explains the selection', async ({ gamePage: page }) => {
@@ -150,4 +160,84 @@ test.describe('mobile city controls', () => {
     expect(after.renderer.pixelRatio).toBeLessThanOrEqual(1.25);
     expect(after.hud.mobile).toBe(true);
   });
+});
+
+// 손가락 탭은 보통 5~15px 흔들린다. 마우스용 7px 드래그 임계값을 그대로 쓰면 폰에서
+// "눌렀는데 아무 반응 없음"이 생기므로, 터치 포인터는 더 큰 흔들림까지 탭으로 인정한다.
+test('a finger tap that wobbles a little still counts as a cell tap', async ({ gamePage: page }) => {
+  await page.locator('.mobile-bar [data-hud-target="build"]').click();
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+  const canvas = page.locator('.city-scene-3d-canvas');
+  const box = await canvas.boundingBox();
+  const client = await page.context().newCDPSession(page);
+  const centre = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
+  const tapWithWobble = async (wobble) => {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: centre.x, y: centre.y, id: 1 }] });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: centre.x + wobble, y: centre.y, id: 1 }] });
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(200);
+  };
+
+  await tapWithWobble(CITY_CAMERA.TAP_THRESHOLD_TOUCH_PX - 2);
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 0, type: 'residential', rotation: 0 }]);
+  // 취소하면 독이 다시 펼쳐지고 배치 무장이 풀린다 — 다시 고른다.
+  await page.locator('#cancelBuildBtn').click();
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+
+  // 임계값을 훌쩍 넘는 움직임은 여전히 카메라 드래그다.
+  await tapWithWobble(CITY_CAMERA.TAP_THRESHOLD_TOUCH_PX * 2);
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+});
+
+// 세로 화면에서 핀치로 셀 하나가 화면을 덮을 만큼 확대되면 길을 잃는다. 세로 화면은 최소 거리를 더 멀리 둔다.
+test('portrait pinch zoom stops before a single cell fills the screen', async ({ gamePage: page }) => {
+  const canvas = page.locator('.city-scene-3d-canvas');
+  const box = await canvas.boundingBox();
+  const client = await page.context().newCDPSession(page);
+  const cx = box.x + box.width * 0.5;
+  const cy = box.y + box.height * 0.5;
+  for (let round = 0; round < 3; round += 1) {
+    await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx - 30, y: cy, id: 1 }, { x: cx + 30, y: cy, id: 2 }] });
+    for (let step = 1; step <= 8; step += 1) {
+      await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx - 30 - step * 14, y: cy, id: 1 }, { x: cx + 30 + step * 14, y: cy, id: 2 }] });
+    }
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(150);
+  }
+  const state = await page.evaluate(() => window.__getCityCameraState());
+  const span = Math.sqrt(3) * BOARD.HEX_SIZE * BOARD.INITIAL_RADIUS * 2 + BOARD.HEX_SIZE * 2;
+  expect(state.minDistance).toBeCloseTo(span * CITY_CAMERA.MIN_DISTANCE_PER_GRID_PORTRAIT, 2);
+  expect(state.distance).toBeGreaterThanOrEqual(state.minDistance - 0.01);
+});
+
+// 터치 탭은 짧은 진동으로도 "눌렸다"를 알린다.
+test('a finger tap on a cell triggers a short vibration', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__vibrations = [];
+    Object.defineProperty(navigator, 'vibrate', { configurable: true, value: (pattern) => { window.__vibrations.push(pattern); return true; } });
+    window.__GAME_STATE__.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+    window.__refreshGameForTest();
+  });
+  const point = await page.evaluate(() => window.__getCellScreenPosition(0));
+  await page.touchscreen.tap(point.x, point.y);
+  await page.waitForTimeout(150);
+  expect(await page.evaluate(() => window.__vibrations)).toEqual([UI_FEEDBACK.TAP_VIBRATE_MS]);
+});
+
+// 모바일 상단 바에는 퀘스트 라벨이 숨겨져 목표를 보려면 패널을 열어야 했다.
+// 얇은 퀘스트 스트립이 현재 퀘스트와 진행률을 항상 보여주고, 누르면 퀘스트 패널이 열린다.
+test('a quest strip under the top bar shows the current quest and opens the quest panel', async ({ gamePage: page }) => {
+  const strip = page.locator('#questStrip');
+  await expect(strip).toBeVisible();
+  await expect(strip.locator('#questStripLevel')).toHaveText('LEVEL 1 / 19');
+  await expect(strip.locator('#questStripTitle')).toHaveText('2040, 첫 시민');
+  const box = await strip.boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(36);
+  expect(box.y).toBeLessThan(150);
+
+  await strip.tap();
+  await expect(page.locator('#questPanel')).toHaveClass(/hud-panel-active/);
+  await expect(strip).toBeHidden();
+  await page.locator('#questPanel [data-hud-close]').tap();
+  await expect(strip).toBeVisible();
 });

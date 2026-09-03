@@ -4,7 +4,7 @@ import { createHexCoordinates } from './HexGridSystem.js';
 import { calendarAtElapsedDay } from './CalendarSystem.js';
 import { roundCredits } from '../core/Money.js';
 import { applyCarbonCrisis } from './CarbonCrisisSystem.js';
-import { applyAutomaticOperationModes, buildCityModifierContext } from './CityModifierSystem.js';
+import { buildCityModifierContext } from './CityModifierSystem.js';
 import { advanceCityEvents } from './CityEventSystem.js';
 import { applyOperationalRisk, isOperationalRiskActive } from './CityFailureSystem.js';
 import { advanceStressTest } from './StressTestSystem.js';
@@ -40,7 +40,6 @@ export function createDaySettler({
     const eventTransition = stressRunning
       ? { forecasted: null, started: null, ended: null, result: null }
       : advanceCityEvents(state);
-    const automaticModeChanges = applyAutomaticOperationModes(state);
     const modifierContext = buildCityModifierContext(state, { coords, calendar });
     const additionalDemandByIndex = getResearchDemand(state);
     const power = calculatePowerNetwork({
@@ -103,7 +102,6 @@ export function createDaySettler({
       expansionUpkeep: economy.expansionUpkeep,
       modifiers: modifierContext,
       waterLimit: modifierContext.city.waterLimit,
-      automaticModeChanges,
     };
     const deliveredOnRoutes = power.routes.reduce((sum, route) => sum + route.delivered, 0);
     const transmissionEfficiency = deliveredOnRoutes

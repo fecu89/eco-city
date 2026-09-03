@@ -3,8 +3,22 @@ import { calculateLabor, settleEconomy } from '../../../src/systems/EconomySyste
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { calcMetrics, demolitionRefund } from '../../../src/systems/BoardSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
-import { ECONOMY_RULES, FACILITIES } from '../../../src/core/Constants.js';
+import {
+  BOARD,
+  DIRECTION_RULES,
+  ECONOMY_RULES,
+  FACILITIES,
+  FACILITY_DIRECTIONS,
+} from '../../../src/core/Constants.js';
+import { GameState } from '../../../src/core/GameState.js';
 import { calculateEnvironmentalOperations } from '../../../src/systems/FacilityOperationSystem.js';
+import { buildCityModifierContext, effectiveFacilityStats, facilityModifierAt } from '../../../src/systems/CityModifierSystem.js';
+import {
+  createEnvironment,
+  isCoastalCell,
+  optimalRotationFor,
+  tidalFactor,
+} from '../../../src/systems/EnvironmentSystem.js';
 
 const cells = (types) => types.map((type) => ({ type, level: 1, priority: 'normal' }));
 const fullyPowered = (grid) => Object.fromEntries(grid.map((_, index) => [index, { demand: 1, delivered: 1, ratio: 1 }]));
@@ -304,4 +318,64 @@ test('a level two facility keeps its upkeep at cent precision', () => {
 
   expect(result.facilityEconomy[0].upkeep).toBe(0.14);
   expect(result.maintenance).toBe(0.14);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 방향(회전)과 해안 조차가 실제 공급으로 이어지는지 — 도시 보정 문맥을 거쳐 확인한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ENVIRONMENT_SEED = 20400134;
+
+function directionState(index, cell) {
+  const state = new GameState();
+  state.environment = createEnvironment(ENVIRONMENT_SEED);
+  state.boardRadius = BOARD.EXPANDED_RADIUS;
+  state.grid = Array(BOARD.EXPANDED_CELLS).fill(null);
+  state.expansion.activeCellIndices = Array.from({ length: BOARD.EXPANDED_CELLS }, (_, i) => i);
+  state.grid[index] = cell;
+  const context = buildCityModifierContext(state, { coords: createHexCoordinates(BOARD.EXPANDED_RADIUS) });
+  return effectiveFacilityStats(state.grid[index], facilityModifierAt(context, index)).supply;
+}
+
+test('풍력은 그 칸의 풍향을 향할 때 가장 많이, 반대편을 향할 때 가장 적게 공급한다', () => {
+  // 지역 특성이 없는 안쪽 칸을 골라 풍황 우수지역(+20%) 보정과 섞이지 않게 한다.
+  const index = 5;
+  const state = new GameState();
+  state.environment = createEnvironment(ENVIRONMENT_SEED);
+  const best = optimalRotationFor(state, 'wind', index);
+  const worst = (best + 4) % FACILITY_DIRECTIONS.length;
+
+  const aligned = directionState(index, { type: 'wind', level: 1, rotation: best });
+  const opposed = directionState(index, { type: 'wind', level: 1, rotation: worst });
+
+  expect(aligned).toBeCloseTo(FACILITIES.wind.supply * DIRECTION_RULES.WIND_FACTORS_BY_DEVIATION[0], 6);
+  expect(opposed).toBeCloseTo(FACILITIES.wind.supply * DIRECTION_RULES.WIND_FACTORS_BY_DEVIATION[4], 6);
+  expect(opposed).toBeLessThan(aligned);
+});
+
+test('북향 태양광은 남향의 최대 이탈 배율만큼만 공급한다', () => {
+  const index = 5;
+  const south = FACILITY_DIRECTIONS.findIndex(({ id }) => id === DIRECTION_RULES.SOLAR_OPTIMAL);
+  const north = FACILITY_DIRECTIONS.findIndex(({ id }) => id === 'N');
+
+  const facingSouth = directionState(index, { type: 'solar', level: 1, rotation: south });
+  const facingNorth = directionState(index, { type: 'solar', level: 1, rotation: north });
+
+  expect(facingSouth).toBeCloseTo(FACILITIES.solar.supply, 6);
+  expect(facingNorth).toBeCloseTo(facingSouth * DIRECTION_RULES.SOLAR_FACTORS_BY_DEVIATION[4], 6);
+});
+
+test('조력 공급은 그 해안 칸의 조수간만의 차를 그대로 따라간다', () => {
+  const state = new GameState();
+  state.environment = createEnvironment(ENVIRONMENT_SEED);
+  const coastal = Array.from({ length: BOARD.EXPANDED_CELLS }, (_, index) => index).filter(isCoastalCell);
+  const weakest = coastal.reduce((low, index) => (tidalFactor(state, index) < tidalFactor(state, low) ? index : low));
+  const strongest = coastal.reduce((high, index) => (tidalFactor(state, index) > tidalFactor(state, high) ? index : high));
+
+  coastal.forEach((index) => {
+    expect(directionState(index, { type: 'tidal', level: 1 }), `cell ${index}`)
+      .toBeCloseTo(FACILITIES.tidal.supply * tidalFactor(state, index), 6);
+  });
+  expect(directionState(weakest, { type: 'tidal', level: 1 }))
+    .toBeLessThan(directionState(strongest, { type: 'tidal', level: 1 }));
 });

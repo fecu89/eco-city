@@ -5,9 +5,14 @@ import { getFacilityPermitForCount, validateGridFacilityDependencies } from './F
 import { validateWorkforceTransition } from './WorkforceSystem.js';
 import { constructionCostForCell } from './ZoneSystem.js';
 import { createBuildProject, finalGridAfterProjects } from './ConstructionProjectSystem.js';
+import { defaultRotationFor, normalizeRotation } from './EnvironmentSystem.js';
 
 function copyPlan(plan) {
-  return (plan || []).map(({ index, type }) => ({ index, type }));
+  return (plan || []).map(({ index, type, rotation }) => ({
+    index,
+    type,
+    rotation: normalizeRotation(rotation, type),
+  }));
 }
 
 function copyGrid(grid) {
@@ -58,7 +63,7 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
     projectedGrid[item.index] = {
       type: item.type,
       level: 1,
-      operationMode: 'normal',
+      rotation: item.rotation,
       ...(item.type === 'battery' ? { batteryPolicy: 'auto' } : {}),
     };
   });
@@ -104,15 +109,19 @@ export function assessConstructionPlan(state, planOverride = state.constructionP
   };
 }
 
-export function upsertPlannedFacility(state, type, index) {
+export function upsertPlannedFacility(state, type, index, rotation = defaultRotationFor(type)) {
   const current = state.constructionPlan.find((item) => item.index === index);
+  const nextRotation = normalizeRotation(rotation, type);
   let nextPlan;
   if (current?.type === type) {
+    // 같은 칸에 같은 시설을 다시 누르면 계획에서 뺀다(토글). 방향만 바꿀 때는 rotatePlannedFacility를 쓴다.
     nextPlan = state.constructionPlan.filter((item) => item.index !== index);
   } else if (current) {
-    nextPlan = state.constructionPlan.map((item) => item.index === index ? { index, type } : item);
+    nextPlan = state.constructionPlan.map((item) => (
+      item.index === index ? { index, type, rotation: nextRotation } : item
+    ));
   } else {
-    nextPlan = [...state.constructionPlan, { index, type }];
+    nextPlan = [...state.constructionPlan, { index, type, rotation: nextRotation }];
   }
 
   // 같은 계획을 다시 누르는 제거 동작은 언제나 허용한다. 추가·교체는 시설 허가를 넘는
@@ -134,6 +143,30 @@ export function upsertPlannedFacility(state, type, index) {
   return assessConstructionPlan(state);
 }
 
+// 계획에 담긴 시설의 방향을 45°씩 돌린다(0~7 순환). 방향은 건설할 때만 정할 수 있으므로
+// 이미 지어진 칸에는 쓰지 않는다.
+export function rotatePlannedFacility(state, index, steps = 1) {
+  const current = state.constructionPlan.find((item) => item.index === index);
+  if (!current) return { ...assessConstructionPlan(state), rotation: null };
+  const delta = Math.trunc(Number(steps)) || 0;
+  const rotation = normalizeRotation(current.rotation + delta, current.type);
+  state.constructionPlan = state.constructionPlan.map((item) => (
+    item.index === index ? { ...item, rotation } : item
+  ));
+  return { ...assessConstructionPlan(state), rotation };
+}
+
+// 방향 모달이 고른 방위를 계획에 그대로 적는다(회전량이 아니라 절대 방향 인덱스).
+export function setPlannedFacilityRotation(state, index, rotation) {
+  const current = state.constructionPlan.find((item) => item.index === index);
+  if (!current) return { ...assessConstructionPlan(state), rotation: null };
+  const next = normalizeRotation(rotation, current.type);
+  state.constructionPlan = state.constructionPlan.map((item) => (
+    item.index === index ? { ...item, rotation: next } : item
+  ));
+  return { ...assessConstructionPlan(state), rotation: next };
+}
+
 export function removePlannedFacility(state, index) {
   state.constructionPlan = state.constructionPlan.filter((item) => item.index !== index);
   return assessConstructionPlan(state);
@@ -150,18 +183,20 @@ export function commitConstructionPlan(state) {
   if (!assessment.ok) return { ...assessment, ok: false, reason: 'invalid_plan' };
 
   const nextGrid = copyGrid(state.grid);
-  const projects = assessment.items.map(({ index, type }) => ({
+  const projects = assessment.items.map(({ index, type, rotation }) => ({
     index,
     key: type,
     type: FACILITIES[type].name,
     level: 1,
+    rotation,
     durationDays: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }).durationDays,
   }));
-  assessment.items.forEach(({ index, type }) => {
+  // 공사 중인 칸도 계획에서 고른 방향을 그대로 들고 있어야 완공 순간에 방향이 바뀌지 않는다.
+  assessment.items.forEach(({ index, type, rotation }) => {
     nextGrid[index] = {
       type,
       level: 1,
-      operationMode: 'normal',
+      rotation,
       ...(type === 'battery' ? { batteryPolicy: 'auto' } : {}),
       project: createBuildProject({ type, paidCost: assessment.paidCostByIndex[index] }),
     };

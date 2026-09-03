@@ -13,7 +13,13 @@ import {
   upgradeCell,
   validatePlacement,
 } from '../../../src/systems/BoardSystem.js';
-import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
+import {
+  createEnvironment,
+  defaultRotationFor,
+  isCoastalCell,
+  optimalRotationFor,
+  tidalRangeAt,
+} from '../../../src/systems/EnvironmentSystem.js';
 import {
   accelerateResearchFromQuiz,
   advanceResearchOneDay,
@@ -34,12 +40,24 @@ const settleDay = createDaySettler({
   evaluateQuest: applySimulationQuestProgress,
 });
 
-function facility(type, level = 1, extra = {}) {
+// 칸별 풍향과 해안 조차는 판마다 무작위다. 이 캠페인은 자연 조건 운이 아니라 도시 설계가
+// 19단계를 통과하는지를 검증하므로 씨앗을 고정한다. 20400134는 기준 도시가 조력을 세우는
+// 19번 해안 칸의 조차가 정확히 기준값(5m → 출력 100%)이라 예전 밸런스를 그대로 잰다.
+const ENVIRONMENT_SEED = 20400134;
+
+function seededState() {
+  const state = new GameState();
+  state.environment = createEnvironment(ENVIRONMENT_SEED);
+  return state;
+}
+
+function facility(state, type, index, level = 1, extra = {}) {
   return {
     type,
     level,
+    // 방향은 건설할 때만 고른다. 고정 배치도 "모달을 확인한 플레이어"처럼 최적 방향으로 세운다.
+    rotation: optimalRotationFor(state, type, index) ?? defaultRotationFor(type),
     priority: ['residential', 'cooling'].includes(type) ? 'essential' : 'normal',
-    operationMode: 'normal',
     ...extra,
   };
 }
@@ -47,7 +65,7 @@ function facility(type, level = 1, extra = {}) {
 function place(state, placements, { clear = false } = {}) {
   if (clear) state.grid = Array(state.grid.length).fill(null);
   placements.forEach(([index, type, level = 1, extra = {}]) => {
-    state.grid[index] = facility(type, level, extra);
+    state.grid[index] = facility(state, type, index, level, extra);
   });
 }
 
@@ -197,7 +215,7 @@ function finishClimateCampaign(state) {
 }
 
 function stressState(placements) {
-  const state = new GameState();
+  const state = seededState();
   state.questIndex = 19;
   state.questStatus = 'active';
   state.progression.chapter = 4;
@@ -231,7 +249,7 @@ const REFERENCE_CITY = Object.freeze([
 ]);
 
 test('one quest cursor advances through four preparation quests and all eight climate events to quest nineteen', () => {
-  const state = new GameState();
+  const state = seededState();
   state.credits = 500;
   finishFoundation(state);
   finishPreparation(state);
@@ -328,7 +346,12 @@ function settleReferenceDays(days) {
 
 // 계획에 담기 전에 validatePlacement이 통과해야 하고, 확정 뒤에는 공사가 실제 게임일만큼 걸린다.
 function buildReference(...placements) {
-  gameState.constructionPlan = placements.map(([index, type]) => ({ index, type }));
+  // 방향 모달을 확인한 플레이어처럼, 방향이 있는 시설은 그 칸의 최적 방향으로 계획에 담는다.
+  gameState.constructionPlan = placements.map(([index, type]) => ({
+    index,
+    type,
+    rotation: optimalRotationFor(gameState, type, index) ?? defaultRotationFor(type),
+  }));
   placements.forEach(([index, type]) => {
     expect(
       validatePlacement(gameState, type, index, {
@@ -377,6 +400,7 @@ function claimReference(expectedQuest) {
 
 test('a west-branch city earns every one of the nineteen quests through the real placement path', () => {
   gameState.reset();
+  gameState.environment = createEnvironment(ENVIRONMENT_SEED);
   expect(gameState.credits).toBe(10);
 
   // 1블록 — 도시 기반 (1~6).
@@ -431,8 +455,10 @@ test('a west-branch city earns every one of the nineteen quests through the real
   claimReference(9);
 
   researchReference('tidal1', 0);
+  // 조력은 해안 칸에만 설 수 있다. 좋은 플레이어는 그중 조차가 가장 큰 칸을 고른다.
   const coast = gameState.expansion.activeCellIndices
-    .find((index) => !gameState.grid[index] && isOuterRing(index, createHexCoordinates(3), 3));
+    .filter((index) => !gameState.grid[index] && isCoastalCell(index))
+    .sort((a, b) => tidalRangeAt(gameState, b) - tidalRangeAt(gameState, a))[0];
   buildReference([coast, 'tidal'], [20, 'residential']);
   settleUntilReferenceReady();
   claimReference(10);

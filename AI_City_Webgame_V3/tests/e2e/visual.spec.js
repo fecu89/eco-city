@@ -40,24 +40,6 @@ test.describe('visual', () => {
     await expect(page).toHaveScreenshot('world-light-living-city.png', { maxDiffPixels: 18000 });
   });
 
-  test('daylight sky uses a clean blue gradient without a celestial object', async ({ gamePage: page }) => {
-    await renderMixedLevels(page);
-    await page.evaluate(() => window.__setWorldHourForTest(12));
-    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-day.png', { maxDiffPixels: 12000 });
-  });
-
-  test('dusk sky warms gradually without hiding the city', async ({ gamePage: page }) => {
-    await renderMixedLevels(page);
-    await page.evaluate(() => window.__setWorldHourForTest(17));
-    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-dusk.png', { maxDiffPixels: 12000 });
-  });
-
-  test('night keeps readable building lights without a celestial object', async ({ gamePage: page }) => {
-    await renderMixedLevels(page);
-    await page.evaluate(() => window.__setWorldHourForTest(23));
-    await expect(page.locator('#cityGrid')).toHaveScreenshot('world-sky-night.png', { maxDiffPixels: 12000 });
-  });
-
   test('floating build palette', async ({ gamePage: page }) => {
     await renderMixedLevels(page);
     await page.locator('[data-hud-target="build"]').first().click();
@@ -177,8 +159,8 @@ test.describe('visual mobile', () => {
       window.__refreshGameForTest();
       window.__clickCell(0);
     });
-    // 연구는 RESEARCH 정의 11종이 모두 목록에 뜬다.
-    await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
+    // 연구는 RESEARCH 정의 10종이 모두 목록에 뜬다.
+    await expect(page.locator('.research-grid > .research-card')).toHaveCount(10);
     await expect(page).toHaveScreenshot('facility-console-research-mobile.png', { maxDiffPixels: 18000 });
   });
 

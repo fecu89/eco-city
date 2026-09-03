@@ -22,11 +22,14 @@ export const DISPLAY_UNITS = Object.freeze({
   CARBON: 'CO₂',
 });
 
-export const WORLD_LIGHTING_STORAGE_KEY = 'ai-city-world-lighting';
-export const WORLD_LIGHTING_MODES = Object.freeze({
-  day: Object.freeze({ id: 'day', label: '낮', visualHour: 12, icon: 'sun' }),
-  dusk: Object.freeze({ id: 'dusk', label: '노을', visualHour: 17, icon: 'cloud-sun' }),
-  night: Object.freeze({ id: 'night', label: '밤', visualHour: 23, icon: 'moon' }),
+// 월드는 항상 낮 한 가지로 렌더한다. 시간대 전환은 제거했고, 밝기와 하늘색은 테마와 무관하게 고정이다.
+export const WORLD_DAY_LIGHTING = Object.freeze({
+  SUN_INTENSITY: 1.22,
+  SUN_COLOR: 0xffffff,
+  HEMISPHERE_INTENSITY: 1.08,
+  RIM_INTENSITY: 0.3,
+  SKY_TOP: 0x5aaee8,
+  SKY_BOTTOM: 0xcbeaff,
 });
 
 export const BOARD = Object.freeze({
@@ -36,6 +39,60 @@ export const BOARD = Object.freeze({
   EXPANDED_CELLS: 37,
   HEX_SIZE: 0.56,
   MAX_CELLS: 37,
+});
+
+// 시설은 건설할 때만 방향을 고른다(45° 8방위). rotation은 이 배열의 인덱스(0~7)다.
+export const FACILITY_DIRECTIONS = Object.freeze([
+  Object.freeze({ id: 'N', label: '북', angle: 0 }),
+  Object.freeze({ id: 'NE', label: '북동', angle: 45 }),
+  Object.freeze({ id: 'E', label: '동', angle: 90 }),
+  Object.freeze({ id: 'SE', label: '남동', angle: 135 }),
+  Object.freeze({ id: 'S', label: '남', angle: 180 }),
+  Object.freeze({ id: 'SW', label: '남서', angle: 225 }),
+  Object.freeze({ id: 'W', label: '서', angle: 270 }),
+  Object.freeze({ id: 'NW', label: '북서', angle: 315 }),
+]);
+
+export const DIRECTION_RULES = Object.freeze({
+  STEP_DEGREES: 45,
+  DIRECTIONAL_TYPES: Object.freeze(['solar', 'wind']),
+  SOLAR_OPTIMAL: 'S',
+  // 최적 방향에서 45° 몇 칸 벗어났는가(0~4) → 공급 배율.
+  SOLAR_FACTORS_BY_DEVIATION: Object.freeze([1, 0.92, 0.72, 0.5, 0.38]),
+  WIND_FACTORS_BY_DEVIATION: Object.freeze([1, 0.9, 0.7, 0.5, 0.35]),
+  // 태양광은 남향이 어디서나 정답이라 기본값으로 두고, 풍력은 북향에서 시작해
+  // 플레이어가 그 칸의 풍향을 직접 확인하게 한다.
+  DEFAULT_ROTATION: Object.freeze({ solar: 4, wind: 0 }),
+});
+
+export const TIDAL_RULES = Object.freeze({
+  COASTAL_RING: BOARD.EXPANDED_RADIUS, // 37칸 섬의 3링이 바다와 맞닿는다
+  RANGE_MIN_M: 2,
+  RANGE_MAX_M: 8,
+  REFERENCE_RANGE_M: 5, // 이 조차에서 출력 ×1.0
+  MIN_FACTOR: 0.5,
+  MAX_FACTOR: 1.5,
+  LABEL: (range, factor) => `조차 ${range}m · 출력 ${Math.round(factor * 100)}%`,
+});
+
+// 방향(회전)·풍향·조차를 설명하는 화면 문구. 시설 방향은 건설할 때만 고를 수 있으므로
+// 여기 문구는 건설 위젯·방향 모달·건설 확정 바·시설 창에서만 쓰인다.
+export const DIRECTION_COPY = Object.freeze({
+  ROTATE_LABEL: '건물 회전',
+  ROTATE_TITLE: '45° 회전',
+  ROTATE_ICON: 'rotate-cw',
+  INFO_LABEL: '방향별 발전량',
+  INFO_ICON: 'compass',
+  MODAL_EYEBROW: 'FACILITY DIRECTION',
+  MODAL_TITLE: (facilityName) => `${facilityName} 방향별 발전량`,
+  MODAL_INTRO: '방향을 고르면 건설 계획에 바로 반영됩니다. 완공한 뒤에는 방향을 바꿀 수 없습니다.',
+  BEST_BADGE: '최적',
+  OUTPUT: (factor) => `출력 ${Math.round(factor * 100)}%`,
+  SUMMARY: (label, factor) => `방향 ${label} · 출력 ${Math.round(factor * 100)}%`,
+  INSPECTOR: (label, factor, bestLabel) => `방향 ${label} · 출력 ${Math.round(factor * 100)}% (최적 ${bestLabel})`,
+  WIND_HINT: (label) => `이 칸의 바람: ${label}`,
+  SOLAR_HINT: '태양은 남쪽에 있습니다',
+  COASTAL_BLOCKED_TITLE: '해안 칸이 필요합니다',
 });
 
 // 3D 보드는 포인터로만 조작할 수 있었다. 아래 값은 키보드 커서(#cityGrid 포커스 상태)가
@@ -59,11 +116,13 @@ export const BOARD_KEYBOARD = Object.freeze({
   HOME_KEY: 'Home',
   CLEAR_KEY: 'Escape',
   ACTIVATE_KEYS: Object.freeze(['Enter', ' ', 'Spacebar']),
+  // 건설 계획이 떠 있는 동안 방향을 45°씩 돌린다(위젯의 회전 버튼과 같은 동작).
+  ROTATE_KEY: 'r',
   HOME_INDEX: 0,
   // 화살표 방향과 이웃 칸이 이룬 각도가 너무 벌어지면(내적이 이 값 미만) 옮기지 않는다.
   MIN_DIRECTION_DOT: 0.2,
   ROLE: 'application',
-  ARIA_LABEL: '육각 도시 건설 대지. 화살표 키로 칸을 옮기고 Enter 또는 Space로 선택합니다. Home은 중앙 칸, Escape는 선택 해제입니다.',
+  ARIA_LABEL: '육각 도시 건설 대지. 화살표 키로 칸을 옮기고 Enter 또는 Space로 선택합니다. Home은 중앙 칸, Escape는 선택 해제, R은 건설 계획 방향 회전입니다.',
   EMPTY_CELL_TEXT: '빈 대지',
   cellAnnouncement: (index, description) => `칸 ${index}: ${description}`,
   facilityDescription: (name, level) => `${name} Lv.${level}`,
@@ -187,7 +246,7 @@ export const CAMPAIGN_PACING = Object.freeze({
     Object.freeze({
       startMinute: 14,
       endMinute: 16,
-      decisions: Object.freeze(['facility-mode', 'battery-reserve', 'research-continue-or-pause']),
+      decisions: Object.freeze(['facility-priority', 'battery-reserve', 'research-continue-or-pause']),
     }),
     Object.freeze({
       startMinute: 20,
@@ -422,10 +481,24 @@ export const CITY_CAMERA = {
   MAX_POLAR_ANGLE: Math.PI / 2.08,
   DAMPING_FACTOR: 0.075,
   PAN_MARGIN: 0.75,
+  // 마우스는 7px만 움직여도 드래그지만, 손가락 탭은 보통 5~15px 흔들린다.
   DRAG_THRESHOLD_PX: 7,
+  TAP_THRESHOLD_TOUCH_PX: 14,
+  // 세로 화면(폰)은 셀 하나가 화면을 덮을 만큼 확대되면 길을 잃으므로 최소 거리를 더 멀리 둔다.
+  MIN_DISTANCE_PER_GRID_PORTRAIT: 0.95,
+  // 기본 시점에서 이 비율(거리 대비)보다 멀어지면 "시점 초기화" 칩을 보여준다.
+  DEFAULT_POSE_TOLERANCE: 0.02,
+  // 빈 바닥을 이 간격·반경 안에서 두 번 누르면 시점을 되돌린다.
+  DOUBLE_TAP_MS: 350,
+  DOUBLE_TAP_RADIUS_PX: 24,
   GROUND_PLANE_SIZE: 18,
   GROUND_PLANE_OFFSET: [2.25, 2.8],
 };
+
+export const CAMERA_UI = Object.freeze({
+  RECENTER_GLYPH: '⌖',
+  RECENTER_LABEL: '시점 초기화',
+});
 
 export const CITY_MOTION = {
   PLACE_MS: 480,
@@ -561,7 +634,31 @@ export const UI_FEEDBACK = {
   QUEST_ALERT_MS: 7000,
   QUEST_CELEBRATION_MS: 3200,
   QUEST_BURST_PARTICLES: 12,
+  // 칸을 누른 직후 피드백 — 모바일은 호버가 없어 "눌렸다"를 따로 알려야 한다.
+  TAP_FLASH_MS: 220,
+  TAP_VIBRATE_MS: 10,
+  // 시설을 고른 직후 "빈 칸을 눌러 배치" 힌트 표시 시간(첫 건설 확정 전까지만).
+  PLACEMENT_HINT_MS: 2600,
 };
+
+// 보드를 눌렀을 때의 안내 문구. 잔소리는 세션당 한 번만 나온다.
+export const BOARD_TAP_COPY = Object.freeze({
+  BUILD_MENU: Object.freeze({
+    title: '건설 메뉴를 먼저 여세요',
+    text: '건설 버튼을 누르고 시설을 고른 뒤 빈 대지를 누르면 지을 수 있습니다.',
+  }),
+  PICK_FACILITY: Object.freeze({
+    title: '시설을 먼저 고르세요',
+    text: '건설 패널에서 시설 카드를 누르면 빈 대지에 배치할 수 있습니다.',
+  }),
+  // 돈·허가가 아니라 대지 규칙 자체가 막는 칸을 눌렀을 때(조력의 해안 칸 등).
+  BLOCKED_SITE_TITLE: '이 칸에는 지을 수 없습니다',
+  placementHint: (facilityName) => ({
+    kicker: 'PLACEMENT',
+    title: `빈 칸을 눌러 ${facilityName} 배치`,
+    text: '건설 버튼을 다시 누르면 다른 시설을 고를 수 있습니다.',
+  }),
+});
 
 export const QUEST_PANEL_LAYOUT = Object.freeze({
   STORAGE_KEY: 'ai-city-quest-panel-layout-v2',
@@ -734,7 +831,7 @@ export const FACILITIES = {
   battery: { name: '에너지저장', icon: '🔋', cost: 4, dev: 2, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '보조전력을 사용해 잉여 전력을 저장하고, 인접 소비지의 송전 손실을 줄입니다.' },
   cooling: { name: '순환냉각', icon: '💧', cost: 4, dev: 1, demand: 1, supply: 0, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '자체 물 감축 시설이 아닙니다. 전력이 공급되면 인접 데이터센터·핵발전의 물 사용을 줄입니다.' },
   green: { name: '녹지', icon: '🌳', cost: 2, dev: 1, demand: 0, supply: 0, carbon: -1, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, desc: '도시 탄소를 줄이고 인접 주거지의 세금과 폭염 대응력을 높입니다. 연구로 수관과 생태축을 강화할 수 있습니다.' },
-  tidal: { name: '조력발전', icon: '🌊', cost: 7, dev: 3, demand: 0, supply: 10, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, placement: 'outer_ring', desc: '외곽 육각에서 일정한 저탄소 전력을 공급하며 고정 운영비가 듭니다.' },
+  tidal: { name: '조력발전', icon: '🌊', cost: 7, dev: 3, demand: 0, supply: 10, carbon: 0, water: 0, unlockStage: STAGES.REDESIGN, maxLevel: 3, placement: 'coastal', desc: '바다와 맞닿은 해안 칸에서 일정한 저탄소 전력을 공급하며, 그 칸의 조수간만의 차가 클수록 출력이 커집니다.' },
 };
 
 export const QUIZ_BANK = [

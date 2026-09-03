@@ -34,4 +34,41 @@ test.describe('3D city camera', () => {
     expect(reset.position).toEqual(initial.position);
     expect(reset.target).toEqual(initial.target);
   });
+
+  // 핀치·드래그로 시점이 흐트러진 뒤 돌아올 길이 없었다. 상시 버튼 대신 기본 시점을
+  // 벗어났을 때만 작은 칩이 나타나고, 빈 바닥을 더블클릭/더블탭해도 돌아온다.
+  test('a recenter chip appears only after the camera leaves its default pose and restores it', async ({ gamePage: page }) => {
+    const chip = page.locator('#cityRecenterBtn');
+    const initial = await page.evaluate(() => window.__getCityCameraState());
+    expect(initial.atDefault).toBe(true);
+    await expect(chip).toBeHidden();
+
+    await page.evaluate(() => window.__setCityCameraOrbitForTest(0.9, 1.1));
+    await expect(chip).toBeVisible();
+    expect(await page.evaluate(() => window.__getCityCameraState().atDefault)).toBe(false);
+
+    await chip.click();
+    await page.waitForTimeout(120);
+    const reset = await page.evaluate(() => window.__getCityCameraState());
+    expect(reset.position).toEqual(initial.position);
+    expect(reset.target).toEqual(initial.target);
+    expect(reset.atDefault).toBe(true);
+    await expect(chip).toBeHidden();
+  });
+
+  test('double-clicking empty ground recenters the camera without touching the city', async ({ gamePage: page }) => {
+    const initial = await page.evaluate(() => window.__getCityCameraState());
+    const box = await page.locator('.city-scene-3d-canvas').boundingBox();
+    await page.evaluate(() => window.__setCityCameraOrbitForTest(0.9, 1.1));
+    expect(await page.evaluate(() => window.__getCityCameraState().atDefault)).toBe(false);
+
+    // 왼쪽 가장자리는 보드 칸이 아닌 바다/해안이다.
+    await page.mouse.dblclick(box.x + 24, box.y + box.height * 0.5);
+    await page.waitForTimeout(150);
+    const after = await page.evaluate(() => window.__getCityCameraState());
+    expect(after.atDefault).toBe(true);
+    expect(after.target).toEqual(initial.target);
+    expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+    expect(await page.evaluate(() => window.__GAME_STATE__.selectedCell)).toBeNull();
+  });
 });

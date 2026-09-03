@@ -23,8 +23,8 @@ test.describe('fullscreen world HUD', () => {
 
     await expect(page.locator('#credits')).toHaveText('12.50');
     await expect(page.locator('#simNet')).toHaveText('+0.25/일');
-    await expect(page.locator('#simPower')).toHaveText('+1 E');
-    await expect(page.locator('#simBattery')).toHaveText('8.5 E');
+    await expect(page.locator('#simPower')).toHaveText('+1');
+    await expect(page.locator('#simBattery')).toHaveText('8.5');
     await expect(page.locator('#simCarbonRate')).toHaveText('3.4/일');
     await expect(page.locator('#simWater')).toHaveText('2.5/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 6 / 전체 인구 8');
@@ -68,7 +68,7 @@ test.describe('fullscreen world HUD', () => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       const state = window.__GAME_STATE__;
-      state.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+      state.grid[0] = { type: 'residential', level: 1 };
       state.lastTickSummary = { dailyCarbon: 2, dailyWater: 2, deliveredPower: 4, demand: 7, batteryStored: 0, lowCarbonPercent: 60, capacity: 10, used: 7 };
       window.__refreshGameForTest();
     });
@@ -181,8 +181,8 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#credits')).toHaveText('1.25M');
     await expect(page.locator('#simulationHud [data-metric="credit"]')).toHaveAttribute('title', /1,250,000\.00/);
     await expect(page.locator('#simNet')).toHaveText('+12.5K/일');
-    await expect(page.locator('#simPower')).toHaveText('+2.5K E');
-    await expect(page.locator('#simBattery')).toHaveText('12.5K E');
+    await expect(page.locator('#simPower')).toHaveText('+2.5K');
+    await expect(page.locator('#simBattery')).toHaveText('12.5K');
     await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/일');
     await expect(page.locator('#simWater')).toHaveText('1.2M/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 11K / 전체 인구 12.5K');
@@ -193,8 +193,8 @@ test.describe('fullscreen world HUD', () => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       const state = window.__GAME_STATE__;
-      state.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
-      state.grid[1] = { type: 'data', level: 2, operationMode: 'research' };
+      state.grid[0] = { type: 'residential', level: 1 };
+      state.grid[1] = { type: 'data', level: 2 };
       state.grid[2] = { type: 'wind', level: 1 };
       state.research.jobs = {
         solar2: { id: 'solar2', dataCenterIndex: 1, status: 'running', elapsedEffectiveDays: 0 },
@@ -671,22 +671,7 @@ test.describe('fullscreen world HUD', () => {
     expect(await page.evaluate(() => window.__HUD_ESCAPE_FAILED__)).toBeUndefined();
   });
 
-  test('graphics lighting is fixed to day, dusk, or night instead of following simulation time', async ({ gamePage: page }) => {
-    await page.locator('[data-hud-target="settings"]').first().click();
-    const controls = page.locator('#worldLightingControls');
-    await expect(controls.locator('button')).toHaveCount(3);
-    await controls.locator('[data-world-lighting="dusk"]').click();
-    expect(await page.evaluate(() => window.__getWorldLightingMode())).toBe('dusk');
-    expect(await page.evaluate(() => window.__getCityRendererStats().skyHour)).toBe(17);
-
-    await page.evaluate(() => {
-      for (let day = 0; day < 8; day++) window.__settleSimulationDay();
-    });
-    expect(await page.evaluate(() => window.__getCityRendererStats().skyHour)).toBe(17);
-    expect(await page.evaluate(() => localStorage.getItem('ai-city-world-lighting'))).toBe('dusk');
-
-    await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForFunction(() => window.__getWorldLightingMode?.() === 'dusk');
-    expect(await page.evaluate(() => window.__getCityRendererStats().skyHour)).toBe(17);
+  test('the mobile quest strip stays out of the desktop HUD', async ({ gamePage: page }) => {
+    await expect(page.locator('#questStrip')).toBeHidden();
   });
 });

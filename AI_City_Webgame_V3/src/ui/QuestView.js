@@ -43,6 +43,14 @@ const eachNode = (value, callback) => nodes(value).forEach(callback);
 export function initQuestView(elements, changed) {
   els = elements;
   onChanged = changed || (() => {});
+  // 모바일 퀘스트 스트립: 누르면 퀘스트 패널을 열고, 패널이 열려 있는 동안은 숨긴다.
+  if (els.strip) {
+    els.strip.hidden = false;
+    els.strip.addEventListener('click', () => eventBus.emit(Events.HUD_PANEL_OPEN_REQUESTED, { name: 'quest' }));
+    eventBus.on(Events.HUD_PANEL_CHANGED, ({ activePanel }) => {
+      els.strip.hidden = activePanel === 'quest';
+    });
+  }
   eachNode(els.claim, (claim) => claim.addEventListener('click', () => {
     if (['ready', 'failed'].includes(gameState.stressTest?.status)) {
       eventBus.emit(Events.STRESS_TEST_START_REQUESTED, {});

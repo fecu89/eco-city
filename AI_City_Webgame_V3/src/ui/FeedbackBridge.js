@@ -43,6 +43,11 @@ function showQuestAlert(quest, ready = false) {
 
 // 특정 모달에 속하지 않는 범용 이벤트→토스트/효과음 연결.
 export function initFeedbackBridge() {
+  // 칸을 누른 즉시 클릭음, 터치면 짧은 진동 — 모달이 뜨기 전에도 반응이 있어야 한다.
+  eventBus.on(Events.BOARD_CELL_TAPPED, ({ pointerType }) => {
+    eventBus.emit(Events.AUDIO_SFX, { name: 'click' });
+    if (pointerType === 'touch' && typeof navigator.vibrate === 'function') navigator.vibrate(UI_FEEDBACK.TAP_VIBRATE_MS);
+  });
   eventBus.on(Events.CLIMATE_QUEST_RESULT, (result) => {
     if (result.passed) return;
     const quest = QUESTS[result.questIndex - 1];

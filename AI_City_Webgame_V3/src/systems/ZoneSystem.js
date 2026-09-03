@@ -4,7 +4,6 @@ import {
   ENERGY_SITE_OUTPUT_MULTIPLIER,
   EXPANSION_SIDES,
   EXPANSION_UPKEEP,
-  TIDAL_SITE_COORDINATES,
 } from '../core/ZoneDefinitions.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { roundCredits } from '../core/Money.js';
@@ -74,16 +73,14 @@ export function cellZoneTrait(state, index) {
   return coord.r >= 0 ? 'wind' : 'industrial';
 }
 
+// 지역 특성(동부 태양광·서부 풍황)에서 오는 입지 보너스다. 조력은 여기가 아니라
+// 해안 칸의 조수간만의 차(EnvironmentSystem.tidalFactor)로 출력이 갈린다.
 export function energySiteBenefit(state, index, facilityType) {
-  if (!['solar', 'wind', 'tidal'].includes(facilityType) || !isExpansionCellActive(state, index)) return null;
+  if (!['solar', 'wind'].includes(facilityType) || !isExpansionCellActive(state, index)) return null;
   const coord = createHexCoordinates(BOARD.EXPANDED_RADIUS)[index];
   if (!coord) return null;
   const trait = cellZoneTrait(state, index);
-  const matchesRegionalSite = (facilityType === 'solar' && trait === 'solar')
-    || (facilityType === 'wind' && trait === 'wind');
-  const matchesTidalSite = facilityType === 'tidal'
-    && TIDAL_SITE_COORDINATES.some(({ q, r }) => coord.q === q && coord.r === r);
-  if (!matchesRegionalSite && !matchesTidalSite) return null;
+  if (trait !== facilityType) return null;
   return {
     type: facilityType,
     label: ENERGY_SITE_LABELS[facilityType],

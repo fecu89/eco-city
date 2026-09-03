@@ -53,8 +53,8 @@ test('v4 saves migrate the active research job and quest-eight permit to v5', ()
 
 test('the complete migration chain ends at the current save version', () => {
   const migrated = migrateSaveData(v4Save({ questIndex: 6, upgradePermitLevel: 1 }));
-  expect(SAVE_VERSION).toBe(9);
-  expect(migrated.v).toBe(9);
+  expect(SAVE_VERSION).toBe(10);
+  expect(migrated.v).toBe(10);
   expect(migrated.upgradePermitLevel).toBe(1);
 });
 

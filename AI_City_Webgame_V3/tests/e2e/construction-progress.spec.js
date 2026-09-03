@@ -154,7 +154,7 @@ test('a factory construction site exposes site demolition instead of looking non
     state.questIndex = 2;
     state.unlockedFacilities.add('factory');
     state.credits = 20;
-    state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+    state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
     window.__refreshGameForTest();
     window.__setTimeScale(0);
   });
@@ -174,7 +174,7 @@ test('a factory construction site exposes site demolition instead of looking non
 
 test('a completed factory still uses the normal irreversible demolition flow', async ({ gamePage: page }) => {
   await page.evaluate(() => {
-    window.__GAME_STATE__.grid[0] = { type: 'factory', level: 1, priority: 'normal', operationMode: 'normal' };
+    window.__GAME_STATE__.grid[0] = { type: 'factory', level: 1, priority: 'normal' };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
@@ -190,7 +190,7 @@ test('upgrade starts an eight-day limited-operation project and changes level on
     const state = window.__GAME_STATE__;
     state.credits = 20;
     state.upgradePermitLevel = 2;
-    state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+    state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
@@ -224,8 +224,8 @@ test('tidal upgrade forecast shows distinct current construction and completed g
     const state = window.__GAME_STATE__;
     state.credits = 100;
     state.upgradePermitLevel = 3;
-    state.grid[0] = { type: 'tidal', level: 1, priority: 'normal', operationMode: 'normal' };
-    state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+    state.grid[0] = { type: 'tidal', level: 1, priority: 'normal' };
+    state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });
@@ -246,8 +246,8 @@ test('green level-two and level-three upgrades use the shared world progress bar
     state.research.completedIds.add('green2');
     state.research.completedIds.add('green3');
     state.research.techLevels.green = 3;
-    state.grid[0] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
-    state.grid[1] = { type: 'green', level: 2, priority: 'normal', operationMode: 'normal' };
+    state.grid[0] = { type: 'green', level: 1, priority: 'normal' };
+    state.grid[1] = { type: 'green', level: 2, priority: 'normal' };
     window.__refreshGameForTest();
     window.__clickCell(0);
   });

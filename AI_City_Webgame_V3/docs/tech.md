@@ -42,16 +42,16 @@ src/
 
   core/                          규칙과 데이터. 여기서는 systems/ui를 import하지 않는다
     EventBus.js                  pub/sub 싱글턴 + Events 상수 78개(domain:action). 원시 문자열 발행은 0건
-    GameState.js                 상태 싱글턴, SAVE_VERSION 9, serialize/restore, normalizeCell
+    GameState.js                 상태 싱글턴, SAVE_VERSION 10, serialize/restore, normalizeCell(방향 포함)
     Constants.js                 모든 밸런스 수치(시설·경제·전력·기후·보고서·모션·에셋·테마)
     QuestDefinitions.js          퀘스트 19개(1~10·19 직접 정의, 11~18은 기후 캠페인에서 합성), WEST_BRANCH_QUESTS
     ClimateCampaignDefinitions.js 기후 이벤트 8종, 기후 퀘스트 11~18, 최종시험 8구간(FINAL_CLIMATE_PHASES)
     EventDefinitions.js          기후 이벤트를 이벤트 덱/스트레스 구간으로 다시 내보내고 총 시험 일수를 계산
     CampaignProgression.js       캠페인 구간 경계(CAMPAIGN_QUEST_INDEXES), Lv.3 강화 허가 퀘스트 표
-    ResearchDefinitions.js       연구 11종(기간·비용·선행조건·효과·분기)
-    ResearchQuizDefinitions.js   연구별 전용 퀴즈 4문항 × 11 = 44문항
-    ZoneDefinitions.js           동/서 확장 방향, 지역 특성, 확장 유지비, 조력 입지 좌표
-    OperationDefinitions.js      시설 운영 모드(주거 절전 요청·강제 절전·자동 수요반응, 공장 절전·증산, 데이터센터 집중 연구)
+    ResearchDefinitions.js       연구 10종(기간·비용·선행조건·효과·분기)
+    ResearchQuizDefinitions.js   연구별 전용 퀴즈 4문항 × 10 = 40문항
+    ZoneDefinitions.js           동/서 확장 방향, 지역 특성, 확장 유지비, 태양광·풍력 우수 입지 라벨
+    OperationDefinitions.js      배터리 저장 전력 사용 정책(BATTERY_POLICIES)
     ConstructionProject.js       공사/강화 프로젝트 순수 헬퍼(정규화·완공 판정) — core가 systems를 참조하지 않도록 분리
     Money.js                     크레딧 반올림·표기(소수 둘째 자리, -0.00 방지)
     safeStorage.js               localStorage 접근을 전부 감싸는 방어 래퍼(차단된 브라우저에서 부팅이 멈추지 않게)
@@ -62,6 +62,8 @@ src/
     BoardSystem.js               배치·강화·철거, 인접·시너지·갈등 점수(calcMetrics), 배치 미리보기
     HexGridSystem.js             육각 좌표 생성·거리·이웃·반경 확장
     ZoneSystem.js                확장 방향 활성화(19→28→37칸), 지역 특성, 확장 선택 재요청 판정
+    EnvironmentSystem.js         판마다 새로 뽑는 자연 조건(칸별 풍향·해안 조차)과 시설 방향 규칙
+                                 (createEnvironment/isCoastalCell/directionFactor/directionOutputTable/tidalSiteInfo)
     PowerNetworkSystem.js        거리 손실·급전 우선순위·배터리 허브·저탄소 우선 배분
     EconomySystem.js             세금·수입·유지비·과밀·건강·기후복구 비용 정산
     FacilityOperationSystem.js   시설별 실제 가동률과 그에 비례하는 탄소·물 산출
@@ -73,25 +75,24 @@ src/
     ClimateModifierSystem.js     기후 정의를 시설/도시 계수로 합성(물 한도·냉각 효과·고정 탄소 포함)
     ClimateQuestSystem.js        기후 퀘스트 11~18의 브리핑·연속일 판정·보상
     CityEventSystem.js           기후 이벤트 일정 생성(24일 예보·3일 휴지기)과 결과 요약
-    CityModifierSystem.js        운영 모드·지역·기후를 하나의 시설 계수로 합성
+    CityModifierSystem.js        지역·기후·연구·시험 계수를 하나의 시설 계수로 합성
     CarbonCrisisSystem.js        일일 CO₂ 초과 누적, 경고 마일스톤, 게임오버 전환
     CityFailureSystem.js         적자·필수시설 정전 누적에 따른 경고/일시정지/게임오버
     StressTestSystem.js          19단계 최종시험 구간 진행·물 기준선·통과 판정
     QuestSystem.js               퀘스트 1~10·19 조건 평가, 연속 일수, 보상 수령, 해금
     QuizSystem.js                연구 가속 퀴즈와 최종 4문항 퀴즈(결정적 셔플, 재출제 방지)
     ResearchSystem.js            데이터센터별 연구 작업 시작·진행·취소
-    ResearchEffectSystem.js      완료된 연구를 실제 계수(발전 효율·저장·수요반응 등)로 변환
+    ResearchEffectSystem.js      완료된 연구를 실제 계수(발전 효율·저장·송전 손실 등)로 변환
     ReportSystem.js              5축 성적표·퀴즈 보너스·도시 유형 분류·내보내기
-    SaveSystem.js                localStorage 자동저장과 v1→v9 마이그레이션
+    SaveSystem.js                localStorage 자동저장과 v1→v10 마이그레이션
     CalendarSystem.js            경과 게임일 → 달력 스냅샷, 배속별 틱 간격
     CameraController.js          제한된 OrbitControls(회전·팬·줌, 결정적 초기화)
     AmbientBirdSystem.js         녹지가 있을 때만 도는 새 방문 스케줄러
     CityAmbientMotionSystem.js   연기·로터 등 저빈도 ambient 모션 스케줄러
 
   ui/                            DOM/3D 렌더링. 규칙을 다시 계산하지 않는다
-    CityScene3D.js               InstancedMesh 3D 보드, 레이캐스팅, 레벨별 메시, 고스트·O/X 위젯, 전력선
+    CityScene3D.js               InstancedMesh 3D 보드, 레이캐스팅, 레벨별 메시, 고스트·O/X 위젯(회전·방향 버튼), 전력선
     CityEnvironment3D.js         고정 섬 지형(육지·해안·수면·바다)과 해안 장식
-    WorldLightingManager.js      낮/노을/밤 고정 조명 모드와 저장
     GridView.js                  보드 입력(칸 클릭·건설 확정 흐름)과 렌더 트리거
     WorldHud.js                  데스크톱 rail·모바일 하단 바, 패널 하나만 열기, 포커스 복원, 모달 우선순위
     HudView.js                   상단 상태줄(단계·크레딧·경보)
@@ -104,7 +105,7 @@ src/
     ChartView.js                 도시 상태 레이더 차트(chart.js 지연 로딩, 틱 간격 보간)
     ForecastView.js              상단 기후 예보 스트립
     EventResultView.js           기후 이벤트 종료 결과 요약
-    StageModals.js               시설 상세·강화 예측·철거 확인·확장 선택·최종시험·성적표·도움말 모달
+    StageModals.js               시설 상세·방향별 발전량·강화 예측·철거 확인·확장 선택·최종시험·성적표·도움말 모달
     Modal.js                     모달 셸, 우선순위 큐, lucide 아이콘 등록(PascalCase 키)
     OnboardingView.js            첫 접속 3장 스토리와 행동형 튜토리얼 하이라이트
     ResearchView.js              데이터센터 연구 목록·시작·취소
@@ -157,16 +158,18 @@ tests/
   좌표 기반 실제 레이캐스팅은 `__getCellScreenPosition(index)`을 쓰는 별도 테스트에서만 검증한다.
 - `__getCellVisual(index)` / `__getHexCell(index)` / `__getCityLevelVisuals()` — 렌더 중인 칸의 시각 상태.
 - `__getCityRendererStats()` / `__getCityAssetStatus()` — draw call·geometry·resource revision·고스트·
-  생활 객체 수, GLB 로드/폴백 상태.
+  생활 객체 수, GLB 로드/폴백 상태. `ghostRotation`은 지금 고스트가 쓰는 방향 인덱스,
+  `planGhostRotationsY`는 계획 고스트에 실제로 찍힌 yaw다.
 - `__getCityCameraState()` / `__resetCityCamera()` / `__setCityCameraOrbitForTest()` — 카메라.
 - `__settleSimulationDay()` / `__getSimulationState()` / `__setTimeScale(scale)` — 하루 결정 정산과 타이머.
+- `__setEnvironmentSeed(seed)` / `__getEnvironmentAt(index)` — 판의 자연 조건을 고정 씨앗으로 다시 뽑고,
+  한 칸의 풍향 인덱스(0~7)와 해안 조차(m, 내륙은 null)를 읽는다. 방향·조력 UI 테스트가 쓴다.
 - `__refreshGameForTest()` / `__renderCityForTest()` / `__setBuildPreviewForTest()` — 강제 리렌더.
 - `__getWorldHudState()` / `__getModalState()` / `__getOnboardingState()` / `__getTheme()` /
-  `__getWorldLightingMode()` / `__getAudioState()` — UI 상태 진단.
+  `__getAudioState()` — UI 상태 진단.
 - `__triggerBirdVisitForTest()` / `__finishBirdVisitForTest()` / `__triggerFacilityAmbientForTest()` /
   `__finishFacilityAmbientForTest()` — ambient 연출 강제 시작/종료.
-- `__setWorldHourForTest(hour)` / `__openStoryForTest()` / `__renderCityConfigsForTest()` — 조명·온보딩·
-  대표 도시 배치를 직접 세팅.
+- `__openStoryForTest()` / `__renderCityConfigsForTest()` — 온보딩·대표 도시 배치를 직접 세팅.
 - `__disposeCitySceneForTest()` — 해제 경로 누수 회귀 전용.
 - `__GAME_STATE__` / `__EVENT_BUS__` / `__EVENTS__` — 상태와 이벤트 버스 직접 접근.
 

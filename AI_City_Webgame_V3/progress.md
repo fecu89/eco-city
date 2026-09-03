@@ -700,3 +700,38 @@
 - [x] 접힌 상태에서 건설 버튼을 다시 누르면 패널이 닫히는 대신 다시 펼쳐진다. `WorldHud.toggleHudPanel`이 닫기 전에 `HUD_PANEL_CLOSE_REQUESTED`를 발행하고, 독이 `preventClose()`로 가로채 펼친다. 카드를 키보드로 골랐다면 포커스를 보드(`#cityGrid`)로 옮긴다.
 - [x] 취소(X)도 확정(O)과 같은 규칙으로 배치 무장을 해제한다(`GridView.js`가 `BUILD_PLAN_CLEARED`에서 `facilityArmed=false`). 취소 뒤 마우스를 움직여도 고스트가 따라다니지 않고, 다시 지으려면 시설을 다시 고른다.
 - [x] 테스트: `build-preview.spec.js`에 데스크톱·모바일 접힘/펼침/확정/취소 흐름과 취소 후 무장 해제 테스트 추가, `hud.spec.js`의 "선택 후 팔레트 유지" 테스트를 새 계약으로 갱신. 영향 범위 14개 스위트 **147/147 통과**(9.8분, `PW_PORT=3177`).
+
+## 43차 수정 — /improve-game UX·상호작용·HUD·카메라·모바일 (2026-09-03)
+
+원본 요청: `/improve-game UX threejs interaction HUD camera selection feedback mobile usability`. 심층 점검(진단표 50/65)에서 초점 영역 개선안 7개를 뽑았고 사용자가 전부 승인했다.
+
+- [x] **터치 탭 판정 완화**: 손가락 탭은 5~15px 흔들리는데 마우스용 7px 임계값을 그대로 써서 8px부터 탭이 무시됐다(실측). 터치 포인터는 `CITY_CAMERA.TAP_THRESHOLD_TOUCH_PX`(14)까지 탭으로 인정한다(`CameraController.js`).
+- [x] **세로 화면 줌 한계**: 핀치로 셀 하나가 화면을 덮을 만큼 확대되던 것을 `MIN_DISTANCE_PER_GRID_PORTRAIT`(0.95)로 막았다. `__getCityCameraState()`가 `minDistance/maxDistance/atDefault`를 노출한다.
+- [x] **카메라 되돌리기**: 기본 시점을 벗어났을 때만 보드 왼쪽 아래에 "⌖ 시점 초기화" 칩(`#cityRecenterBtn`)이 나타나고, 보드 칸이 아닌 바닥을 350ms 안에 두 번 누르면(더블탭/더블클릭) 시점이 돌아온다. 36차에서 뺀 상시 버튼은 되살리지 않았다.
+- [x] **빈 칸 탭 = 선택 해제**: 건설 모드가 아닐 때 빈 칸을 누르면 매번 "건설 메뉴를 먼저 여세요" 토스트가 떴다. 이제 선택 링을 풀고, 안내(`BOARD_TAP_COPY`)는 세션당 한 번만 나온다(리셋 시 초기화).
+- [x] **배치 안내 힌트**: 시설 카드를 고르면 패널이 접히는 42차 흐름에서 첫 사용자가 다음 행동을 모를 수 있어, 첫 건설을 확정하기 전까지 "빈 칸을 눌러 {시설} 배치" 힌트(`UI_FEEDBACK.PLACEMENT_HINT_MS`)를 띄운다.
+- [x] **탭 즉각 피드백**: 칸을 누르면 `BOARD_CELL_TAPPED`가 발행되고, 누른 칸이 220ms 흰 링으로 반짝이며(`tapFlashIndex` 통계), 클릭음과 터치 시 10ms 진동(`navigator.vibrate`)이 난다. 키보드 Enter도 같은 경로.
+- [x] **모바일 퀘스트 스트립**: 모바일 상단 바 아래에 현재 퀘스트(레벨·제목·진행률)를 항상 보여주는 `#questStrip`을 추가했다. 퀘스트 패널과 같은 렌더 경로(노드 배열)로 값을 받고, 누르면 퀘스트 패널이 열리며 패널이 열린 동안은 숨는다. 예보 스트립은 그 아래(148px)로 내려갔다. 데스크톱에서는 표시되지 않는다.
+- [x] 테스트: `board-tap.spec.js`(신규), `camera.spec.js`·`mobile.spec.js`·`build-preview.spec.js`·`hud.spec.js`에 총 9개 추가. 모바일 시각 스냅샷 3장(`world-hud-mobile-default/build`, `city-kit-mobile`)은 스트립 추가로 갱신했다 — 갱신 전 기준은 옛 HUD(`0/h`, 옛 리셋 버튼)를 담은 채 허용 오차 안에서만 통과하던 것이었다.
+
+## 44차 수정 — 도시 조명·운영 모드 제거, 모바일 상단 바 1줄 (2026-09-03)
+
+원본 요청: (1) 도시조명 낮·노을·밤 제거 + 코드정리, (2) 각 건물의 운영모드 제거 + 코드정리, (3) 모바일 퀘스트 창(스트립) 폭을 제목에 맞게 축소, (4) 모바일 상단 탭 1줄(브랜드 마크만 남기고 문구 숨김, 전력 생산·저장 상하 묶음, 에너지 값 뒤 E 제거), (5) 상단 탭의 CO₂ 세로 정렬과 모바일에서 CO₂가 안 보이던 문제.
+
+- [x] **운영 모드 제거**: `OPERATION_MODES`·`operationModeDefinition`·`availableOperationModes`(OperationDefinitions.js에는 `BATTERY_POLICIES`만 남김), 자동 수요반응(`applyAutomaticOperationModes`)과 그 전용 연구 `demandResponse`(퀴즈 4문항 포함, 연구 11→10종), 셀의 `operationMode` 필드(`normalizeCell`이 옛 저장의 키를 버림), 강화 공사의 모드 보류/복원, `decisionCounts.modeChanges/automaticModeChanges`, `OPERATION_MODE_CHANGED` 이벤트, 시설 상세의 운영 모드 컨트롤과 모드 변경 예측 모달, 연구의 `mode_paused` 상태를 모두 제거했다. 절전·증산·운영 모드를 권하던 문구는 우선순위·배터리 정책·순환냉각·연구로 바꿨다. 남은 물 절감 수단은 순환냉각 인접뿐이며 기준 캠페인은 그대로 통과한다.
+- [x] **도시 조명 제거**: `WorldLightingManager.js`·설정 패널의 GRAPHICS 블록·`WORLD_LIGHTING_MODES` 상수·`setVisualWorldHour`/`__setWorldHourForTest`/`__getWorldLightingMode` 훅과 함께, 낮/노을/밤 조명 단계표·시간별 하늘 상태(`getSkyState`/`getWorldPhase`)·밤 전용 창문 조명 레이어를 제거했다. 씬은 `WORLD_DAY_LIGHTING` 한 가지 조명으로 고정되며 밝은/어두운 테마 토글은 그대로다. 최악 드로우콜 실측 47→46(예산 49 유지, ADR-0003 갱신). `day-night-scene.spec.js`와 하늘 스냅샷 3장 삭제.
+- [x] **모바일 상단 바 1줄**: `.world-status`를 flex 한 줄로 바꾸고 브랜드 문구(`.brand-copy`)를 숨겼다. 전력 여유와 배터리 저장량은 그리드 한 칸을 상하로 나눠 쓴다(각 21px, 합쳐 44px). 전력·배터리 값의 `E` 단위를 뗐다(툴팁에는 유지). 시간 조절 버튼은 한 줄에 맞게 36px. 360px 폭에서도 한 줄로 들어간다.
+- [x] **CO₂**: `.sim-metric-icon`을 inline-flex 중앙 정렬로 바꿔 텍스트 라벨(CO₂)이 SVG 아이콘과 같은 높이에 놓이게 했고, 모바일에서 `.simulation-hud small{display:none}`이 CO₂ 라벨까지 숨기던 것을 `.sim-date small`로 좁혔다.
+- [x] **퀘스트 스트립**: 폭을 내용에 맞춤(`width:auto`, 제목 최대 52vw). 한 줄 상단 바에 맞춰 76px, 예보 스트립은 122px로 이동.
+- [x] 테스트: 모드·조명 전용 테스트 삭제, 픽스처의 `operationMode` 키 제거, 단위 기대값(`+1 E`→`+1`) 갱신, 터치 타겟 테스트는 시간 버튼 36px·전력/배터리 합산 규칙으로 조정, 모바일 스냅샷 3장 갱신.
+
+## 45차 수정 — 건물 회전, 방향별 발전량, 풍향·조차 환경 (2026-09-03)
+
+원본 요청: 건설할 때 회전 화살표 아이콘으로 건물을 돌릴 수 있게; 태양광·풍력은 방향에 따라 발전량이 달라지고 방향별 발전량을 보는 모달 추가; 태양광 최적 방향은 남쪽 고정, 풍력은 칸마다 다르게; 조력은 내륙에 못 짓고 기존 "이득 위치" 표시 대신 해안 칸의 조수간만의 차를 표시; 이 값들은 새 게임마다 무작위. 확인받은 결정: 8방위 45° 회전, 풍력 기본 방향은 북쪽(학생이 모달을 보고 직접 돌려야 최대 출력).
+
+- [x] **환경(`state.environment`)**: 새 게임마다 32비트 씨앗을 뽑아 `core/Environment.js`의 `createEnvironment(seed)`로 칸별 풍향(주풍향 ± 2칸 흔들림)과 해안 칸(최외곽 링 18칸)의 조차(2~8m, 0.1m 단위)를 만든다. 저장에 유지되며(v10 마이그레이션), `__setEnvironmentSeed(seed)`·`__getEnvironmentAt(index)` 훅으로 테스트가 고정한다.
+- [x] **방향 규칙(`DIRECTION_RULES`)**: 셀의 `rotation`(0~7, `FACILITY_DIRECTIONS` 인덱스). 태양광 최적 = 남(고정), 풍력 최적 = 그 칸의 풍향. 최적과의 편차(45° 칸 수 0~4)에 따라 출력 배율 태양광 1/.92/.72/.5/.38, 풍력 1/.9/.7/.5/.35. 기본 회전: 태양광 남, 풍력 북. 동부 태양광·서부 풍황 구역 보너스는 그대로 곱해진다.
+- [x] **조력(`TIDAL_RULES`)**: 해안 칸에만 건설(`coastal_required`), 옛 3곳 보너스 입지(`TIDAL_SITE_COORDINATES`) 삭제. 출력 배율 = 조차/5m(0.5~1.5). 미리보기·시설 상세에 `조차 6.3m · 출력 126%`를 표시한다.
+- [x] **건설 위젯**: O/X 옆에 회전(`rotate-cw`)과 방향(`compass`, 태양광·풍력만) 버튼. 회전은 계획 항목의 `rotation`을 45°씩 돌리고(보드 포커스 시 `r` 키도 가능) 고스트가 즉시 돌아간다. 방향 모달은 8방위 각각의 출력 %와 최적 표시, 풍력은 "이 칸의 바람" 안내, 클릭하면 계획에 반영. 완공 후에는 방향을 바꾸지 않는다. 건설 후 예상 바에 `방향 남 · 출력 100%` / `조차 …`가 붙는다.
+- [x] **계층 정리**: 육각 기하(`core/HexGrid.js`)와 환경 생성(`core/Environment.js`)을 core로 옮기고 systems 모듈은 재수출만 한다(core→systems import 0건).
+- [x] 테스트: `unit/environment.spec.js`, `unit/state-v10.spec.js`, `direction.spec.js`(7) 신규; 기준 캠페인·퀘스트 가능성·구역 테스트는 씨앗 20400134로 고정하고 풍력은 최적 방향으로 짓도록 갱신. 시각 스냅샷은 허용 오차 안(태양광 기본 남향 180° 회전이 판 배열 가장자리만 바꿈)이라 갱신하지 않았다.

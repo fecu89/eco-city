@@ -33,9 +33,7 @@ export function normalizeConstructionProject(cell, rawProject) {
     && elapsedDays >= 0
     && Number.isInteger(durationDays)
     && durationDays > 0;
-  if (!commonValid) {
-    return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
-  }
+  if (!commonValid) return { valid: false, kind };
 
   if (kind === 'build') {
     const expectedDuration = constructionDurationDays(cell?.type);
@@ -61,9 +59,7 @@ export function normalizeConstructionProject(cell, rawProject) {
     && toLevel === fromLevel + 1
     && toLevel <= (FACILITIES[cell?.type]?.maxLevel || 0)
     && durationDays === expectedDuration;
-  if (!validUpgrade) {
-    return { valid: false, kind, restoreOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal' };
-  }
+  if (!validUpgrade) return { valid: false, kind };
   return {
     valid: true,
     complete: elapsedDays >= durationDays,
@@ -74,7 +70,6 @@ export function normalizeConstructionProject(cell, rawProject) {
       elapsedDays: Math.min(elapsedDays, durationDays),
       durationDays,
       paidCost: roundCredits(paidCost),
-      suspendedOperationMode: rawProject?.suspendedOperationMode || cell?.operationMode || 'normal',
     },
   };
 }

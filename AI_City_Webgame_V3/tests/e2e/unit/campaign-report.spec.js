@@ -28,8 +28,7 @@ function operatingState() {
     factoryIncome: 20, peakDemand: 24, peakAvailableSupply: 28,
   };
   gameState.decisionCounts = {
-    modeChanges: 2, priorityChanges: 1, researchPauses: 1, emergencySupport: 0,
-    automaticModeChanges: 2, batteryPolicyChanges: 1,
+    priorityChanges: 3, researchPauses: 1, emergencySupport: 0, batteryPolicyChanges: 1,
   };
 }
 

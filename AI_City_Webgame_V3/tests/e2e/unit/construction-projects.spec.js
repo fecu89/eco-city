@@ -53,14 +53,12 @@ test('advancing completes every due project before returning transitions', () =>
   state.grid[0] = {
     type: 'factory',
     level: 1,
-    operationMode: 'normal',
     project: { ...createBuildProject({ type: 'factory', paidCost: 4 }), elapsedDays: 7 },
   };
   state.grid[1] = {
     type: 'thermal',
     level: 1,
-    operationMode: 'normal',
-    project: { ...createUpgradeProject({ cell: { type: 'thermal', level: 1, operationMode: 'eco' }, paidCost: 5 }), elapsedDays: 7 },
+    project: { ...createUpgradeProject({ cell: { type: 'thermal', level: 1 }, paidCost: 5 }), elapsedDays: 7 },
   };
 
   const result = advanceConstructionProjects(state);
@@ -70,7 +68,7 @@ test('advancing completes every due project before returning transitions', () =>
     expect.objectContaining({ index: 1, kind: 'upgrade', type: 'thermal', level: 2 }),
   ]);
   expect(state.grid[0].project).toBeNull();
-  expect(state.grid[1]).toMatchObject({ level: 2, operationMode: 'eco', project: null });
+  expect(state.grid[1]).toMatchObject({ level: 2, project: null });
 });
 
 test('cancelling build and upgrade projects applies distinct restoration rules', () => {
@@ -79,14 +77,12 @@ test('cancelling build and upgrade projects applies distinct restoration rules',
   state.grid[0] = {
     type: 'residential',
     level: 1,
-    operationMode: 'normal',
     project: { ...createBuildProject({ type: 'residential', paidCost: 2 }), elapsedDays: 1 },
   };
   state.grid[1] = {
     type: 'factory',
     level: 1,
-    operationMode: 'normal',
-    project: { ...createUpgradeProject({ cell: { type: 'factory', level: 1, operationMode: 'boost' }, paidCost: 4 }), elapsedDays: 2 },
+    project: { ...createUpgradeProject({ cell: { type: 'factory', level: 1 }, paidCost: 4 }), elapsedDays: 2 },
   };
 
   expect(cancelConstructionProject(state, 0)).toMatchObject({ ok: true, kind: 'build', refund: 1.6 });
@@ -94,7 +90,7 @@ test('cancelling build and upgrade projects applies distinct restoration rules',
   expect(state.credits).toBe(2.6);
 
   expect(cancelConstructionProject(state, 1)).toMatchObject({ ok: true, kind: 'upgrade', refund: 2.6 });
-  expect(state.grid[1]).toMatchObject({ level: 1, operationMode: 'boost', project: null });
+  expect(state.grid[1]).toMatchObject({ level: 1, project: null });
   expect(state.credits).toBe(5.2);
 });
 

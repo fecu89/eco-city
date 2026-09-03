@@ -44,7 +44,7 @@ test('v7 save preserves its displayed date and real remaining durations', () => 
   // v7 시(hour) 틱은 v8 일(day) 틱으로 1:1 이름만 바뀌었다. 공사·연구·위기 카운터가 모두
   // 1:1로 옮겨지므로 경과 시간만 24로 나누면 저장된 도시의 날짜만 어긋난다.
   expect(migrated).toMatchObject({
-    v: 9,
+    v: 10,
     elapsedGameDays: 120,
     workforceRebalanceGraceDays: WORKFORCE_RULES.REBALANCE_GRACE_DAYS,
   });
@@ -63,7 +63,7 @@ test('v7 post-tutorial save starts quest seven without losing its city', () => {
     unlockedFacilities: ['residential', 'nuclear'],
   }));
 
-  expect(migrated).toMatchObject({ v: 9, questIndex: 7, credits: 31 });
+  expect(migrated).toMatchObject({ v: 10, questIndex: 7, credits: 31 });
   expect(migrated.grid[0]).toMatchObject({ type: 'nuclear', level: 2 });
   expect(migrated.climateCampaign).toMatchObject({ status: 'locked', completedEventTypes: [] });
 });
@@ -74,7 +74,7 @@ test('completed v7 campaign remains complete and fresh v8 state uses daily field
 
   const fresh = new GameState();
   const serialized = fresh.serialize();
-  expect(SAVE_VERSION).toBe(9);
+  expect(SAVE_VERSION).toBe(10);
   expect(serialized.elapsedGameDays).toBe(0);
   expect(serialized.simulationTotals.days).toBe(0);
   expect(serialized.research.techLevels.green).toBe(1);

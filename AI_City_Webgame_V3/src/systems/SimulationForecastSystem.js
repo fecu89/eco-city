@@ -2,6 +2,7 @@ import { GameState } from '../core/GameState.js';
 import { eventBus } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
 import { createBuildProject, createUpgradeProject } from './ConstructionProjectSystem.js';
+import { normalizeRotation } from './EnvironmentSystem.js';
 
 export function cloneSimulationState(state) {
   const clone = new GameState();
@@ -49,7 +50,8 @@ function placePlannedProject(state, planned) {
   state.grid[index] = {
     type,
     level: 1,
-    operationMode: 'normal',
+    // 예보는 계획에서 고른 방향 그대로 지어진 도시를 돌려봐야 한다.
+    rotation: normalizeRotation(planned.rotation, type),
     priority: ['residential', 'cooling'].includes(type) ? 'essential' : 'normal',
     ...(type === 'battery' ? {
       batteryPolicy: 'auto',

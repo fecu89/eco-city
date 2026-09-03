@@ -9,7 +9,7 @@ const coords = createHexCoordinates(2);
 function gridOf(entries) {
   const grid = Array.from({ length: coords.length }, () => null);
   Object.entries(entries).forEach(([index, cell]) => {
-    grid[Number(index)] = { level: 1, priority: 'normal', operationMode: 'normal', ...cell };
+    grid[Number(index)] = { level: 1, priority: 'normal', ...cell };
   });
   return grid;
 }

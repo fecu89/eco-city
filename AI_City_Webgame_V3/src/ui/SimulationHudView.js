@@ -57,8 +57,8 @@ export function renderSimulationHud() {
   const used = summary?.used ?? summary?.jobs ?? 0;
   els.net.textContent = `${creditPrefix}${formatCredits(Math.abs(net), { suffix: false, compact: true })}/일`;
   els.carbonRate.textContent = `${compactMetric(dailyCarbon)}/일`;
-  els.power.textContent = `${signedMetric(powerMargin)} E`;
-  els.battery.textContent = `${compactMetric(batteryStored)} E`;
+  els.power.textContent = signedMetric(powerMargin);
+  els.battery.textContent = compactMetric(batteryStored);
   els.water.textContent = `${compactMetric(dailyWater)}/일`;
   const laborText = els.labor.querySelector('span') || els.labor;
   laborText.textContent = `사용 인력 ${compactMetric(used)} / 전체 인구 ${compactMetric(capacity)}`;

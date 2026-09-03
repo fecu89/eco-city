@@ -12,13 +12,12 @@ function buildCell(type, paidCost = 1) {
   return {
     type,
     level: 1,
-    operationMode: 'normal',
     project: createBuildProject({ type, paidCost }),
   };
 }
 
-function upgradeCell(type, operationMode = 'normal') {
-  const cell = { type, level: 1, operationMode };
+function upgradeCell(type) {
+  const cell = { type, level: 1 };
   cell.project = createUpgradeProject({ cell, paidCost: 4 });
   return cell;
 }
@@ -39,7 +38,7 @@ test('new construction contributes no facility stats, upkeep, or workforce', () 
 });
 
 test('general upgrades reduce variable operation but retain fixed upkeep and workforce', () => {
-  const stats = effectiveFacilityStats(upgradeCell('thermal', 'boost'));
+  const stats = effectiveFacilityStats(upgradeCell('thermal'));
 
   expect(stats.supply).toBeCloseTo(9.1, 8);
   expect(stats.carbon).toBeCloseTo(5.6, 8);
@@ -89,7 +88,7 @@ test('build sites do not generate power or create economy count and health effec
 
 test('an upgrading battery retains stored energy and capacity but halves throughput', () => {
   const grid = Array(19).fill(null);
-  grid[0] = { type: 'thermal', level: 1, operationMode: 'normal' };
+  grid[0] = { type: 'thermal', level: 1 };
   grid[1] = {
     ...upgradeCell('battery'),
     batteryStoredLowCarbon: 2,
@@ -125,7 +124,7 @@ test('a legacy research job in an upgrading data center remains assigned but doe
 
 test('an upgrading cooling facility provides only its construction-stage cooling effect', () => {
   const grid = Array(19).fill(null);
-  grid[0] = { type: 'data', level: 1, operationMode: 'normal' };
+  grid[0] = { type: 'data', level: 1 };
   grid[1] = upgradeCell('cooling');
 
   const environment = calculateEnvironmentalOperations({

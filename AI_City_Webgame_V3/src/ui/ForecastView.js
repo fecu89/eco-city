@@ -50,7 +50,7 @@ export function renderForecast() {
     const remaining = Math.max(0, phase.durationDays - gameState.stressTest.phaseDay);
     setText(small, `최종 테스트 · ${gameState.stressTest.phaseIndex + 1}/${STRESS_PHASES.length}`);
     setText(label, `${phase.label} · ${remaining}일 남음`);
-    root.title = '운영 모드·우선순위·배터리 정책을 조정할 수 있습니다.';
+    root.title = '전력 우선순위·배터리 정책·연구·건설을 조정할 수 있습니다.';
     setForecastIcon(phase.icon);
     return;
   }

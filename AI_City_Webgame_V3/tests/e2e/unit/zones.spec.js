@@ -1,7 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { FACILITIES } from '../../../src/core/Constants.js';
+import { FACILITIES, TIDAL_RULES } from '../../../src/core/Constants.js';
 import { GameState } from '../../../src/core/GameState.js';
 import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
+import {
+  createEnvironment,
+  isCoastalCell,
+  tidalFactor,
+  tidalSiteInfo,
+} from '../../../src/systems/EnvironmentSystem.js';
 import {
   cellZoneTrait,
   constructionCostForCell,
@@ -49,7 +55,7 @@ test('zone traits alter matching output and construction costs without affecting
   expect(solarIndex).toBeDefined();
   expect(residentialIndex).toBeDefined();
 
-  const solar = { type: 'solar', level: 1, operationMode: 'normal' };
+  const solar = { type: 'solar', level: 1 };
   const solarStats = effectiveFacilityStats(solar, zoneModifierForCell(state, solarIndex, 'solar'));
   expect(solarStats.supply).toBeCloseTo(FACILITIES.solar.supply * 1.2);
   expect(constructionCostForCell(state, residentialIndex, 'factory')).toBeCloseTo(FACILITIES.factory.cost * 1.2);
@@ -59,7 +65,7 @@ test('zone traits alter matching output and construction costs without affecting
   const industrialIndex = groups.west.find((index) => cellZoneTrait(state, index) === 'industrial');
   const windIndex = groups.west.find((index) => cellZoneTrait(state, index) === 'wind');
   expect(constructionCostForCell(state, industrialIndex, 'factory')).toBeCloseTo(FACILITIES.factory.cost * 0.85);
-  const wind = { type: 'wind', level: 1, operationMode: 'normal' };
+  const wind = { type: 'wind', level: 1 };
   expect(effectiveFacilityStats(wind, zoneModifierForCell(state, windIndex, 'wind')).supply)
     .toBeCloseTo(FACILITIES.wind.supply * 1.2);
 });
@@ -92,7 +98,7 @@ test('each expansion side exposes a benefit and a competing placement consequenc
     .toBeGreaterThan(0);
 });
 
-test('renewable placement preview uses real solar wind and three tidal site bonuses', () => {
+test('renewable placement preview keeps the solar and wind zone bonuses and drops the tidal sites', () => {
   const state = new GameState();
   expandBoard(state, 'east');
   expandBoard(state, 'west');
@@ -110,19 +116,53 @@ test('renewable placement preview uses real solar wind and three tidal site bonu
 
   expect(solar.siteBenefits).toBeInstanceOf(Map);
   expect(wind.siteBenefits).toBeInstanceOf(Map);
-  expect(tidal.siteBenefits).toBeInstanceOf(Map);
   expect([...solar.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(5).fill('solar'));
   expect([...wind.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(5).fill('wind'));
-  expect([...tidal.siteBenefits.values()].map(({ type }) => type)).toEqual(Array(3).fill('tidal'));
+  // 조력 우수 입지는 사라졌다. 출력은 이제 해안 칸마다 다른 조수간만의 차가 정한다.
+  expect(tidal.siteBenefits.size).toBe(0);
+});
 
-  const tidalSites = [...tidal.siteBenefits.keys()];
-  tidalSites.forEach((index) => {
-    expect(zoneModifierForCell(state, index, 'tidal')).toMatchObject({ supply: 1.2 });
-    expect(validatePlacement(state, 'tidal', index)).toMatchObject({ ok: true });
+test('조력은 해안 칸에만 지을 수 있고 내륙은 이유를 밝혀 막는다', () => {
+  const state = new GameState();
+  expandBoard(state, 'east');
+  expandBoard(state, 'west');
+  state.environment = createEnvironment(20400101);
+  state.unlockedFacilities.add('tidal');
+  state.research.techLevels.tidal = 1;
+  state.questIndex = 10;
+  state.credits = 20;
+  const coords = createHexCoordinates(3);
+
+  const inland = coords.map((_, index) => index).find((index) => !isCoastalCell(index));
+  expect(validatePlacement(state, 'tidal', inland)).toMatchObject({
+    ok: false,
+    reason: 'coastal_required',
+    message: '조력발전은 바다와 맞닿은 해안 칸에만 지을 수 있습니다.',
   });
-  const ordinaryCoast = expansionGroups(coords).east
-    .concat(expansionGroups(coords).west)
-    .find((index) => !tidal.siteBenefits.has(index));
-  expect(validatePlacement(state, 'tidal', ordinaryCoast)).toMatchObject({ ok: true });
-  expect(zoneModifierForCell(state, ordinaryCoast, 'tidal')).toEqual({});
+
+  const coastal = coords.map((_, index) => index).filter(isCoastalCell);
+  expect(coastal).toHaveLength(18);
+  coastal.forEach((index) => {
+    expect(validatePlacement(state, 'tidal', index), `cell ${index}`).toMatchObject({ ok: true });
+    expect(zoneModifierForCell(state, index, 'tidal')).toEqual({});
+  });
+});
+
+test('해안 입지 안내는 그 칸의 조차와 출력 배율을 알려준다', () => {
+  const state = new GameState();
+  expandBoard(state, 'east');
+  expandBoard(state, 'west');
+  state.environment = createEnvironment(20400101);
+  const coords = createHexCoordinates(3);
+  const coastal = coords.map((_, index) => index).filter(isCoastalCell);
+
+  coastal.forEach((index) => {
+    const info = tidalSiteInfo(state, index);
+    expect(info.range).toBe(state.environment.tidalRanges[index]);
+    expect(info.factor).toBeCloseTo(tidalFactor(state, index), 10);
+    expect(info.label).toBe(TIDAL_RULES.LABEL(info.range, info.factor));
+  });
+  // 씨앗 20400101에서 19번 칸은 조차 2.6m — 기준(5m)의 절반이라 출력도 52%다.
+  expect(tidalSiteInfo(state, 19)).toMatchObject({ range: 2.6, factor: 0.52, label: '조차 2.6m · 출력 52%' });
+  expect(tidalSiteInfo(state, 0)).toBeNull();
 });

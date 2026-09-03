@@ -5,8 +5,8 @@ test('24-day preparation keeps 4x play running and shows the strip only while th
     window.__setTimeScale(4);
     const state = window.__GAME_STATE__;
     state.progression.chapter = 3;
-    state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
-    state.grid[1] = { type: 'solar', level: 1, priority: 'normal', operationMode: 'normal' };
+    state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+    state.grid[1] = { type: 'solar', level: 1, priority: 'normal' };
     state.events.schedule = [{ id: 'heat-ui', type: 'heatwave', announceAt: 0, startAt: 24, endAt: 32 }];
     state.elapsedGameDays = 0;
     window.__settleSimulationDay();

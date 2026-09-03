@@ -24,7 +24,7 @@ test('two data centers run independent research without pausing the city', async
   await expect(page.locator('#upgradeBtn')).toBeVisible();
   await expect(page.locator('.research-panel')).toContainText('데이터센터 #0 연구');
   await expect(page.locator('.facility-console-scroll')).toHaveCSS('overflow-y', 'auto');
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(10);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const solarCard = page.locator('[data-research-start="solar2"]');
   await expect(solarCard.locator('svg')).toHaveCount(1);
@@ -99,31 +99,6 @@ test('an underpowered research center is emphasized on both the city and researc
   expect(await page.evaluate(() => window.__getCellVisual(0).researchWarning)).toBe(false);
 });
 
-for (const viewport of [
-  { name: 'desktop', width: 1280, height: 720 },
-  { name: 'mobile', width: 390, height: 844 },
-]) test(`${viewport.name} level-two data center previews and confirms an operation mode`, async ({ gamePage: page }) => {
-  await page.setViewportSize({ width: viewport.width, height: viewport.height });
-  await page.evaluate(() => {
-    window.__setTimeScale(0);
-    const state = window.__GAME_STATE__;
-    state.grid[0] = { type: 'data', level: 2, priority: 'normal', operationMode: 'normal' };
-    window.__refreshGameForTest();
-    window.__clickCell(0);
-  });
-
-  const focused = page.locator('[data-operation-mode="research"]');
-  await expect(focused).toBeVisible();
-  await focused.click();
-  await expect(page.locator('#modeChangeForecast')).toContainText('9.9 → 14.9 E/일');
-  expect(await page.evaluate(() => window.__GAME_STATE__.grid[0].operationMode)).toBe('normal');
-  await page.locator('#confirmOperationMode').click();
-  expect(await page.evaluate(() => ({
-    mode: window.__GAME_STATE__.grid[0].operationMode,
-    decisions: window.__GAME_STATE__.decisionCounts.modeChanges,
-  }))).toEqual({ mode: 'research', decisions: 1 });
-});
-
 test('research acceleration opens its assigned four-question quiz and affects only that job', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(0);
@@ -191,16 +166,16 @@ test('research quiz has a top-right close button that exits without consuming th
   });
 });
 
-test('research completion alert shows the localized title instead of the internal demandResponse id', async ({ gamePage: page }) => {
+test('research completion alert shows the localized title instead of the internal research id', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__EVENT_BUS__.emit(window.__EVENTS__.RESEARCH_COMPLETED, {
-      researchId: 'demandResponse',
+      researchId: 'smartGrid',
     });
   });
 
   const alert = page.locator('.toast').filter({ hasText: '연구 완료' }).last();
-  await expect(alert).toContainText('수요 반응 시스템');
-  await expect(alert).not.toContainText('demandResponse');
+  await expect(alert).toContainText('스마트 전력망');
+  await expect(alert).not.toContainText('smartGrid');
 });
 
 for (const viewport of [
@@ -252,7 +227,7 @@ for (const viewport of [
     window.__clickCell(0);
   });
 
-  await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
+  await expect(page.locator('.research-grid > .research-card')).toHaveCount(10);
   expect(await page.locator('.research-grid').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBe(3);
   const gridBox = await page.locator('.research-grid').boundingBox();
   const modalBox = await page.locator('#modalCard').boundingBox();
@@ -310,7 +285,7 @@ test('the catalog shows a completed empty state after every research is finished
     state.grid[0] = { type: 'data', level: 3, priority: 'normal' };
     Object.keys(state.research.jobs).forEach((id) => delete state.research.jobs[id]);
     [
-      'solar2', 'wind2', 'battery2', 'smartGrid', 'demandResponse', 'tidal1',
+      'solar2', 'wind2', 'battery2', 'smartGrid', 'tidal1',
       'green2', 'green3', 'solar3', 'wind3', 'battery3',
     ].forEach((id) => state.research.completedIds.add(id));
     window.__refreshGameForTest();

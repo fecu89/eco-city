@@ -107,19 +107,4 @@ test.describe('3D city motion language', () => {
     expect(stats.birdPoolSize).toBe(3);
     expect(stats.ambientInstances).toBeGreaterThanOrEqual(5);
   });
-
-  test('fixed graphics phase changes update lighting without allocating scene resources', async ({ gamePage: page }) => {
-    const before = await page.evaluate(() => window.__getCityRendererStats());
-    await page.evaluate(() => window.__setWorldHourForTest(17));
-    await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'dusk');
-    const dusk = await page.evaluate(() => window.__getCityRendererStats());
-    expect(dusk.resourceRevision).toBe(before.resourceRevision);
-    expect(dusk.sunIntensity).toBeLessThan(before.sunIntensity);
-
-    await page.evaluate(() => window.__setWorldHourForTest(23));
-    await page.waitForFunction(() => window.__getCityRendererStats().worldPhase === 'night');
-    const night = await page.evaluate(() => window.__getCityRendererStats());
-    expect(night.resourceRevision).toBe(before.resourceRevision);
-    expect(night.sunIntensity).toBeLessThan(dusk.sunIntensity);
-  });
 });

@@ -21,8 +21,7 @@ function operationSnapshot(state, metrics) {
   const averageLowCarbonPercent = round1((totals.lowCarbonPercent || 0) / days);
   const peakDemand = totals.peakDemand || metrics.demand || 0;
   const peakAvailableSupply = totals.peakAvailableSupply || metrics.reliableSupply || 0;
-  const playerDecisionCount = (state.decisionCounts.modeChanges || 0)
-    + (state.decisionCounts.priorityChanges || 0)
+  const playerDecisionCount = (state.decisionCounts.priorityChanges || 0)
     + (state.decisionCounts.researchPauses || 0)
     + (state.decisionCounts.batteryPolicyChanges || 0);
   return {

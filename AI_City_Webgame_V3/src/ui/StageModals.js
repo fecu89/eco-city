@@ -1,5 +1,5 @@
 import anime from 'animejs';
-import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, RESEARCH_RULES, STRESS_TEST_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { CARBON_CRISIS, CITY_FAILURE_RULES, DIRECTION_COPY, DIRECTION_RULES, FACILITIES, FACILITY_DIRECTIONS, RESEARCH_RULES, STRESS_TEST_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { setModal, closeModal, getModalState, MODAL_PRIORITY, $modal, $$modal } from './Modal.js';
@@ -25,7 +25,7 @@ import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import * as Report from '../systems/ReportSystem.js';
 import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
 import { OPERATIONAL_PAUSE_IDS } from '../systems/CityFailureSystem.js';
-import { BATTERY_POLICIES, OPERATION_MODES, availableOperationModes } from '../core/OperationDefinitions.js';
+import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
 import { EXPANSION_SIDES, ZONE_TRAITS } from '../core/ZoneDefinitions.js';
 import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
 import { startStressTest } from '../systems/StressTestSystem.js';
@@ -33,9 +33,7 @@ import {
   buildCityModifierContext,
   availableBatteryPolicies,
   facilityModifierAt,
-  previewFacilityOperationMode,
   setFacilityPriority,
-  setFacilityOperationMode,
   setBatteryPolicy,
 } from '../systems/CityModifierSystem.js';
 import {
@@ -46,6 +44,16 @@ import {
   projectStage,
 } from '../systems/ConstructionProjectSystem.js';
 import { generationAvailabilityMultiplier } from '../systems/PowerNetworkSystem.js';
+import { setPlannedFacilityRotation } from '../systems/ConstructionPlanSystem.js';
+import {
+  defaultRotationFor,
+  directionFactor,
+  directionOutputTable,
+  normalizeRotation,
+  optimalRotationFor,
+  tidalSiteInfo,
+  windDirectionAt,
+} from '../systems/EnvironmentSystem.js';
 
 let refreshAll = () => {};
 let inspectorIndex = null;
@@ -123,6 +131,45 @@ export function openExpansionChoiceModal() {
   }));
 }
 
+// 건설 계획 중인 태양광·풍력의 8방위 발전량 표. 방향을 누르면 그 방향이 계획에 적히고
+// 창이 닫힌다 — 완공한 뒤에는 방향을 바꿀 수 없으므로 이 창은 계획 단계에만 열린다.
+export function openDirectionModal(index, type) {
+  const facility = FACILITIES[type];
+  if (!facility || !DIRECTION_RULES.DIRECTIONAL_TYPES.includes(type)) return;
+  const planned = gameState.constructionPlan.find((item) => item.index === index);
+  const current = normalizeRotation(planned ? planned.rotation : defaultRotationFor(type), type);
+  const hint = type === 'wind'
+    ? DIRECTION_COPY.WIND_HINT(FACILITY_DIRECTIONS[windDirectionAt(gameState, index)].label)
+    : DIRECTION_COPY.SOLAR_HINT;
+  const options = directionOutputTable(gameState, type, index).map((row) => {
+    const active = row.rotation === current;
+    return `<button type="button" class="direction-option${row.best ? ' best' : ''}${active ? ' active' : ''}"
+      data-direction="${row.id}" data-best="${row.best}" aria-pressed="${active}">
+      <strong>${escapeHtml(row.label)}</strong><span>${escapeHtml(DIRECTION_COPY.OUTPUT(row.factor))}</span>
+      ${row.best ? `<em>${DIRECTION_COPY.BEST_BADGE}</em>` : ''}
+    </button>`;
+  }).join('');
+
+  setModal(`
+    <div class="modal-head"><div><span class="eyebrow">${DIRECTION_COPY.MODAL_EYEBROW}</span><h2>${escapeHtml(DIRECTION_COPY.MODAL_TITLE(facility.name))}</h2></div><button class="icon-btn close-modal" aria-label="방향 창 닫기"><i data-lucide="x"></i></button></div>
+    <p class="direction-intro">${escapeHtml(DIRECTION_COPY.MODAL_INTRO)}</p>
+    <div class="direction-rose" role="group" aria-label="${DIRECTION_COPY.INFO_LABEL}">
+      ${options}
+      <p class="direction-rose-center"><i data-lucide="${DIRECTION_COPY.INFO_ICON}" aria-hidden="true"></i><span>${escapeHtml(hint)}</span></p>
+    </div>
+    <div class="modal-actions"><button class="btn secondary close-modal" type="button">닫기</button></div>
+  `, { id: 'facility-direction', pausesSimulation: false });
+  $$modal('.close-modal').forEach((button) => button.addEventListener('click', closeModal));
+  $$modal('[data-direction]').forEach((button) => button.addEventListener('click', () => {
+    const rotation = FACILITY_DIRECTIONS.findIndex(({ id }) => id === button.dataset.direction);
+    const assessment = setPlannedFacilityRotation(gameState, index, rotation);
+    closeModal();
+    if (assessment.rotation == null) return;
+    eventBus.emit(Events.BUILD_PLAN_CHANGED, assessment);
+    refreshAll();
+  }));
+}
+
 function refreshOpenInspector(tickProgress = 0) {
   if (inspectorIndex == null || getModalState()?.id !== 'facility') return;
   const live = gameState.lastTickSummary;
@@ -187,7 +234,8 @@ export function openHelpModal() {
     <div class="callout"><strong>시설 허가</strong><p>퀘스트마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 폭염 경보 퀘스트 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
     <div class="callout"><strong>인구와 필요 인력</strong><p>주거지는 전체 인구를 늘리고, 발전소·공장·데이터센터 같은 운영 시설은 인력을 사용합니다. 계획 전체의 필요 인력이 인구를 넘으면 건설을 확정할 수 없습니다.</p></div>
     <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_DAYS.CAPSTONE / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 4문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
-    <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값이며, 조력발전은 섬의 현재 최외곽에만 배치할 수 있습니다.</p></div>
+    <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값입니다. 조력발전은 바다와 맞닿은 해안 칸에만 지을 수 있고, 그 칸의 조수간만의 차가 클수록 출력이 큽니다.</p></div>
+    <div class="callout"><strong>시설 방향</strong><p>태양광과 풍력은 건설할 때 45° 8방위 중 하나를 고릅니다. 태양광은 남향이 가장 좋고, 풍력은 칸마다 다른 바람이 부는 쪽을 향해야 합니다. 방향은 완공한 뒤에는 바꿀 수 없습니다.</p></div>
   `);
   $modal('.close-modal').addEventListener('click', closeModal);
 }
@@ -221,7 +269,6 @@ function metricCauseData(metric) {
   const margin = round1((summary.deliveredPower || 0) - (summary.demand || 0));
   const activeResearchCount = Object.values(gameState.research?.jobs || {}).filter((job) => (
     Number.isInteger(job.dataCenterIndex)
-    && gameState.grid[job.dataCenterIndex]?.operationMode !== 'eco'
   )).length;
   const titles = {
     credit: '크레딧 적자 원인',
@@ -241,13 +288,13 @@ function metricCauseData(metric) {
     const activeEvent = pressure?.type ? CITY_EVENTS[pressure.type] : null;
     if (activeEvent) data.causes.push(`${activeEvent.label} · ${activeEvent.description}`);
     groupedFacilityValues(summary.facilityPower, 'demand').forEach((label) => data.causes.push(`${label}E 수요`));
-    data.action = '시설 모드를 절약으로 바꾸거나, 필수시설 우선순위·배터리 정책·발전 여유를 조정하세요.';
+    data.action = '비필수 시설의 전력 우선순위를 절약으로 낮추고, 필수시설 우선순위·배터리 정책·발전 여유를 조정하세요.';
   } else if (metric === 'credit') {
     data.current = `일일 ${gameState.lastSettlementDelta >= 0 ? '+' : ''}${formatCredits(gameState.lastSettlementDelta)}`;
     groupedFacilityValues(summary.facilityEconomy, 'upkeep').forEach((label) => data.causes.push(`${label} 💰/일 유지비`));
     if (summary.expansionUpkeep > 0) data.causes.push(`확장 대지 ${round1(summary.expansionUpkeep)} 💰/일 유지비`);
     if (summary.health > 0) data.causes.push(`오염 건강비 ${round1(summary.health)} 💰/일`);
-    data.action = '공장 운영 모드와 불필요한 유지비를 조정하고, 전력이 끊긴 수익 시설을 먼저 복구하세요.';
+    data.action = '불필요한 유지비와 확장 대지를 정리하고, 전력이 끊긴 수익 시설을 먼저 복구하세요.';
   } else if (metric === 'battery') {
     data.current = `현재 저장 ${round1(summary.batteryStored || 0)}E`;
     const operations = Object.values(summary.batteryOperations || {});
@@ -259,14 +306,14 @@ function metricCauseData(metric) {
   } else if (metric === 'carbon') {
     data.current = `현재 ${round1(summary.dailyCarbon || 0)} CO₂/일 · 안전선 ${CARBON_CRISIS.SAFE_DAILY}`;
     groupedFacilityValues(summary.facilityEnvironment, 'carbon').forEach((label) => data.causes.push(`${label} CO₂/일`));
-    data.action = '공장을 친환경 모드로 전환하거나 저탄소 발전 비중과 녹지 완충을 늘리세요.';
+    data.action = '화력 의존을 줄이고 저탄소 발전 비중과 녹지 완충을 늘리세요.';
   } else if (metric === 'water') {
     const hasLimit = summary.waterLimit != null && Number.isFinite(Number(summary.waterLimit));
     const limit = hasLimit ? Number(summary.waterLimit) : null;
     data.current = `현재 ${round1(summary.dailyWater || 0)}/일${limit != null ? ` · 한도 ${round1(limit)}/일` : ''}`;
     groupedFacilityValues(summary.facilityEnvironment, 'water').forEach((label) => data.causes.push(`${label}/일`));
     if (pressure?.type === 'drought') data.causes.push('가뭄 예보 · 물 사용량을 예보 직전 수준 이하로 유지해야 합니다');
-    data.action = '데이터센터·발전소 가까이에 냉각순환 시설을 배치하고 운영 모드를 조정하세요.';
+    data.action = '데이터센터·발전소 가까이에 순환냉각 시설을 배치하고 물 소비가 큰 시설의 강화를 미루세요.';
   }
   if (!data.causes.length) data.causes.push('직전 정산에서 추가 원인이 기록되지 않았습니다. 다음 일일 정산 후 다시 확인하세요.');
   return data;
@@ -282,6 +329,24 @@ export function openHudMetricCausesModal(metric) {
     <div class="modal-actions"><button class="btn primary close-modal" type="button">확인</button></div>
   `, { id: 'hud-metric-causes', pausesSimulation: false });
   $$modal('.close-modal').forEach((button) => button.addEventListener('click', closeModal));
+}
+
+// 완공한 시설이 이 칸의 자연 조건에서 실제로 얼마나 내는지. 방향은 건설할 때 정해져
+// 바꿀 수 없으므로 여기서는 읽기만 한다(태양광·풍력은 방향, 조력은 조차).
+function siteNoteMarkup(index, cell) {
+  if (DIRECTION_RULES.DIRECTIONAL_TYPES.includes(cell.type)) {
+    const rotation = normalizeRotation(cell.rotation, cell.type);
+    const best = optimalRotationFor(gameState, cell.type, index) ?? rotation;
+    const text = DIRECTION_COPY.INSPECTOR(
+      FACILITY_DIRECTIONS[rotation].label,
+      directionFactor(gameState, cell.type, index, rotation),
+      FACILITY_DIRECTIONS[best].label,
+    );
+    return `<p class="facility-site-note" id="facilitySiteNote"><i data-lucide="${DIRECTION_COPY.INFO_ICON}" aria-hidden="true"></i><span>${escapeHtml(text)}</span></p>`;
+  }
+  const tidal = cell.type === 'tidal' ? tidalSiteInfo(gameState, index) : null;
+  if (!tidal) return '';
+  return `<p class="facility-site-note" id="facilitySiteNote"><i data-lucide="waves" aria-hidden="true"></i><span>${escapeHtml(tidal.label)}</span></p>`;
 }
 
 export function openFacilityInspectorModal(index) {
@@ -321,30 +386,13 @@ export function openFacilityInspectorModal(index) {
   const priorityMarkup = priorityUnlocked ? `<div class="facility-priority"><strong>전력 공급 우선순위</strong><div class="segmented-control" id="facilityPriorityControls">
     ${[['essential', '필수'], ['normal', '일반'], ['saving', '절약']].map(([value, label]) => `<button type="button" data-priority="${value}" class="${(cell.priority || 'normal') === value ? 'active' : ''}">${label}</button>`).join('')}
   </div></div>` : '';
-  const supportedModes = OPERATION_MODES[cell.type];
-  const availableModes = new Set(availableOperationModes(cell, gameState).map(({ id }) => id));
-  const selectedMode = cell.operationMode || 'normal';
-  const selectedModeLabel = selectedMode === 'auto'
-    ? `${supportedModes?.auto?.label || '자동'} · ${supportedModes?.[cell.automaticOperationMode || 'normal']?.label || '표준'}`
-    : supportedModes?.[selectedMode]?.label || '표준';
-  const operationModeMarkup = supportedModes ? `
-    <section class="facility-mode-control" aria-label="시설 운영 모드">
-      <div class="facility-mode-head"><div><span>OPERATION MODE</span><strong>운영 모드</strong></div><b>${escapeHtml(selectedModeLabel)}</b></div>
-      <div class="segmented-control facility-mode-options" id="facilityModeControls">
-        ${Object.values(supportedModes).map((definition) => {
-          const unlocked = availableModes.has(definition.id);
-          return `<button type="button" data-operation-mode="${escapeHtml(definition.id)}" class="${(cell.operationMode || 'normal') === definition.id ? 'active' : ''}" ${unlocked ? '' : 'disabled'} title="${unlocked ? escapeHtml(definition.description) : 'Lv.2부터 해금'}"><strong>${escapeHtml(definition.label)}</strong><small>${unlocked ? escapeHtml(definition.description) : 'Lv.2 해금'}</small></button>`;
-        }).join('')}
-      </div>
-      <div class="mode-change-forecast" id="modeChangeForecast" aria-live="polite"><p>모드를 선택하면 변경 전후 운영 수치를 확인할 수 있습니다.</p></div>
-    </section>` : '';
   const batteryPolicies = cell.type === 'battery'
     ? new Set(availableBatteryPolicies(gameState, cell).map(({ id }) => id))
     : new Set();
   const batteryPolicyMarkup = cell.type === 'battery' ? `
-    <section class="facility-mode-control" aria-label="배터리 운영 정책">
-      <div class="facility-mode-head"><div><span>RESERVE POLICY</span><strong>저장 전력 사용 정책</strong></div><b>${escapeHtml(BATTERY_POLICIES[cell.batteryPolicy || 'auto'].label)}</b></div>
-      <div class="segmented-control facility-mode-options" id="batteryPolicyControls">
+    <section class="facility-policy-control" aria-label="배터리 운영 정책">
+      <div class="facility-policy-head"><div><span>RESERVE POLICY</span><strong>저장 전력 사용 정책</strong></div><b>${escapeHtml(BATTERY_POLICIES[cell.batteryPolicy || 'auto'].label)}</b></div>
+      <div class="segmented-control facility-policy-options" id="batteryPolicyControls">
         ${Object.values(BATTERY_POLICIES).map((policy) => {
           const unlocked = batteryPolicies.has(policy.id);
           const lockReason = policy.id === 'essential'
@@ -368,9 +416,9 @@ export function openFacilityInspectorModal(index) {
       <div><span>${workforceLabel}</span><strong>${workforceText}</strong></div>
     </div>
     <p class="facility-settlement-note">도시 전체 순수익 <strong id="facilityCityNet">${signedCreditRate(live?.netCredits || 0)}</strong> · 다른 시설 운영비와 환경·확장 비용까지 포함</p>
+    ${siteNoteMarkup(index, cell)}
     <div class="spatial-tags">${positive}${warnings}</div>
     <div class="callout"><strong>공간 규칙</strong><p>${facility.desc}</p></div>
-    ${operationModeMarkup}
     ${batteryPolicyMarkup}
     ${priorityMarkup}`;
   const managementMarkup = `
@@ -410,32 +458,6 @@ export function openFacilityInspectorModal(index) {
     }
     refreshAll();
     openFacilityInspectorModal(index);
-  }));
-  $$modal('#facilityModeControls [data-operation-mode]').forEach((button) => button.addEventListener('click', () => {
-    const mode = button.dataset.operationMode;
-    const preview = previewFacilityOperationMode(gameState, index, mode);
-    if (!preview.ok) return;
-    const labels = [
-      ['전력 수요', 'demand', 'E/일'],
-      ['순수입', 'netIncome', '💰/일'],
-      ['탄소', 'carbon', 'CO₂/일'],
-      ['물', 'water', '/일'],
-      ['필요 인력', 'workforce', '명'],
-    ];
-    const target = $modal('#modeChangeForecast');
-    target.innerHTML = `
-      <div class="mode-forecast-grid">
-        ${labels.map(([label, key, unit]) => `<div><span>${label}</span><strong>${round1(preview.forecast[key].before)} → ${round1(preview.forecast[key].after)} ${unit}</strong></div>`).join('')}
-      </div>
-      <button class="btn primary" type="button" id="confirmOperationMode">${supportedModes[mode].label} 모드 적용</button>`;
-    $modal('#confirmOperationMode').addEventListener('click', () => {
-      const result = setFacilityOperationMode(gameState, index, mode);
-      if (!result.ok) return;
-      eventBus.emit(Events.OPERATION_MODE_CHANGED, { index, ...result });
-      eventBus.emit(Events.SAVE_REQUESTED, {});
-      refreshAll();
-      openFacilityInspectorModal(index);
-    });
   }));
   $$modal('#batteryPolicyControls [data-battery-policy]').forEach((button) => button.addEventListener('click', () => {
     const result = setBatteryPolicy(gameState, index, button.dataset.batteryPolicy);
@@ -722,9 +744,9 @@ export function openStressTestModal(onStarted = null) {
     <div class="stress-phase-list">
       ${STRESS_PHASES.map((phase, index) => `<article><span>${index + 1}</span><i data-lucide="${phase.icon}"></i><strong>${phase.label}</strong><b>${phase.durationDays}일</b>${phase.preparation ? `<small>${escapeHtml(phase.preparation)}</small>` : ''}</article>`).join('')}
     </div>
-    <div class="callout"><strong>테스트 중에도 가능한 행동</strong><p>운영 모드·전력 우선순위·배터리 정책·연구·강화·긴급 건설을 계속 사용할 수 있습니다. 단, 신규 건설비는 20% 증가합니다.</p></div>
+    <div class="callout"><strong>테스트 중에도 가능한 행동</strong><p>전력 우선순위·배터리 정책·연구·강화·긴급 건설을 계속 사용할 수 있습니다. 단, 신규 건설비는 20% 증가합니다.</p></div>
     <div class="callout"><strong>8개 통과 조건</strong><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 연속 적자 ${STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS}일 미만 · 종료 크레딧 0 이상 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하 · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내 · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E 이상 · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 이하(${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 안전, ${STRESS_TEST_RULES.HIGH_CARBON_RATE} 초과 최대 ${STRESS_TEST_RULES.MAX_HIGH_CARBON_DAYS}일)</p></div>
-    <div class="callout"><strong>물 한도 기준</strong><p>물 한도는 고정값이 아니라 <b>시험 시작 시 도시가 쓰던 사용량</b>입니다. 건조 위기 구간에는 냉각 부담이 커지는데도 그 사용량을 넘기면 안 됩니다. 순환냉각 연결과 절전 모드로 늘어난 물을 다시 눌러야 합니다.</p></div>
+    <div class="callout"><strong>물 한도 기준</strong><p>물 한도는 고정값이 아니라 <b>시험 시작 시 도시가 쓰던 사용량</b>입니다. 건조 위기 구간에는 냉각 부담이 커지는데도 그 사용량을 넘기면 안 됩니다. 순환냉각 연결과 물 소비 시설 정리로 늘어난 물을 다시 눌러야 합니다.</p></div>
     ${previous && !previous.passed ? `<div class="demolition-warning"><strong>이전 시도 진단</strong><p>${escapeHtml(previous.diagnosis?.label || '도시 운영을 보완한 뒤 다시 시도하세요.')}</p></div>` : ''}
     <div class="modal-actions"><button class="btn secondary close-modal">아직 준비하기</button><button class="btn primary" id="startStressTestBtn">${previous ? '테스트 재시작' : '테스트 시작'}</button></div>
   `, { id: 'stress-test-start', pausesSimulation: true });
@@ -826,7 +848,7 @@ export function openCarbonGameOverModal({ dailyCarbon = 0, onReset } = {}) {
       kicker: 'ECONOMIC FAILURE',
       title: '도시 재정이 회복 불능 상태입니다',
       strong: `크레딧 적자가 ${CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS}일 연속 지속되어 필수 운영 계약이 중단됐습니다.`,
-      detail: '공장 절전·증산 모드와 확장 유지비를 조정하고, 긴급지원은 위기 초기에 사용하세요.',
+      detail: '확장 대지와 시설 유지비를 줄이고, 긴급지원은 위기 초기에 사용하세요.',
     }
     : reason === 'essential_blackout'
       ? {
@@ -861,7 +883,7 @@ export function openOperationalRiskModal({ reason } = {}) {
     <div class="modal-head"><div><span class="eyebrow danger-label">OPERATING PAUSE</span><h2>${credit ? `재정 적자 ${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}일` : `필수시설 정전 ${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS}일`}</h2></div></div>
     <div class="demolition-warning">
       <strong>${credit ? `현재 추세가 이어지면 ${creditDaysLeft}일 뒤 파산합니다.` : `현재 추세가 이어지면 ${essentialDaysLeft}일 뒤 전력망이 붕괴합니다.`}</strong>
-      <p>${credit ? '공장을 절전 모드로 전환하거나 확장·시설 운영비를 줄이고 흑자 시설을 확보하세요.' : '주거지·냉각 우선순위를 높이고 발전·저장 예비력을 확보하세요.'}</p>
+      <p>${credit ? '확장·시설 운영비를 줄이고 흑자 시설을 확보하세요.' : '주거지·냉각 우선순위를 높이고 발전·저장 예비력을 확보하세요.'}</p>
     </div>
     <div class="modal-actions"><button class="btn primary" id="acknowledgeOperationalRisk">운영 조정하기</button></div>
   `, { id: 'operational-risk', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.CRITICAL });

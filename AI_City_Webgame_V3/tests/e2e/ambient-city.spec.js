@@ -104,7 +104,7 @@ test('facility motion renders at a throttled cadence and a pausing modal clears 
 test('a bird visit survives daily settlements and ends only when the flock lands or the green is gone', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(0);
-    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
+    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal' };
     window.__refreshGameForTest();
   });
 
@@ -124,7 +124,7 @@ test('a bird visit survives daily settlements and ends only when the flock lands
 test('a bird visit is cancelled when its green cell stops being green', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(0);
-    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
+    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal' };
     window.__refreshGameForTest();
   });
 

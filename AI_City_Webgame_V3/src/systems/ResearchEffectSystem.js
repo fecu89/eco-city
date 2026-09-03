@@ -10,7 +10,6 @@ export function researchEffects(state) {
       : RESEARCH_TUNING.LOW_WIND_SUPPLY_BASE,
     batteryCapacity: completed.has('battery2') ? 1.3 : 1,
     transmissionLossPerTile: completed.has('smartGrid') ? 0.04 : 0.06,
-    demandResponse: completed.has('demandResponse'),
     batteryReservePolicies: completed.has('battery2'),
     batteryEmergencyReserve: completed.has('battery3'),
   };

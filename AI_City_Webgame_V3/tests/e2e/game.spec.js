@@ -32,6 +32,31 @@ test.describe('boot and agent contract', () => {
     expect(snapshot.island).toMatchObject({ landInstances: 37, shoreInstances: 24, waterInstances: 156 });
   });
 
+  test('에이전트 계약은 자연 조건 씨앗과 시설 방향을 함께 노출한다', async ({ gamePage: page }) => {
+    const snapshot = await gameStateSnapshot(page);
+    expect(snapshot.environment.seed).toEqual(expect.any(Number));
+
+    // 씨앗을 고정하면 칸별 풍향과 해안 조차가 그대로 재현된다.
+    const applied = await page.evaluate(() => window.__setEnvironmentSeed(20400134));
+    expect(applied).toBe(20400134);
+    const seeded = await gameStateSnapshot(page);
+    expect(seeded.environment.seed).toBe(20400134);
+    expect(await page.evaluate(() => window.__GAME_STATE__.environment.tidalRanges[19])).toBe(5);
+
+    // 건설된 칸과 건설 계획 항목 모두 방향을 싣는다.
+    await page.evaluate(() => {
+      window.__GAME_STATE__.grid[1] = { type: 'residential', level: 1, rotation: 3 };
+      window.__refreshGameForTest();
+    });
+    const withCity = await gameStateSnapshot(page);
+    expect(withCity.entities.find(({ index }) => index === 1)).toMatchObject({ type: 'residential', rotation: 3 });
+
+    await openHudPanel(page, 'build');
+    await page.evaluate(() => window.__clickCell(0));
+    const planned = await gameStateSnapshot(page);
+    expect(planned.constructionPlan).toEqual([{ index: 0, type: 'residential', rotation: 0 }]);
+  });
+
   test('boot produces no page or console errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -98,8 +123,8 @@ test.describe('construction and inspection', () => {
       window.__setTimeScale(0);
       state.questIndex = 5;
       state.grid = Array(19).fill(null);
-      state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
-      state.grid[18] = { type: 'thermal', level: 1, priority: 'normal', operationMode: 'normal' };
+      state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+      state.grid[18] = { type: 'thermal', level: 1, priority: 'normal' };
       window.__settleSimulationDay();
       window.__refreshGameForTest();
       window.__clickCell(0);

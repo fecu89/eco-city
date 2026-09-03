@@ -22,11 +22,10 @@ function settler({ quests = false } = {}) {
 test('forecast uses the maximum remaining project time and records only completion days', () => {
   const state = new GameState();
   state.credits = 20;
-  state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
   state.grid[1] = {
     type: 'thermal',
     level: 1,
-    operationMode: 'normal',
     project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedDays: 5 },
   };
 
@@ -43,15 +42,15 @@ test('forecast uses the maximum remaining project time and records only completi
 
 test('prediction matches live settlement for economy, power, battery, and completion state', () => {
   const state = new GameState();
-  const thermal = { type: 'thermal', level: 1, operationMode: 'normal' };
+  const thermal = { type: 'thermal', level: 1 };
   state.credits = 20;
-  state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
   state.grid[1] = {
     ...thermal,
     project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedDays: 0 },
   };
   state.grid[2] = {
-    type: 'battery', level: 1, operationMode: 'normal', batteryPolicy: 'auto',
+    type: 'battery', level: 1, batteryPolicy: 'auto',
     batteryStoredLowCarbon: 3, batteryStoredFossil: 1,
   };
   const live = new GameState();
@@ -77,7 +76,7 @@ test('prediction matches live settlement for economy, power, battery, and comple
 test('prediction can evaluate cloned quest transitions without mutating or emitting from the live game', () => {
   const state = new GameState();
   state.credits = 10;
-  state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
   const before = state.serialize();
   let questReadyEvents = 0;
   const onReady = () => { questReadyEvents += 1; };
@@ -96,8 +95,8 @@ test('prediction can evaluate cloned quest transitions without mutating or emitt
 test('upgrade forecast charges only the clone and predicts limited operation through target completion', () => {
   const state = new GameState();
   state.credits = 20;
-  state.grid[0] = { type: 'thermal', level: 1, operationMode: 'normal' };
-  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'thermal', level: 1 };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
   const before = state.serialize();
 
   const prediction = forecastUpgrade(state, 0, { paidCost: 5, settleDay: settler() });

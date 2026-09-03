@@ -4,7 +4,7 @@ import { facilityPresentation } from '../../../src/ui/DockView.js';
 
 test('build detail presents residential earnings as a clear guaranteed-to-maximum tax range', () => {
   const presentation = facilityPresentation('residential');
-  const stats = effectiveFacilityStats({ type: 'residential', level: 1, operationMode: 'normal' });
+  const stats = effectiveFacilityStats({ type: 'residential', level: 1 });
 
   expect(presentation).toMatchObject({
     economyLabel: '주거 세금',

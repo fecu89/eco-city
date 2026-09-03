@@ -54,16 +54,9 @@ export const EXPANSION_UPKEEP = Object.freeze({
 
 export const ENERGY_SITE_OUTPUT_MULTIPLIER = 1.2;
 
-// 실제 해안 장식과 맞닿는 세 곳이다. 두 부두 수로와 서쪽 암반·섬 사이의
-// 좁은 해협을 조차가 큰 조력 우수 입지로 사용한다.
-export const TIDAL_SITE_COORDINATES = Object.freeze([
-  Object.freeze({ q: -1, r: 3 }),
-  Object.freeze({ q: 1, r: -3 }),
-  Object.freeze({ q: -3, r: 0 }),
-]);
-
+// 조력은 더 이상 특정 우수 입지를 쓰지 않는다. 해안 칸마다 다른 조수간만의 차가
+// 출력을 정하며, 그 값은 EnvironmentSystem이 판마다 새로 뽑는다.
 export const ENERGY_SITE_LABELS = Object.freeze({
   solar: '태양광 우수 입지 · 출력 +20%',
   wind: '풍황 우수 입지 · 출력 +20%',
-  tidal: '조차 우수 해협 · 출력 +20%',
 });

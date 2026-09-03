@@ -14,10 +14,9 @@ test('a build completed at the tick boundary operates during that same settlemen
   state.grid[0] = {
     type: 'thermal',
     level: 1,
-    operationMode: 'normal',
     project: { ...createBuildProject({ type: 'thermal', paidCost: 5 }), elapsedDays: 11 },
   };
-  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
 
   const result = realSettler()(state);
 
@@ -32,12 +31,12 @@ test('a build completed at the tick boundary operates during that same settlemen
 
 test('an upgrade completing on a tick settles at the new level instead of the construction ratio', () => {
   const state = new GameState();
-  const thermal = { type: 'thermal', level: 1, operationMode: 'normal' };
+  const thermal = { type: 'thermal', level: 1 };
   state.grid[0] = {
     ...thermal,
     project: { ...createUpgradeProject({ cell: thermal, paidCost: 5 }), elapsedDays: 7 },
   };
-  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
 
   const result = realSettler()(state);
 
@@ -47,8 +46,8 @@ test('an upgrade completing on a tick settles at the new level instead of the co
 
 test('settlement summary exposes available generation separately from demand-limited delivery', () => {
   const state = new GameState();
-  state.grid[0] = { type: 'tidal', level: 2, operationMode: 'normal' };
-  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'tidal', level: 2 };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
 
   const result = realSettler()(state);
 
@@ -64,8 +63,8 @@ test('an event beginning on the new game day changes that day power demand', () 
   const state = new GameState();
   state.progression.chapter = 3;
   state.events.schedule = [{ id: 'heat-1', type: 'heatwave', announceAt: 0, startAt: 1, endAt: 5 }];
-  state.grid[0] = { type: 'thermal', level: 1, operationMode: 'normal' };
-  state.grid[1] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'thermal', level: 1 };
+  state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
 
   const result = realSettler()(state);
 
@@ -77,9 +76,9 @@ test('an event beginning on the new game day changes that day power demand', () 
 test('unavoidable pre-grid construction does not pollute the report outage total', () => {
   const state = new GameState();
   state.questIndex = 2;
-  state.grid[0] = { type: 'residential', level: 1, priority: 'essential', operationMode: 'normal' };
+  state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
   state.grid[1] = {
-    type: 'thermal', level: 1, operationMode: 'normal',
+    type: 'thermal', level: 1,
     project: createBuildProject({ type: 'thermal', paidCost: 4 }),
   };
   const settle = realSettler();

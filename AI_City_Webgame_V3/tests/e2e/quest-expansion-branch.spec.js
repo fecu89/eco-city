@@ -36,7 +36,7 @@ test('west first expansion switches quests and level eight opens the east side',
 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
-    state.grid[0] = { type: 'data', level: 2, priority: 'normal', operationMode: 'normal' };
+    state.grid[0] = { type: 'data', level: 2, priority: 'normal' };
     state.research.completedIds.add('smartGrid');
     window.__refreshGameForTest();
   });

@@ -73,7 +73,7 @@ test('a legacy 37-cell city keeps every outer cell active', () => {
 
   expect(migrated.expansion).toMatchObject({ phase: 2, firstChoice: 'legacy_full' });
   expect(migrated.expansion.activeCellIndices).toEqual(Array.from({ length: 37 }, (_, index) => index));
-  expect(migrated.grid[36]).toMatchObject({ type: 'wind', level: 2, operationMode: 'normal' });
+  expect(migrated.grid[36]).toMatchObject({ type: 'wind', level: 2 });
 });
 
 test('v6 normalization clamps scale, facility level, and battery storage while adding operation defaults', () => {
@@ -89,7 +89,6 @@ test('v6 normalization clamps scale, facility level, and battery storage while a
   expect(migrated.timeScale).toBe(1);
   expect(migrated.grid[0]).toMatchObject({
     level: 3,
-    operationMode: 'normal',
     batteryPolicy: 'auto',
     batteryStoredLowCarbon: 52,
     batteryStoredFossil: 13,
@@ -98,14 +97,14 @@ test('v6 normalization clamps scale, facility level, and battery storage while a
 
 test('current state serializes and hydrates every redesign state group', () => {
   const state = new GameState();
-  expect(SAVE_VERSION).toBe(9);
+  expect(SAVE_VERSION).toBe(10);
   state.progression.chapter = 3;
   state.progression.objectiveSetId = 'resilience';
   state.expansion.phase = 1;
   state.events.activeId = 'heatwave-1';
   state.operationalRisk.negativeCreditDays = 4;
   state.emergencySupport.used = true;
-  state.decisionCounts.modeChanges = 2;
+  state.decisionCounts.priorityChanges = 2;
 
   const restored = new GameState();
   expect(restored.hydrate(state.serialize())).toBe(true);
@@ -114,12 +113,12 @@ test('current state serializes and hydrates every redesign state group', () => {
   expect(restored.events.activeId).toBe('heatwave-1');
   expect(restored.operationalRisk.negativeCreditDays).toBe(4);
   expect(restored.emergencySupport.used).toBe(true);
-  expect(restored.decisionCounts.modeChanges).toBe(2);
+  expect(restored.decisionCounts.priorityChanges).toBe(2);
 });
 
-test('the full migration chain passes through v6 and ends at v9', () => {
+test('the full migration chain passes through v6 and ends at v10', () => {
   const migrated = migrateSaveData(v5Save());
-  expect(migrated.v).toBe(9);
+  expect(migrated.v).toBe(10);
 });
 
 test('v6 state and migrated payloads omit obsolete diagnosis state', () => {

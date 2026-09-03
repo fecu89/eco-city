@@ -66,7 +66,7 @@ test('cancelling a build preview disarms placement until a facility is picked ag
 
   await page.locator('#facilityDock [data-facility="residential"]').click();
   await page.evaluate(() => window.__clickCell(1));
-  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 1, type: 'residential' }]);
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 1, type: 'residential', rotation: 0 }]);
 });
 
 test('confirming a build disarms placement until a facility is picked again', async ({ gamePage: page }) => {
@@ -87,7 +87,7 @@ test('confirming a build disarms placement until a facility is picked again', as
   await page.locator('[data-facility="residential"]').click();
   await page.evaluate(() => window.__clickCell(1));
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
-    { index: 1, type: 'residential' },
+    { index: 1, type: 'residential', rotation: 0 },
   ]);
 });
 
@@ -104,7 +104,7 @@ test('only one facility can be pending at a time; a second location is ignored u
   await page.evaluate(() => window.__clickCell(1));
 
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
-    { index: 0, type: 'residential' },
+    { index: 0, type: 'residential', rotation: 0 },
   ]);
   await expect(page.locator('.toast')).toBeVisible();
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean))).toHaveLength(0);
@@ -116,7 +116,7 @@ test('only one facility can be pending at a time; a second location is ignored u
   await page.locator('[data-facility="residential"]').click();
   await page.evaluate(() => window.__clickCell(1));
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([
-    { index: 1, type: 'residential' },
+    { index: 1, type: 'residential', rotation: 0 },
   ]);
   await page.locator('#confirmBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(2);
@@ -127,7 +127,7 @@ test('picking a facility collapses the build list, and clicking the pending tile
   await expect(page.locator('#facilityDock')).toBeVisible();
 
   await page.evaluate(() => window.__clickCell(0));
-  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 0, type: 'residential' }]);
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 0, type: 'residential', rotation: 0 }]);
   await expect(page.locator('#facilityDock')).toBeHidden();
   await expect(page.locator('#buildPanel')).toBeHidden();
 
@@ -262,4 +262,21 @@ for (const viewport of [
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
   await expect(panel).not.toHaveClass(/build-panel--collapsed/);
   await expect(card).toBeVisible();
+});
+
+// 시설을 고르면 패널이 접히는 새 흐름에서 첫 사용자는 다음 행동을 모를 수 있다.
+// 첫 건설을 확정하기 전까지만 "빈 칸을 눌러 배치" 힌트를 보여준다.
+test('picking a facility shows a placement hint until the first build is confirmed', async ({ gamePage: page }) => {
+  await openBuild(page);
+  const hint = page.locator('.toast', { hasText: '빈 칸을 눌러' });
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+  await expect(hint).toHaveCount(1);
+  await expect(hint).toContainText('주거지');
+  await expect(hint).toBeHidden({ timeout: 8000 });
+
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+  await expect(hint).toHaveCount(0);
 });

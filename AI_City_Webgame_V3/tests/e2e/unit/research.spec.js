@@ -57,7 +57,6 @@ test('one center and one research id cannot be occupied twice', () => {
 test('an upgrading data center cannot start a research job', () => {
   const state = stateWithDataCenter();
   state.unlockedFacilities.add('solar');
-  state.grid[3].operationMode = 'normal';
   state.grid[3].project = createUpgradeProject({ cell: state.grid[3], paidCost: 6 });
   const creditsBefore = state.credits;
 
@@ -135,7 +134,6 @@ test('every research finishes within three real minutes at 1x speed', () => {
     wind2: [120, 10],
     battery2: [150, 15],
     smartGrid: [150, 15],
-    demandResponse: [150, 15],
     tidal1: [150, 18],
     solar3: [180, 20],
     wind3: [180, 20],
@@ -218,16 +216,14 @@ test('completed branch research exposes its distinct simulation effects', () => 
     lowWindSupply: 0.35,
     batteryCapacity: 1,
     transmissionLossPerTile: 0.06,
-    demandResponse: false,
   });
-  state.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'smartGrid', 'demandResponse', 'battery3']);
+  state.research.completedIds = new Set(['solar2', 'wind2', 'battery2', 'smartGrid', 'battery3']);
   expect(researchEffects(state)).toMatchObject({
     solarSupply: 1.2,
     windSupply: 1.15,
     lowWindSupply: 0.5,
     batteryCapacity: 1.3,
     transmissionLossPerTile: 0.04,
-    demandResponse: true,
     batteryReservePolicies: true,
     batteryEmergencyReserve: true,
   });

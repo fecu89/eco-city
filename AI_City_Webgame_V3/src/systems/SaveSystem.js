@@ -4,6 +4,7 @@ import { gameState } from '../core/GameState.js';
 import { roundCredits } from '../core/Money.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { axialToWorld, createHexCoordinates, expandHexGrid, hexDistance } from './HexGridSystem.js';
+import { createEnvironment, normalizeRotation } from '../core/Environment.js';
 import { refreshMetrics } from './BoardSystem.js';
 import { readStorage, removeStorage, writeStorage } from '../core/safeStorage.js';
 import { CAMPAIGN_QUEST_INDEXES, PREPARATION_QUEST_IDS } from '../core/CampaignProgression.js';
@@ -421,11 +422,9 @@ export function migrateV5ToV6(data) {
       economyScorePenalty: legacySupportUsed ? 2 : 0,
     },
     decisionCounts: {
-      modeChanges: 0,
       priorityChanges: 0,
       researchPauses: 0,
       emergencySupport: Number(legacySupportUsed),
-      automaticModeChanges: 0,
       batteryPolicyChanges: 0,
     },
     research: {
@@ -732,6 +731,19 @@ export function migrateV8ToV9(data) {
   };
 }
 
+// v9까지는 섬의 자연 조건(칸별 풍향·해안 조차)도, 시설의 방향도 없었다. 옛 도시는 새 환경을
+// 받고 모든 시설이 그 시설의 기본 방향(태양광 남향, 나머지 북향)으로 서 있던 것으로 본다.
+export function migrateV9ToV10(data) {
+  return {
+    ...data,
+    v: 10,
+    environment: createEnvironment(),
+    grid: (data.grid || []).map((cell) => (cell
+      ? { ...cell, rotation: normalizeRotation(cell.rotation, cell.type) }
+      : null)),
+  };
+}
+
 export function migrateSaveData(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid save payload');
   let migrated = structuredClone(data);
@@ -743,6 +755,7 @@ export function migrateSaveData(data) {
   if (migrated.v === 6) migrated = migrateV6ToV7(migrated);
   if (migrated.v === 7) migrated = migrateV7ToV8(migrated);
   if (migrated.v === 8) migrated = migrateV8ToV9(migrated);
+  if (migrated.v === 9) migrated = migrateV9ToV10(migrated);
   if (migrated.v !== SAVE_VERSION) throw new Error(`Unsupported save version: ${migrated.v}`);
   return stripObsoleteState(migrated);
 }

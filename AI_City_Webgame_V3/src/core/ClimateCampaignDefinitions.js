@@ -86,7 +86,7 @@ export const CLIMATE_EVENT_DEFINITIONS = Object.freeze({
     icon: 'droplets',
     durationDays: 6,
     description: '데이터센터와 핵발전의 냉각 부담이 커지는 동안 도시 물 사용량을 예보 직전 수준 이하로 유지해야 합니다.',
-    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 데이터센터를 절전 모드로 돌리세요.',
+    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 물 소비가 큰 시설의 강화를 미루세요.',
     facilityModifiers: {
       data: { water: 1.15 },
       nuclear: { water: 1.15 },
@@ -101,7 +101,7 @@ export const CLIMATE_EVENT_DEFINITIONS = Object.freeze({
     icon: 'cloud-fog',
     durationDays: 6,
     description: '풍력 출력이 급감하고 화력·공장의 탄소 부담이 커집니다.',
-    preparation: '화력과 공장을 절전하고 저탄소 발전과 녹지를 확보하세요.',
+    preparation: '화력 의존을 줄이고 저탄소 발전과 녹지를 확보하세요.',
     facilityModifiers: {
       wind: { supply: 0.25 },
       solar: { supply: 0.85 },
@@ -246,7 +246,7 @@ export const CLIMATE_QUESTS = Object.freeze({
     id: 'stagnant-air',
     title: '무풍과 미세먼지',
     goal: 'CO₂ 8/일 이하와 필수시설 전력 90%를 4일 연속 유지하세요.',
-    details: ['무풍에는 풍력 출력이 급감합니다.', '화력·공장 절전과 녹지·저탄소 발전을 조합하세요.'],
+    details: ['무풍에는 풍력 출력이 급감합니다.', '저장 예비력과 녹지·저탄소 발전을 조합하세요.'],
     eventType: 'stagnantAir',
     objective: 'cleanAir',
     carbonTarget: 8,
@@ -314,7 +314,7 @@ export const FINAL_CLIMATE_PHASES = Object.freeze([
   finalPhase({
     id: 'dryEmergency', label: '건조 위기', icon: 'flame', durationDays: 5,
     description: '도시 고정 탄소가 늘고 냉각 부담이 커지는 동안 물 사용량을 구간 직전 수준 이하로 유지해야 합니다.',
-    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 데이터센터를 절전 모드로 돌리세요.',
+    preparation: '순환냉각을 물 소비가 큰 시설 옆에 연결하고 물 소비가 큰 시설의 강화를 미루세요.',
     facilityModifiers: { data: { water: 1.15 }, nuclear: { water: 1.15 }, cooling: { effectiveness: 1.25 } },
     cityModifiers: { carbonFlat: 2, waterLimitRatio: 1.0 },
     greenAbsorptionByLevel: [1, 0.5, 0.75, 1],

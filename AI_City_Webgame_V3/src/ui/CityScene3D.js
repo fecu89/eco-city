@@ -1,20 +1,7 @@
 import * as THREE from 'three';
-import {
-  BOARD,
-  CITY_AMBIENT,
-  CITY_AMBIENT_MOTION,
-  CITY_ASSETS,
-  CITY_BUILDING_ORIENTATION,
-  CITY_CAMERA,
-  CITY_MOTION,
-  CITY_WORLD_OVERLAY,
-  facilityColorFor,
-  GREEN_VISUAL_LAYOUTS,
-  HEX_TILE_VISUALS,
-  LEVEL_VISUALS,
-  THEME_SCHEMAS,
-} from '../core/Constants.js';
+import { BOARD, CAMERA_UI, CITY_AMBIENT, CITY_AMBIENT_MOTION, CITY_ASSETS, CITY_BUILDING_ORIENTATION, CITY_CAMERA, CITY_MOTION, CITY_WORLD_OVERLAY, DIRECTION_COPY, DIRECTION_RULES, GREEN_VISUAL_LAYOUTS, HEX_TILE_VISUALS, LEVEL_VISUALS, THEME_SCHEMAS, UI_FEEDBACK, WORLD_DAY_LIGHTING, facilityColorFor } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { refreshIcons } from './Modal.js';
 import { assetLoader } from '../assets/AssetLoader.js';
 import { FACILITY_ASSET_IDS } from '../assets/assetRegistry.js';
 import {
@@ -27,7 +14,6 @@ import {
 import { createCameraController } from '../systems/CameraController.js';
 import { createBirdVisitController } from '../systems/AmbientBirdSystem.js';
 import { ambientDurationBounds, createAmbientMotionController } from '../systems/CityAmbientMotionSystem.js';
-import { getSkyState, getWorldPhase } from '../systems/ClimateSystem.js';
 import { axialToWorld, createHexCoordinates } from '../systems/HexGridSystem.js';
 import { projectProgress } from '../systems/ConstructionProjectSystem.js';
 import { createCityEnvironment3D } from './CityEnvironment3D.js';
@@ -43,8 +29,9 @@ const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
   + 3
 );
-const MAX_BUILDING_LIGHTS = MAX_CELLS * 3;
 const BIRD_POOL_SIZE = 3;
+// 방향 한 칸(45°)에 해당하는 yaw. rotation 인덱스에 곱해 쓴다.
+const DIRECTION_STEP_RADIANS = (DIRECTION_RULES.STEP_DEGREES * Math.PI) / 180;
 
 const TILE_COLORS = {
   base: new THREE.Color(TILE_BASE_COLOR),
@@ -63,6 +50,7 @@ const TILE_COLORS = {
 };
 
 const MARKER_COLORS = {
+  tap: new THREE.Color(0xffffff),
   selected: new THREE.Color(0x54e4ff),
   good: new THREE.Color(0x71f5b4),
   warn: new THREE.Color(0xffd166),
@@ -91,7 +79,13 @@ let canvasEl;
 let containerEl;
 let cameraHintEl;
 let buildOxWidgetEl;
+let recenterEl = null;
+let lastEmptyTap = null; // { at, x, y } — 빈 바닥 더블탭 판정용
+let tapFlashIndex = -1; // 방금 누른 칸 — TAP_FLASH_MS 동안 흰 링으로 반짝인다
+let tapFlashAt = 0;
 let buildOxConfirmEl;
+let buildOxRotateEl;
+let buildOxDirectionEl;
 let buildOxWidgetState = null;
 let buildOxWidgetVisible = false;
 const constructionHudEls = new Map();
@@ -127,17 +121,12 @@ let hoveredPreviewIndex = -1;
 // 표시 수단(무장 상태면 고스트, 아니면 선택 링)을 그대로 재사용한다.
 let keyboardCursorIndex = -1;
 let ghostSignature = null;
-let buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
-let currentWorldHour = 8;
-let currentSkyState = getSkyState(currentWorldHour);
-let visualHourOverride = null;
+let buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [], rotation: 0 };
 
 let tileMesh;
 let stateRingMesh;
 let windRotorMesh;
 let ambientAgentMesh;
-let buildingLightMesh;
-let buildingLightMaterial;
 let smokeEffectMesh;
 let statusLightMesh;
 let constructionFoundationMesh;
@@ -157,7 +146,6 @@ const facilityCellIndexBuckets = new Map(); // key: type 또는 `${type}:${level
 const cellInstanceRef = new Map(); // cellIndex -> { mesh, instanceIndex } — 통계에서 실제로 어느 메시에 쓰였는지 찾는다.
 const planGhostMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
-let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
 const greenIndices = [];
 let greenDetailCountsByLevel = { 1: 0, 2: 0, 3: 0 };
@@ -177,7 +165,7 @@ function applyWorldTheme({ theme, schema } = {}) {
   currentTheme = THEME_SCHEMAS[theme] ? theme : document.documentElement.dataset.theme || 'dark';
   const activeSchema = schema || THEME_SCHEMAS[currentTheme] || THEME_SCHEMAS.dark;
   const world = activeSchema.world;
-  renderer?.setClearColor(currentSkyState.bottomColor, 0);
+  renderer?.setClearColor(WORLD_DAY_LIGHTING.SKY_BOTTOM, 0);
   TILE_COLORS.base.setHex(world.tile);
   TILE_COLORS.selected.setHex(world.selectedTile);
   if (hemisphereLight) {
@@ -186,59 +174,21 @@ function applyWorldTheme({ theme, schema } = {}) {
   }
   rimLight?.color.setHex(world.rim);
   cityEnvironment?.setTheme(currentTheme);
-  applyWorldHour(currentWorldHour, true);
+  paintSky();
   if (tileMesh && currentConfigs.length) updateTileInstances(currentConfigs, currentCoords);
   needsRender = true;
-}
-
-const WORLD_LIGHTING = Object.freeze({
-  dawn: { sun: 0.92, hemisphere: 0.94, rim: 0.4, sunColor: 0xffc89d },
-  day: { sun: 1.22, hemisphere: 1.08, rim: 0.3, sunColor: 0xffffff },
-  dusk: { sun: 0.86, hemisphere: 0.9, rim: 0.48, sunColor: 0xffaa83 },
-  night: { sun: 0.34, hemisphere: 0.7, rim: 0.64, sunColor: 0x9fbdff },
-});
-
-function applyWorldPhase(nextPhase, force = false) {
-  if (!force && nextPhase === worldPhase) return false;
-  worldPhase = WORLD_LIGHTING[nextPhase] ? nextPhase : 'day';
-  const lighting = WORLD_LIGHTING[worldPhase];
-  if (sunLight) {
-    sunLight.intensity = lighting.sun;
-    sunLight.color.setHex(lighting.sunColor);
-  }
-  if (hemisphereLight) hemisphereLight.intensity = lighting.hemisphere;
-  if (rimLight) rimLight.intensity = lighting.rim;
-  needsRender = true;
-  return true;
 }
 
 function cssHex(color) {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
-function paintSky(state) {
+// 하늘은 항상 낮 그라데이션이다. 테마가 바뀌어도 같은 색으로 다시 칠한다.
+function paintSky() {
   if (!canvasEl) return;
-  canvasEl.style.background = `linear-gradient(${cssHex(state.topColor)} 0%, ${cssHex(state.bottomColor)} 34%, ${cssHex(state.bottomColor)} 100%)`;
-}
-
-export function applyWorldHour(hour, force = false) {
-  const next = getSkyState(hour);
-  if (!force && currentWorldHour === next.hour) return false;
-  currentWorldHour = next.hour;
-  currentSkyState = next;
-  renderer?.setClearColor(next.bottomColor, 0);
-  paintSky(next);
-  applyWorldPhase(next.phase, force);
-  updateBuildingLightInstances();
-  needsRender = true;
-  return true;
-}
-
-// 연속 시계는 DOM 하늘 그라데이션만 갱신한다. Three.js 조명과 창문은 정수 시간 정산 때만 갱신한다.
-export function setVisualWorldHour(hour) {
-  if (visualHourOverride != null) return currentSkyState;
-  applyWorldHour(hour, true);
-  return currentSkyState;
+  const top = cssHex(WORLD_DAY_LIGHTING.SKY_TOP);
+  const bottom = cssHex(WORLD_DAY_LIGHTING.SKY_BOTTOM);
+  canvasEl.style.background = `linear-gradient(${top} 0%, ${bottom} 34%, ${bottom} 100%)`;
 }
 
 function ownGeometry(geometry) {
@@ -522,19 +472,6 @@ function createSceneLayers() {
   windRotorMesh = makeInstancedMesh(ownGeometry(createRotorGeometry()), rotorMaterial, MAX_CELLS);
   windRotorMesh.name = 'wind-rotors';
 
-  buildingLightMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xffdf8a,
-    transparent: true,
-    opacity: 0.88,
-    depthWrite: false,
-  }));
-  buildingLightMesh = makeInstancedMesh(
-    ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
-    buildingLightMaterial,
-    MAX_BUILDING_LIGHTS,
-  );
-  buildingLightMesh.name = 'building-window-lights';
-
   const ambientAgentMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
@@ -587,7 +524,6 @@ function prewarmGpuBuffers() {
     greenDetailMesh,
     windRotorMesh,
     ambientAgentMesh,
-    buildingLightMesh,
     smokeEffectMesh,
     statusLightMesh,
   ];
@@ -814,7 +750,7 @@ function placeBuildOxWidget(metrics) {
     }
     return;
   }
-  const { index, disabled } = buildOxWidgetState;
+  const { index, disabled, type } = buildOxWidgetState;
   const point = clampOverlayPoint(
     projectToOverlay(index, BUILD_OX_WIDGET_HEIGHT, metrics),
     metrics,
@@ -823,6 +759,8 @@ function placeBuildOxWidget(metrics) {
   buildOxWidgetEl.style.left = `${point.x}px`;
   buildOxWidgetEl.style.top = `${point.y}px`;
   buildOxConfirmEl.disabled = Boolean(disabled);
+  // 방향 안내는 방향이 출력을 바꾸는 시설(태양광·풍력)에만 뜬다.
+  if (buildOxDirectionEl) buildOxDirectionEl.hidden = !DIRECTION_RULES.DIRECTIONAL_TYPES.includes(type);
   if (!buildOxWidgetVisible) {
     buildOxWidgetVisible = true;
     buildOxWidgetEl.hidden = false;
@@ -846,18 +784,36 @@ export function refreshCityConstructionProgress(tickProgress = 0) {
   syncWorldOverlays(tickProgress);
 }
 
+// 위젯은 계획 중인 건물 위에 뜬다. 방향(회전)은 건설할 때만 고를 수 있으므로 회전·방향
+// 버튼도 여기에만 있다 — 왼쪽부터 방향 안내, 회전, 취소(X), 확정(O) 순이다.
 function createBuildOxWidget() {
   const widget = document.createElement('div');
   widget.className = 'world-build-ox';
   widget.hidden = true;
-  widget.innerHTML = '<button type="button" id="cancelBuildBtn" class="ox-btn ox-cancel" aria-label="건설 취소"><span aria-hidden="true">X</span></button>'
+  widget.innerHTML = `<button type="button" id="directionInfoBtn" class="ox-btn ox-info" aria-label="${DIRECTION_COPY.INFO_LABEL}" title="${DIRECTION_COPY.INFO_LABEL}"><i data-lucide="${DIRECTION_COPY.INFO_ICON}" aria-hidden="true"></i></button>`
+    + `<button type="button" id="rotateBuildBtn" class="ox-btn ox-rotate" aria-label="${DIRECTION_COPY.ROTATE_LABEL}" title="${DIRECTION_COPY.ROTATE_TITLE}"><i data-lucide="${DIRECTION_COPY.ROTATE_ICON}" aria-hidden="true"></i></button>`
+    + '<button type="button" id="cancelBuildBtn" class="ox-btn ox-cancel" aria-label="건설 취소"><span aria-hidden="true">X</span></button>'
     + '<button type="button" id="confirmBuildBtn" class="ox-btn ox-confirm" aria-label="건설 확정"><span aria-hidden="true">O</span></button>';
   widget.querySelector('.ox-cancel').addEventListener('click', () => buildOxWidgetState?.onCancel?.());
+  buildOxRotateEl = widget.querySelector('.ox-rotate');
+  buildOxRotateEl.addEventListener('click', () => {
+    if (!buildOxWidgetState) return;
+    eventBus.emit(Events.BUILD_ROTATE_REQUESTED, {});
+  });
+  buildOxDirectionEl = widget.querySelector('.ox-info');
+  buildOxDirectionEl.addEventListener('click', () => {
+    if (!buildOxWidgetState) return;
+    eventBus.emit(Events.BUILD_DIRECTION_INFO_REQUESTED, {
+      index: buildOxWidgetState.index,
+      type: buildOxWidgetState.type,
+    });
+  });
   buildOxConfirmEl = widget.querySelector('.ox-confirm');
   buildOxConfirmEl.addEventListener('click', () => {
     if (buildOxWidgetState?.disabled) return;
     buildOxWidgetState?.onConfirm?.();
   });
+  refreshIcons(widget);
   return widget;
 }
 
@@ -1002,7 +958,7 @@ function updateAmbientEffectInstances(now = performance.now()) {
       const smoke = CITY_AMBIENT_MOTION.SMOKE[effect.type];
       const config = visualConfigAt(currentConfigs, effect.cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
-      const rotation = facilityRotationY(effect.type, effect.cellIndex);
+      const rotation = facilityRotationY(effect.type, effect.cellIndex, config.rotation);
       const [localX, localZ] = smoke.stackOffset;
       const emitterX = localX * Math.cos(rotation) - localZ * Math.sin(rotation);
       const emitterZ = localX * Math.sin(rotation) + localZ * Math.cos(rotation);
@@ -1229,11 +1185,16 @@ function visualYAt(index, now) {
   return 0.13 - motionProgress(motion, now) * 0.22;
 }
 
-function facilityRotationY(type, cellIndex) {
+// 시설이 실제로 놓이는 방위각(yaw)이다. 두 값이 겹친다.
+//  - 칸마다 조금씩 다른 장식용 오프셋(CITY_BUILDING_ORIENTATION): 같은 시설이 줄맞춰
+//    복사된 것처럼 보이지 않게 하는 기존 연출이며, 방향 0(북)이 이 상태다.
+//  - 플레이어가 건설할 때 고른 방향(rotation 0~7): 45°씩 시계 방향으로 더 돈다.
+// three의 +Y 회전은 위에서 볼 때 반시계 방향이라, 시계 방향으로 돌리려면 부호를 뒤집는다.
+function facilityRotationY(type, cellIndex, rotation = 0) {
   const offset = CITY_BUILDING_ORIENTATION.offsets[type];
-  if (offset == null) return 0;
-  const turn = (cellIndex + offset) % 6;
-  return turn * CITY_BUILDING_ORIENTATION.step;
+  const base = offset == null ? 0 : ((cellIndex + offset) % 6) * CITY_BUILDING_ORIENTATION.step;
+  const steps = Number.isFinite(Number(rotation)) ? Math.trunc(Number(rotation)) : 0;
+  return base - steps * DIRECTION_STEP_RADIANS;
 }
 
 function constructionStageForConfig(config) {
@@ -1292,7 +1253,7 @@ function updateFacilityInstances(configs, coordinates, now) {
       const shellScale = config.project?.kind === 'build' ? 0.82 : 1;
       const visualScale = visualScaleAt(cellIndex, level.scale * shellScale, now);
       const visualY = visualYAt(cellIndex, now);
-      setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex));
+      setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex, config.rotation));
       const facilityColor = facilityColorFor(type, config.level);
       mesh.setColorAt(instanceIndex, _color.setHex(facilityColor));
       cellInstanceRef.set(cellIndex, { mesh, instanceIndex });
@@ -1377,35 +1338,15 @@ function updateConstructionInstances(configs, coordinates) {
   finishInstances(constructionScaffoldMesh, scaffoldCount);
 }
 
-function updateBuildingLightInstances() {
-  if (!buildingLightMesh || !currentConfigs.length || worldPhase !== 'night') {
-    if (buildingLightMesh) finishInstances(buildingLightMesh, 0);
-    return;
-  }
-  let lightCount = 0;
-  currentConfigs.forEach((config, index) => {
-    if (!config || config.empty || !config.type || config.project?.kind === 'build') return;
-    const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
-    const { x, z } = worldPosition(index);
-    const y = 0.3 * level.scale;
-    [-0.13, 0.13].forEach((offset) => {
-      setBoxInstance(buildingLightMesh, lightCount, x + offset * level.scale, y, z + 0.29 * level.scale, 0.055, 0.045, 0.012);
-      buildingLightMesh.setColorAt(lightCount, _color.setHex(0xffdf8a));
-      lightCount++;
-    });
-    setBoxInstance(buildingLightMesh, lightCount, x + 0.29 * level.scale, y + 0.08, z, 0.012, 0.04, 0.05);
-    buildingLightMesh.setColorAt(lightCount, _color.setHex(0xffc765));
-    lightCount++;
-  });
-  finishInstances(buildingLightMesh, Math.min(lightCount, MAX_BUILDING_LIGHTS));
-}
-
 function updateMarkerInstances(configs, coordinates, now) {
   let ringCount = 0;
   configs.forEach((config, index) => {
     const { x, z } = worldPosition(index, coordinates);
     // 키보드 커서는 어떤 진단 색보다 앞선다 — 지금 어디에 있는지가 먼저 보여야 한다.
-    const markerColor = index === keyboardCursorIndex ? MARKER_COLORS.selected : markerColorFor(config);
+    const tapFlashing = index === tapFlashIndex && now - tapFlashAt < UI_FEEDBACK.TAP_FLASH_MS;
+    const markerColor = tapFlashing
+      ? MARKER_COLORS.tap
+      : index === keyboardCursorIndex ? MARKER_COLORS.selected : markerColorFor(config);
     if (markerColor) {
       const pulse = 1 + Math.sin((now / CITY_MOTION.SELECT_PULSE_MS) * Math.PI * 2) * 0.035;
       setInstance(stateRingMesh, ringCount, x, 0.135, z, pulse, -Math.PI / 2);
@@ -1423,7 +1364,6 @@ function updateInstances(configs, coordinates, now = performance.now()) {
   updateGreenDetailInstances(configs, coordinates, now);
   updateConstructionInstances(configs, coordinates);
   updateMarkerInstances(configs, coordinates, now);
-  updateBuildingLightInstances();
 }
 
 function beginMotion(kind, payload) {
@@ -1479,7 +1419,7 @@ export function initCityScene3D(container) {
   canvasEl.className = 'city-scene-3d-canvas';
   container.innerHTML = '';
   container.appendChild(canvasEl);
-  paintSky(currentSkyState);
+  paintSky();
 
   cameraHintEl = document.createElement('div');
   cameraHintEl.className = 'city-camera-hint';
@@ -1491,15 +1431,28 @@ export function initCityScene3D(container) {
   buildOxWidgetEl = createBuildOxWidget();
   container.appendChild(buildOxWidgetEl);
 
+  // 기본 시점을 벗어났을 때만 나타나는 "시점 초기화" 칩. 상시 버튼은 사용자가 원치 않았다.
+  recenterEl = document.createElement('button');
+  recenterEl.type = 'button';
+  recenterEl.id = 'cityRecenterBtn';
+  recenterEl.className = 'city-camera-recenter';
+  recenterEl.hidden = true;
+  recenterEl.setAttribute('aria-label', CAMERA_UI.RECENTER_LABEL);
+  recenterEl.title = CAMERA_UI.RECENTER_LABEL;
+  recenterEl.innerHTML = `<span aria-hidden="true">${CAMERA_UI.RECENTER_GLYPH}</span><span>${CAMERA_UI.RECENTER_LABEL}</span>`;
+  recenterEl.addEventListener('click', () => resetCityCamera());
+  container.appendChild(recenterEl);
+
   renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelRatioCap()));
 
-  hemisphereLight = new THREE.HemisphereLight(0xc8dcff, 0x101722, 1.15);
+  // 조명은 낮 한 가지로 고정한다. 색만 테마에 따라 applyWorldTheme이 바꾼다.
+  hemisphereLight = new THREE.HemisphereLight(0xc8dcff, 0x101722, WORLD_DAY_LIGHTING.HEMISPHERE_INTENSITY);
   scene.add(hemisphereLight);
-  sunLight = new THREE.DirectionalLight(0xffffff, 1.35);
+  sunLight = new THREE.DirectionalLight(WORLD_DAY_LIGHTING.SUN_COLOR, WORLD_DAY_LIGHTING.SUN_INTENSITY);
   sunLight.position.set(4, 8, 5);
   scene.add(sunLight);
-  rimLight = new THREE.DirectionalLight(0x54e4ff, 0.42);
+  rimLight = new THREE.DirectionalLight(0x54e4ff, WORLD_DAY_LIGHTING.RIM_INTENSITY);
   rimLight.position.set(-6, 4, -4);
   scene.add(rimLight);
 
@@ -1551,6 +1504,8 @@ export function initCityScene3D(container) {
   eventBus.on(Events.THEME_CHANGED, applyWorldTheme);
   eventBus.on(Events.MODAL_OPEN, pauseBirdVisits);
   eventBus.on(Events.MODAL_CLOSE, resumeBirdVisits);
+  eventBus.on(Events.CAMERA_CHANGED, syncRecenterChip);
+  eventBus.on(Events.CAMERA_RESET, syncRecenterChip);
   document.addEventListener('visibilitychange', handleBirdVisibility);
 
   birdVisitController = createBirdVisitController({
@@ -1580,10 +1535,6 @@ export function initCityScene3D(container) {
     onCellClickCb(index);
   };
   window.__getCellVisual = (index) => currentConfigs[index] ?? null;
-  window.__setWorldHourForTest = (hour) => {
-    visualHourOverride = hour;
-    return applyWorldHour(hour, true);
-  };
 
   window.__getHexCell = (index) => {
     const coord = currentCoords[index];
@@ -1646,7 +1597,8 @@ function buildGhostSignature(index, type, config) {
   // 고스트가 실제로 의존하는 값만 모은다. 같은 칸 위에서 마우스만 움직이면 이 값이 그대로라
   // 프레임마다 needsRender를 세우지 않고, 반대로 배치 가능 여부나 계획이 바뀌면 다시 그린다.
   return `${buildPreviewMode.enabled ? 1 : 0}|${index}|${type || ''}|${config?.empty ? 1 : 0}`
-    + `|${config?.plannedType || ''}|${config?.placementAllowed === false ? 0 : 1}|${resourceRevision}`;
+    + `|${config?.plannedType || ''}|${config?.placementAllowed === false ? 0 : 1}`
+    + `|${buildPreviewMode.rotation}|${resourceRevision}`;
 }
 
 function syncBuildGhost() {
@@ -1668,7 +1620,7 @@ function syncBuildGhost() {
   const { x, z } = worldPosition(index);
   const level = LEVEL_VISUALS[1];
   ghostMesh.position.set(x, 0.13, z);
-  ghostMesh.rotation.set(0, facilityRotationY(type, index), 0);
+  ghostMesh.rotation.set(0, facilityRotationY(type, index, buildPreviewMode.rotation), 0);
   ghostMesh.scale.setScalar(level.scale);
   const color = config.placementAllowed === false ? MARKER_COLORS.problem : MARKER_COLORS.good;
   ghostMaterial.color.copy(color);
@@ -1685,11 +1637,11 @@ function syncPlanGhosts() {
     const mesh = planGhostMeshes.get(type);
     const items = plannedItems.filter((item) => item.type === type);
     let count = 0;
-    items.forEach(({ index }) => {
+    items.forEach(({ index, rotation }) => {
       if (!currentConfigs[index]?.empty || !currentCoords[index]) return;
       const { x, z } = worldPosition(index);
       const level = LEVEL_VISUALS[1];
-      setInstance(mesh, count, x, 0.13, z, level.scale, 0, facilityRotationY(type, index));
+      setInstance(mesh, count, x, 0.13, z, level.scale, 0, facilityRotationY(type, index, rotation));
       mesh.setColorAt(count, invalid.has(index) ? MARKER_COLORS.problem : MARKER_COLORS.good);
       count++;
     });
@@ -1698,25 +1650,65 @@ function syncPlanGhosts() {
   needsRender = true;
 }
 
-export function setBuildPreviewMode({ enabled = false, type = null, candidateIndex = null, plannedItems = [], invalidIndices = [] } = {}) {
+// rotation은 아직 계획에 들어가지 않은 칸(마우스를 따라다니는 고스트)이 쓸 방향이다.
+// 계획에 이미 올라간 건물은 각자의 rotation으로 돈다.
+export function setBuildPreviewMode({ enabled = false, type = null, candidateIndex = null, plannedItems = [], invalidIndices = [], rotation = 0 } = {}) {
   buildPreviewMode = {
     enabled: Boolean(enabled),
     type,
     candidateIndex,
-    plannedItems: plannedItems.map(({ index, type: plannedType }) => ({ index, type: plannedType })),
+    plannedItems: plannedItems.map(({ index, type: plannedType, rotation: plannedRotation = 0 }) => ({
+      index,
+      type: plannedType,
+      rotation: plannedRotation,
+    })),
     invalidIndices: [...invalidIndices],
+    rotation,
   };
   if (!buildPreviewMode.enabled) hoveredPreviewIndex = -1;
   syncPlanGhosts();
   syncBuildGhost();
 }
 
+function syncRecenterChip(state = cameraController?.getState()) {
+  if (!recenterEl) return;
+  recenterEl.hidden = state?.atDefault !== false;
+}
+
+// 보드 칸이 아닌 바닥(바다·해안)을 짧은 간격으로 두 번 누르면 시점을 되돌린다.
+function handleEmptyGroundTap(event) {
+  const now = performance.now();
+  const previous = lastEmptyTap;
+  lastEmptyTap = { at: now, x: event.clientX, y: event.clientY };
+  if (!previous || now - previous.at > CITY_CAMERA.DOUBLE_TAP_MS) return;
+  const dx = event.clientX - previous.x;
+  const dy = event.clientY - previous.y;
+  if (dx * dx + dy * dy > CITY_CAMERA.DOUBLE_TAP_RADIUS_PX ** 2) return;
+  lastEmptyTap = null;
+  resetCityCamera();
+}
+
 function handlePointerClick(event) {
   if (!cameraController.isGestureClick(event.pointerId)) return;
   updatePointer(event);
   const index = raycastIndex();
-  if (index < 0 || currentConfigs[index]?.disabled) return;
+  if (index < 0) {
+    handleEmptyGroundTap(event);
+    return;
+  }
+  lastEmptyTap = null;
+  if (currentConfigs[index]?.disabled) return;
+  flashTappedCell(index);
   onCellClickCb(index);
+  eventBus.emit(Events.BOARD_CELL_TAPPED, { index, pointerType: event.pointerType || 'mouse' });
+}
+
+// 누른 칸을 잠깐 흰 링으로 반짝여 "눌렸다"를 보여준다(키보드 활성화도 같은 경로).
+export function flashTappedCell(index) {
+  if (!(index >= 0)) return;
+  tapFlashIndex = index;
+  tapFlashAt = performance.now();
+  needsRender = true;
 }
 
 function renderFrame(now) {
@@ -1726,6 +1718,12 @@ function renderFrame(now) {
   if (activeMotions.size) {
     updateInstances(currentConfigs, currentCoords, now);
     if (completeFinishedMotions(now)) updateInstances(currentConfigs, currentCoords, now);
+    shouldRender = true;
+  }
+  if (tapFlashIndex >= 0) {
+    // 반짝임이 끝나는 프레임까지 한 번 더 그려서 흰 링을 지운다.
+    if (now - tapFlashAt >= UI_FEEDBACK.TAP_FLASH_MS) tapFlashIndex = -1;
+    if (!activeMotions.size) updateInstances(currentConfigs, currentCoords, now);
     shouldRender = true;
   }
   if (!shouldRender || !renderer) return;
@@ -1858,7 +1856,7 @@ export function getCityRendererStats() {
     facilityVisualSamples,
     greenDetailInstances: greenDetailMesh?.count ?? 0,
     greenDetailCountsByLevel: { ...greenDetailCountsByLevel },
-    instancedLayers: 1 + facilityMeshes.size + extraLevelMeshes.size + planGhostMeshes.size + 9,
+    instancedLayers: 1 + facilityMeshes.size + extraLevelMeshes.size + planGhostMeshes.size + 8,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1877,23 +1875,28 @@ export function getCityRendererStats() {
     ambientFrameUpdateCount,
     ambientMotionPaused: ambientMotionController?.getState().paused ?? false,
     ambientMotionScheduled: ambientMotionController?.getState().scheduled ?? false,
-    worldPhase,
-    sunIntensity: sunLight?.intensity ?? 0,
     renderCount,
     pixelRatio: renderer?.getPixelRatio() ?? 0,
     theme: currentTheme,
     firstTileColor,
     environment: cityEnvironment?.getStats() ?? { state: 'idle' },
     keyboardCursorIndex,
+    tapFlashIndex: tapFlashIndex >= 0 ? tapFlashIndex : null,
     ghostVisible: Boolean(ghostMesh?.visible),
     ghostCount: ghostMesh?.visible ? 1 : 0,
     planGhostCount,
     planGhostTypes: [...planGhostMeshes.entries()].filter(([, mesh]) => mesh.count > 0).map(([type]) => type).sort(),
+    // 지금 고스트가 쓰고 있는 방향 인덱스(0~7)와, 계획 고스트에 실제로 찍힌 yaw.
+    ghostRotation: buildPreviewMode.enabled ? buildPreviewMode.rotation : null,
+    planGhostRotationsY: [...planGhostMeshes.values()].flatMap((mesh) => (
+      Array.from({ length: mesh.count }, (_, instanceIndex) => {
+        mesh.getMatrixAt(instanceIndex, sampleMatrix);
+        sampleMatrix.decompose(samplePosition, sampleQuaternion, sampleScale);
+        sampleEuler.setFromQuaternion(sampleQuaternion, 'YXZ');
+        return Number(sampleEuler.y.toFixed(3));
+      })
+    )),
     planGhostLayerCount: planGhostMeshes.size,
-    skyHour: currentWorldHour,
-    skyTopColor: currentSkyState.topColor,
-    skyBottomColor: currentSkyState.bottomColor,
-    buildingLightCount: buildingLightMesh?.count ?? 0,
     linkMarkerCount: 0,
     levelSegmentCount: 0,
     facilityPaletteMode: facilityMeshes.get('factory')?.material?.userData?.facilityPaletteMode || 'textured',
@@ -1935,6 +1938,8 @@ export async function disposeCityScene3D() {
   eventBus.off(Events.THEME_CHANGED, applyWorldTheme);
   eventBus.off(Events.MODAL_OPEN, pauseBirdVisits);
   eventBus.off(Events.MODAL_CLOSE, resumeBirdVisits);
+  eventBus.off(Events.CAMERA_CHANGED, syncRecenterChip);
+  eventBus.off(Events.CAMERA_RESET, syncRecenterChip);
   document.removeEventListener('visibilitychange', handleBirdVisibility);
   reducedMotionQuery?.removeEventListener?.('change', handleReducedMotion);
   birdVisitController?.dispose();
@@ -1952,9 +1957,14 @@ export async function disposeCityScene3D() {
   buildOxWidgetEl?.remove();
   buildOxWidgetEl = null;
   buildOxConfirmEl = null;
+  buildOxRotateEl = null;
+  buildOxDirectionEl = null;
   buildOxWidgetState = null;
   buildOxWidgetVisible = false;
   cameraHintEl?.remove();
+  recenterEl?.remove();
+  recenterEl = null;
+  lastEmptyTap = null;
   cameraHintEl = null;
   canvasEl?.removeEventListener('pointerdown', capturePointer);
   canvasEl?.removeEventListener('pointermove', updatePointer);
@@ -1966,7 +1976,6 @@ export async function disposeCityScene3D() {
     stateRingMesh,
     windRotorMesh,
     ambientAgentMesh,
-    buildingLightMesh,
     smokeEffectMesh,
     statusLightMesh,
     constructionFoundationMesh,
@@ -2025,17 +2034,12 @@ export async function disposeCityScene3D() {
   ghostMaterial = null;
   ghostSignature = null;
   planGhostMaterial = null;
-  buildingLightMesh = null;
-  buildingLightMaterial = null;
   smokeEffectMesh = null;
   statusLightMesh = null;
   constructionFoundationMesh = null;
   constructionScaffoldMesh = null;
   greenDetailMesh = null;
   greenDetailCountsByLevel = { 1: 0, 2: 0, 3: 0 };
-  currentWorldHour = 8;
-  currentSkyState = getSkyState(currentWorldHour);
-  visualHourOverride = null;
   hoveredPreviewIndex = -1;
   keyboardCursorIndex = -1;
   lastTickProgress = 0;
@@ -2054,6 +2058,7 @@ export function getCityCameraState() {
 
 export function resetCityCamera() {
   cameraController?.reset(currentRadius);
+  syncRecenterChip();
   needsRender = true;
 }
 

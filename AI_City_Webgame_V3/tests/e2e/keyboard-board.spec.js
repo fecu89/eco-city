@@ -56,7 +56,7 @@ test('화살표로 커서를 옮기고 Enter로 건설 계획을 세운 뒤 O �
   await page.keyboard.press('Enter');
   await expect(page.locator('#buildConfirm')).toBeVisible();
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan))
-    .toEqual([{ index: target, type: 'residential' }]);
+    .toEqual([{ index: target, type: 'residential', rotation: 0 }]);
   expect(await page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(0);
 
   // O 위젯은 진짜 버튼이라 키보드로도 눌린다.

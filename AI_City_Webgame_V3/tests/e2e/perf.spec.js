@@ -26,10 +26,10 @@ async function renderRepresentativeCity(page) {
 }
 
 // 예산의 기준이 되는 최악의 경우: 37칸이 모든 (시설, 레벨) 조합을 동시에 갖고(레벨마다
-// 실제 GLB가 다른 시설은 조합마다 InstancedMesh를 하나씩 더 쓴다) 야간 창문 조명, 공사
-// 기초·비계 두 현장, 연기와 상태등 ambient, 호버 고스트, 계획 고스트, 선택 마커까지
-// 한 프레임에 모두 켜진 상태다. 이 조합의 실측치는 47 draw calls이고 예산은 실측 + 2다
-// (ADR-0003에 같은 수치와 시나리오를 기록해 두었다).
+// 실제 GLB가 다른 시설은 조합마다 InstancedMesh를 하나씩 더 쓴다) 공사 기초·비계 두 현장,
+// 연기와 상태등 ambient, 호버 고스트, 계획 고스트, 선택 마커까지 한 프레임에 모두 켜진
+// 상태다. 야간 창문 조명 레이어를 없애면서 실측치는 47 -> 46 draw calls가 됐고, 예산은
+// 49를 그대로 둔다(ADR-0003에 같은 수치와 시나리오를 기록해 두었다).
 const WORST_CASE_DRAW_CALL_BUDGET = 49;
 
 async function renderWorstCaseCity(page) {
@@ -63,7 +63,6 @@ async function renderWorstCaseCity(page) {
       project: { kind: 'upgrade', fromLevel: 2, toLevel: 3, elapsedDays: 4, durationDays: 8 },
     };
     state.selectedCell = 0;
-    window.__setWorldHourForTest(2);
     window.__refreshGameForTest();
     // 마지막 renderGrid 뒤에 세워야 고스트가 살아 있다(renderGrid는 candidateIndex를 지운다).
     window.__setBuildPreviewForTest({
@@ -162,14 +161,12 @@ test.describe('performance', () => {
     expect(stats.drawCalls).toBeLessThanOrEqual(40);
   });
 
-  test('the worst-case night city with construction, ambient, and both ghosts stays inside the draw-call budget', async ({ gamePage: page }) => {
+  test('the worst-case city with construction, ambient, and both ghosts stays inside the draw-call budget', async ({ gamePage: page }) => {
     await renderWorstCaseCity(page);
     const stats = await page.evaluate(() => window.__getCityRendererStats());
 
     // 예산이 조용히 헐거워지지 않도록, 최악의 경우를 이루는 레이어가 실제로 다 켜졌는지 먼저 확인한다.
     expect(stats.occupiedCells).toBe(35);
-    expect(stats.worldPhase).toBe('night');
-    expect(stats.buildingLightCount).toBeGreaterThan(0);
     expect(stats.constructionSiteCount).toBe(2);
     expect(stats.smokeEffectCount).toBeGreaterThan(0);
     expect(stats.statusLightCount).toBeGreaterThan(0);
@@ -183,7 +180,7 @@ test.describe('performance', () => {
     expect(stats.drawCalls).toBeLessThanOrEqual(WORST_CASE_DRAW_CALL_BUDGET);
   });
 
-  test('active zones, operating modes, and a climate event stay inside the same render budget', async ({ gamePage: page }) => {
+  test('active zones, facility priorities, and a climate event stay inside the same render budget', async ({ gamePage: page }) => {
     await renderRepresentativeCity(page);
     const before = await page.evaluate(() => window.__getCityRendererStats());
     await page.evaluate(() => {
@@ -191,8 +188,8 @@ test.describe('performance', () => {
       state.progression.chapter = 3;
       state.progression.objectiveSetId = 'resilience';
       state.elapsedGameDays = 40;
-      state.grid[1].operationMode = 'saving';
-      state.grid[2].operationMode = 'boost';
+      state.grid[1].priority = 'saving';
+      state.grid[2].priority = 'essential';
       state.grid[7].batteryPolicy = 'reserve30';
       state.events.schedule = [{
         id: 'perf-heatwave', type: 'heatwave', announceAt: 34, startAt: 40, endAt: 48,
@@ -325,8 +322,8 @@ test.describe('performance', () => {
       const state = window.__GAME_STATE__;
       state.progression.chapter = 3;
       state.elapsedGameDays = 40;
-      state.grid[1].operationMode = 'saving';
-      state.grid[2].operationMode = 'boost';
+      state.grid[1].priority = 'saving';
+      state.grid[2].priority = 'essential';
       state.grid[7].batteryPolicy = 'reserve30';
       state.events.schedule = [{
         id: 'perf-stagnant-air', type: 'stagnantAir', announceAt: 34, startAt: 40, endAt: 52,

@@ -16,14 +16,14 @@ test('the final council is the only quest quiz while every research owns four qu
   expect(state.quizResearchId).toBeNull();
 
   expect(Object.keys(RESEARCH_QUIZZES).sort()).toEqual([
-    'battery2', 'battery3', 'demandResponse', 'green2', 'green3', 'smartGrid', 'solar2', 'solar3', 'tidal1', 'wind2', 'wind3',
+    'battery2', 'battery3', 'green2', 'green3', 'smartGrid', 'solar2', 'solar3', 'tidal1', 'wind2', 'wind3',
   ]);
   const ids = [];
   Object.entries(RESEARCH_QUIZZES).forEach(([researchId, questions]) => {
     expect(questions, researchId).toHaveLength(4);
     questions.forEach((question) => ids.push(question.id));
   });
-  expect(new Set(ids).size).toBe(44);
+  expect(new Set(ids).size).toBe(40);
 });
 
 test('research quiz choices do not reveal the answer through sentence length', () => {

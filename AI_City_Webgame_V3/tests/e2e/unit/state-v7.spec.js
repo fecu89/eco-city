@@ -10,23 +10,24 @@ function saveShapedState() {
 test('v6 migration keeps every facility complete and creates no construction projects', () => {
   const v6 = saveShapedState();
   v6.v = 6;
-  v6.grid[0] = { type: 'residential', level: 1, operationMode: 'normal' };
+  v6.grid[0] = { type: 'residential', level: 1 };
+  // 제거된 시설 운영 모드가 들어 있는 옛 저장본도 정상 복구되고, 그 필드는 버려져야 한다.
   v6.grid[1] = { type: 'thermal', level: 2, operationMode: 'eco' };
 
   const migrated = migrateV6ToV7(v6);
 
   expect(migrated.v).toBe(7);
   expect(migrated.grid[0]).toMatchObject({ type: 'residential', level: 1, project: null });
-  expect(migrated.grid[1]).toMatchObject({ type: 'thermal', level: 2, operationMode: 'eco', project: null });
+  expect(migrated.grid[1]).toMatchObject({ type: 'thermal', level: 2, project: null });
+  expect(migrated.grid[1]).not.toHaveProperty('operationMode');
 });
 
 test('current round trip preserves concurrent build and upgrade progress with battery and research state', () => {
   const state = new GameState();
-  const thermal = { type: 'thermal', level: 1, operationMode: 'eco' };
+  const thermal = { type: 'thermal', level: 1 };
   state.grid[0] = {
     type: 'battery',
     level: 1,
-    operationMode: 'normal',
     batteryPolicy: 'auto',
     batteryStoredLowCarbon: 6,
     batteryStoredFossil: 2,
@@ -41,7 +42,7 @@ test('current round trip preserves concurrent build and upgrade progress with ba
   const payload = state.serialize();
   const restored = new GameState();
 
-  expect(SAVE_VERSION).toBe(9);
+  expect(SAVE_VERSION).toBe(10);
   expect(restored.hydrate(payload)).toBe(true);
   expect(restored.grid[0]).toMatchObject({
     batteryStoredLowCarbon: 6,
@@ -50,7 +51,7 @@ test('current round trip preserves concurrent build and upgrade progress with ba
   });
   expect(restored.grid[1]).toMatchObject({
     level: 1,
-    project: { kind: 'upgrade', fromLevel: 1, toLevel: 2, elapsedDays: 4, durationDays: 8, suspendedOperationMode: 'eco' },
+    project: { kind: 'upgrade', fromLevel: 1, toLevel: 2, elapsedDays: 4, durationDays: 8 },
   });
   expect(restored.research.jobs.solar2.elapsedEffectiveDays).toBe(12);
   expect(JSON.stringify(payload)).not.toContain('startedAtRealTime');
@@ -64,7 +65,7 @@ test('malformed build projects clear only their construction site', () => {
     level: 1,
     project: { kind: 'build', elapsedDays: 2, durationDays: 0, paidCost: 4 },
   };
-  payload.grid[1] = { type: 'residential', level: 1, operationMode: 'normal', project: null };
+  payload.grid[1] = { type: 'residential', level: 1, project: null };
 
   const restored = new GameState();
   expect(restored.hydrate(payload)).toBe(true);
@@ -72,14 +73,13 @@ test('malformed build projects clear only their construction site', () => {
   expect(restored.grid[1]).toMatchObject({ type: 'residential', level: 1, project: null });
 });
 
-test('malformed upgrade projects restore the previous level and suspended mode without refund', () => {
+test('malformed upgrade projects restore the previous level without refund', () => {
   const payload = saveShapedState();
   payload.v = SAVE_VERSION;
   payload.credits = 3;
   payload.grid[0] = {
     type: 'thermal',
     level: 1,
-    operationMode: 'normal',
     project: {
       kind: 'upgrade',
       fromLevel: 1,
@@ -87,18 +87,17 @@ test('malformed upgrade projects restore the previous level and suspended mode w
       elapsedDays: 2,
       durationDays: 8,
       paidCost: 5,
-      suspendedOperationMode: 'eco',
     },
   };
 
   const restored = new GameState();
   expect(restored.hydrate(payload)).toBe(true);
-  expect(restored.grid[0]).toMatchObject({ level: 1, operationMode: 'eco', project: null });
+  expect(restored.grid[0]).toMatchObject({ level: 1, project: null });
   expect(restored.credits).toBe(3);
 });
 
-test('the full migration chain ends at v9', () => {
+test('the full migration chain ends at v10', () => {
   const v6 = saveShapedState();
   v6.v = 6;
-  expect(migrateSaveData(v6).v).toBe(9);
+  expect(migrateSaveData(v6).v).toBe(10);
 });

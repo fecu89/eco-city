@@ -6,6 +6,8 @@ import { eventBus, Events } from '../core/EventBus.js';
 const _ratio = new THREE.Vector3(...CITY_CAMERA.POSITION_RATIO).normalize();
 const _clampedTarget = new THREE.Vector3();
 const _targetDelta = new THREE.Vector3();
+const _defaultPosition = new THREE.Vector3();
+const _defaultTarget = new THREE.Vector3();
 
 function boardWorldSpan(radius) {
   return Math.sqrt(3) * BOARD.HEX_SIZE * radius * 2 + BOARD.HEX_SIZE * 2;
@@ -19,6 +21,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
   let multiTouch = false;
   let boardRadius = getBoardRadius();
   let aspectFit = 1;
+  let portrait = false;
 
   controls.enablePan = true;
   controls.enableDamping = true;
@@ -28,8 +31,14 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
 
   function applyDistanceBounds(radius) {
     const span = boardWorldSpan(radius);
-    controls.minDistance = span * CITY_CAMERA.MIN_DISTANCE_PER_GRID;
+    const minPerGrid = portrait ? CITY_CAMERA.MIN_DISTANCE_PER_GRID_PORTRAIT : CITY_CAMERA.MIN_DISTANCE_PER_GRID;
+    controls.minDistance = span * minPerGrid;
     controls.maxDistance = span * CITY_CAMERA.MAX_DISTANCE_PER_GRID;
+  }
+
+  // 손가락은 마우스보다 크게 흔들린다 — 포인터 종류별로 "탭"으로 볼 이동 한계를 다르게 둔다.
+  function clickThresholdFor(pointerType) {
+    return pointerType === 'touch' ? CITY_CAMERA.TAP_THRESHOLD_TOUCH_PX : CITY_CAMERA.DRAG_THRESHOLD_PX;
   }
 
   function clampTarget() {
@@ -62,7 +71,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
 
   function onPointerDown(event) {
     completedGestures.delete(event.pointerId);
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false, pointerType: event.pointerType });
     if (pointers.size > 1) {
       multiTouch = true;
       pointers.forEach((entry) => { entry.moved = true; });
@@ -74,7 +83,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
     if (!entry) return;
     const dx = event.clientX - entry.x;
     const dy = event.clientY - entry.y;
-    const threshold = CITY_CAMERA.DRAG_THRESHOLD_PX;
+    const threshold = clickThresholdFor(entry.pointerType);
     if (dx * dx + dy * dy >= threshold * threshold) entry.moved = true;
   }
 
@@ -127,14 +136,30 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
     controls.update();
     controls.enableDamping = damping;
     controls.saveState();
+    _defaultPosition.copy(camera.position);
+    _defaultTarget.copy(controls.target);
     eventBus.emit(Events.CAMERA_RESET, getState());
   }
 
+  // 기본 시점(리셋 직후 포즈)에서 벗어났는지 — 허용 오차는 현재 거리에 비례한다.
+  function isAtDefault() {
+    const tolerance = Math.max(0.01, camera.position.distanceTo(controls.target) * CITY_CAMERA.DEFAULT_POSE_TOLERANCE);
+    return camera.position.distanceTo(_defaultPosition) <= tolerance
+      && controls.target.distanceTo(_defaultTarget) <= tolerance;
+  }
+
   function fitAspect(aspect) {
+    const nextPortrait = aspect < 1;
+    if (nextPortrait !== portrait) {
+      portrait = nextPortrait;
+      applyDistanceBounds(boardRadius);
+    }
     const nextFit = aspect < 1 ? Math.min(1.32, 1 + (1 - aspect) * 1.08) : 1;
     if (Math.abs(nextFit - aspectFit) < 0.001) return;
     const ratio = nextFit / aspectFit;
     camera.position.sub(controls.target).multiplyScalar(ratio).add(controls.target);
+    // 화면 비율 맞춤은 사용자가 움직인 게 아니므로 기본 시점도 같이 옮긴다.
+    _defaultPosition.sub(_defaultTarget).multiplyScalar(ratio).add(_defaultTarget);
     aspectFit = nextFit;
     controls.update();
   }
@@ -155,6 +180,9 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
       position: copy(camera.position),
       target: copy(controls.target),
       distance: Math.round(camera.position.distanceTo(controls.target) * 10000) / 10000,
+      minDistance: Math.round(controls.minDistance * 10000) / 10000,
+      maxDistance: Math.round(controls.maxDistance * 10000) / 10000,
+      atDefault: isAtDefault(),
       interacting,
     };
   }
@@ -193,5 +221,5 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
   domElement.addEventListener('pointercancel', onPointerCancel);
   reset(boardRadius);
 
-  return { controls, update, reset, resize, fitAspect, isGestureClick, getState, setOrbitForTest, dispose };
+  return { controls, update, reset, resize, fitAspect, isGestureClick, isAtDefault, getState, setOrbitForTest, dispose };
 }

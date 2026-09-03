@@ -1,5 +1,12 @@
 import { test, expect } from '../fixtures/game-test.js';
 import { GREEN_VISUAL_LAYOUTS } from '../../src/ui/CityScene3D.js';
+import { DIRECTION_RULES } from '../../src/core/Constants.js';
+import { defaultRotationFor } from '../../src/systems/EnvironmentSystem.js';
+
+// 방향 인덱스 → three의 yaw. 시계 방향으로 도는 만큼 +Y 회전은 반대 부호다.
+const yawFor = (rotation) => -rotation * ((DIRECTION_RULES.STEP_DEGREES * Math.PI) / 180);
+// 오일러 각은 ±π에서 접히므로 각도 차이로 비교한다.
+const sameAngle = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 1e-3;
 
 test('green levels use progressively richer but bounded shared geometry', () => {
   expect(Object.fromEntries(
@@ -56,8 +63,12 @@ test.describe('City Kit asset pipeline', () => {
     for (const type of ['residential', 'factory', 'data', 'nuclear', 'green']) {
       expect(new Set(samples[type].map((sample) => sample.rotationY)).size).toBeGreaterThan(1);
     }
+    // 장식용 방위 오프셋이 없는 시설은 칸이 달라도 같은 쪽을 본다. 방향을 따로 고르지 않은
+    // 칸은 시설 기본 방향에 그대로 서므로(태양광은 남향 = 180°) 그 값까지 함께 확인한다.
     for (const type of ['thermal', 'solar', 'wind', 'battery', 'cooling', 'tidal']) {
-      expect(samples[type].every((sample) => sample.rotationY === 0)).toBe(true);
+      const expected = yawFor(defaultRotationFor(type));
+      expect(new Set(samples[type].map((sample) => sample.rotationY)).size).toBe(1);
+      expect(samples[type].every((sample) => sameAngle(sample.rotationY, expected))).toBe(true);
     }
   });
 

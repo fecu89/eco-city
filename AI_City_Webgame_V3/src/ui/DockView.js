@@ -1,4 +1,4 @@
-import { ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { BOARD_TAP_COPY, ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, UI_FEEDBACK, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { facilityBuildAvailability, facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
 import { effectiveFacilityStats } from '../systems/CityModifierSystem.js';
@@ -12,6 +12,8 @@ let detailFacilityKey = null;
 // 시설 카드를 고르는 즉시 독 패널을 접어 보드를 드러낸다(어디에 지을지 보여야 하므로).
 // 칸을 골라 확정·취소하거나, 패널이 닫히거나, 건설 버튼으로 다시 펼치면 풀린다.
 let collapsedForPlacement = false;
+// 첫 건설을 확정하기 전까지는 시설을 고를 때마다 "빈 칸을 눌러 배치" 힌트를 띄운다.
+let placementHintDismissed = false;
 
 const FACILITY_DISPLAY_ORDER = new Map(FACILITY_BUILD_ORDER.map((facility, index) => [facility, index]));
 
@@ -21,7 +23,10 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   panelEl = sharedPanelEl;
   eventBus.on(Events.BUILD_PLAN_CHANGED, renderDock);
   eventBus.on(Events.BUILD_PLAN_CLEARED, () => expandDock());
-  eventBus.on(Events.BUILD_PLAN_COMMITTED, () => expandDock());
+  eventBus.on(Events.BUILD_PLAN_COMMITTED, () => {
+    placementHintDismissed = true;
+    expandDock();
+  });
   eventBus.on(Events.HUD_PANEL_CHANGED, () => expandDock());
   // 접힌 독 상태에서 건설 버튼을 다시 누르면 패널을 닫는 대신 독을 다시 펼친다 —
   // 그래야 다른 시설로 바꾸려는 사람이 "버튼을 눌렀는데 아무 일도 없다"고 느끼지 않는다.
@@ -33,6 +38,7 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   eventBus.on(Events.GAME_RESET, () => {
     detailFacilityKey = null;
     collapsedForPlacement = false;
+    placementHintDismissed = false;
   });
 }
 
@@ -43,6 +49,13 @@ function expandDock() {
 
 function collapseDockForPlacement(pickedButton) {
   collapsedForPlacement = true;
+  if (!placementHintDismissed) {
+    eventBus.emit(Events.TOAST_SHOW, {
+      ...BOARD_TAP_COPY.placementHint(FACILITIES[gameState.selectedFacility]?.name || '시설'),
+      kind: 'placement-hint',
+      duration: UI_FEEDBACK.PLACEMENT_HINT_MS,
+    });
+  }
   // 키보드로 카드를 골랐다면 포커스를 보드로 옮겨 방향키로 바로 칸을 고를 수 있게 한다.
   const board = pickedButton?.ownerDocument.getElementById('cityGrid');
   if (pickedButton && pickedButton === pickedButton.ownerDocument.activeElement) board?.focus({ preventScroll: true });
@@ -53,7 +66,6 @@ export function facilityPresentation(key) {
   const reference = effectiveFacilityStats({
     type: key,
     level: 1,
-    operationMode: 'normal',
     priority: ['residential', 'cooling'].includes(key) ? 'essential' : 'normal',
   });
   const labor = WORKFORCE_LEVELS[key];
@@ -107,7 +119,7 @@ function renderFacilityDetail(requestedKey = null) {
     <div class="facility-detail-copy"><strong>${facility.icon} ${facility.name}</strong><p title="${facility.desc}">${facility.desc}</p><small class="facility-detail-basis">${basisText}</small>${locked ? `<em>${facilityUnlockMessage(gameState, key)}</em>` : ''}</div>
     <div class="facility-detail-stats">
       <span data-metric="credit" aria-label="크레딧" title="전력·인력·취업률과 공간 페널티 적용 전 Lv.1 기준"><small aria-hidden="true">💰 ${economyLabel}</small><b>${money}</b></span>
-      <span data-metric="power" aria-label="전력" title="기후·연구·운영 모드 적용 전 Lv.1 기준"><small aria-hidden="true">⚡ ${powerLabel}</small><b>${power}</b></span>
+      <span data-metric="power" aria-label="전력" title="기후·연구 효과 적용 전 Lv.1 기준"><small aria-hidden="true">⚡ ${powerLabel}</small><b>${power}</b></span>
       <span data-metric="carbon" aria-label="이산화탄소" title="정상 운전 시 상한"><small aria-hidden="true">CO₂ 상한</small><b>${carbon}</b></span>
       <span data-metric="water" aria-label="물" title="정상 운전 시 상한. 순환냉각은 인접 대상에서 차감"><small aria-hidden="true">💧 물</small><b>${water}</b></span>
       <span data-metric="labor" aria-label="인력" title="인력"><small aria-hidden="true">👥</small><b>${laborText}</b></span>

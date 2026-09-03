@@ -153,9 +153,7 @@ export function assignResearchDataCenter(state, researchId, index) {
 export function researchDemandByIndex(state) {
   return activeResearchJobs(state).reduce((demand, job) => {
     const cell = state.grid[job.dataCenterIndex];
-    if (validDataCenter(state, job.dataCenterIndex)
-      && !cell.project
-      && cell.operationMode !== 'eco') {
+    if (validDataCenter(state, job.dataCenterIndex) && !cell.project) {
       demand[job.dataCenterIndex] = RESEARCH_RULES.EXTRA_DEMAND * operationProfileForCell(cell).demand;
     }
     return demand;
@@ -255,17 +253,6 @@ export function advanceResearchOneDay(state, facilityPower, modifierContext = nu
       cell,
       facilityModifierAt(modifierContext, active.dataCenterIndex),
     ).researchSpeed;
-    if (researchSpeed <= 0) {
-      active.status = 'mode_paused';
-      results[active.id] = {
-        status: 'mode_paused',
-        advancedDays: 0,
-        completed: false,
-        ratio,
-        dataCenterIndex: active.dataCenterIndex,
-      };
-      continue;
-    }
     const dataCenterLevel = state.grid[active.dataCenterIndex]?.level || 1;
     const advancedDays = (RESEARCH_RULES.DATA_CENTER_SPEED[dataCenterLevel] || 1) * researchSpeed;
     active.elapsedEffectiveDays = Math.min(definition.durationDays, active.elapsedEffectiveDays + advancedDays);
