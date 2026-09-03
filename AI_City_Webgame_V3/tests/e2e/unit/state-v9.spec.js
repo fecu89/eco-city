@@ -4,6 +4,7 @@ import { BOARD, STAGES } from '../../../src/core/Constants.js';
 import { CAMPAIGN_QUEST_INDEXES, PREPARATION_QUEST_IDS } from '../../../src/core/CampaignProgression.js';
 import { migrateSaveData, migrateV8ToV9 } from '../../../src/systems/SaveSystem.js';
 import { listResearchAvailability } from '../../../src/systems/ResearchSystem.js';
+import { advanceCityEvents } from '../../../src/systems/CityEventSystem.js';
 
 function v8Save(overrides = {}) {
   const serialized = new GameState().serialize();
@@ -217,4 +218,41 @@ test('old final-test and completed campaign saves move to quest nineteen', () =>
     stressTest: { status: 'passed', result: { passed: true } },
   });
   expect(SAVE_VERSION).toBe(9);
+});
+
+// 기후전 구간(11~18)에서는 캠페인이 이벤트 일정을 소유한다(campaignOwnsSchedule). v8의
+// climateCampaign.status는 'locked'일 수 있고 그대로 옮기면 캠페인이 일정을 놓아 버려
+// 무작위 이벤트 덱이 기후 퀘스트 위에 겹쳐 깔린다.
+test('기후전 구간으로 옮겨진 저장은 브리핑 상태로 정규화되어 캠페인이 일정을 소유한다', () => {
+  const save = v8Save({
+    questIndex: 9,
+    climateCampaign: {
+      status: 'locked',
+      eventType: 'drought',
+      attempt: 2,
+      scheduledEventId: 'stale-1',
+      progress: { days: 3 },
+      lastResult: null,
+      completedEventTypes: ['heatwave'],
+    },
+  });
+
+  const migrated = migrateV8ToV9(save);
+  expect(migrated.questIndex).toBe(13);
+  expect(migrated.climateCampaign).toMatchObject({
+    status: 'briefing',
+    eventType: null,
+    scheduledEventId: null,
+    progress: {},
+    attempt: 2,
+    completedEventTypes: ['heatwave'],
+  });
+
+  const state = hydrated(save);
+  expect(state.climateCampaign.status).toBe('briefing');
+  expect(state.events.schedule).toEqual([]);
+  // 캠페인이 일정을 소유하므로 무작위 덱을 새로 만들지 않는다.
+  advanceCityEvents(state);
+  expect(state.events.schedule).toEqual([]);
+  expect(state.events.activeId).toBe(null);
 });

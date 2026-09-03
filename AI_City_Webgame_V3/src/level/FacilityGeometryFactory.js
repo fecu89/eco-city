@@ -42,7 +42,15 @@ export function createFacilityFallbackGeometry(type) {
   return geometry;
 }
 
-export function disposeFacilityFallbacks() {
-  cache.forEach((geometry) => geometry.dispose());
-  cache.clear();
+// types를 주면 그 타입의 폴백만 버린다(실제 GLB로 교체된 시설). 생략하면 전부 버린다.
+export function disposeFacilityFallbacks(types) {
+  if (!types) {
+    cache.forEach((geometry) => geometry.dispose());
+    cache.clear();
+    return;
+  }
+  types.forEach((type) => {
+    cache.get(type)?.dispose();
+    cache.delete(type);
+  });
 }

@@ -13,6 +13,7 @@ import { roundCredits } from '../core/Money.js';
 import { formatCredits } from '../core/Money.js';
 import { QUESTS, questForState } from '../core/QuestDefinitions.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { EXPANSION_SIDES } from '../core/ZoneDefinitions.js';
 import {
   CAMPAIGN_QUEST_INDEXES,
   levelThreeUnlockQuestForFacility,
@@ -449,6 +450,15 @@ export function upgradeRequirementMessage(state, validation) {
 export function facilityUnlockMessage(state, facilityKey) {
   if (facilityKey === 'tidal' && (state.research?.techLevels?.tidal || 0) < 1) {
     return `${RESEARCH.tidal1.name} 연구를 완료하면 해금됩니다.`;
+  }
+  // 태양광·풍력은 퀘스트 보상이 아니라 6단계를 끝낸 뒤 고르는 첫 확장 방향으로 열린다.
+  // 아직 방향을 고르지 않았다면 그것이 실제 다음 행동이다. 방향을 고른 뒤에는 반대편
+  // 재생에너지가 8단계 보상으로 열리므로 아래 퀘스트 안내가 맞다.
+  const expansionSide = state.expansion?.firstChoice
+    ? null
+    : Object.values(EXPANSION_SIDES).find((side) => side.facility === facilityKey);
+  if (expansionSide && !state.unlockedFacilities.has(facilityKey)) {
+    return `퀘스트 ${CAMPAIGN_QUEST_INDEXES.FOUNDATION_END} 완료 후 ${expansionSide.label}을 선택하면 해금됩니다.`;
   }
   const quest = QUESTS
     .map((item) => questForState(state, item.index))

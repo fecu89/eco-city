@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
+import { QUEST_REQUIREMENTS } from '../../../src/core/Constants.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
@@ -96,7 +97,12 @@ test('foundation quests one through six remain reachable with the real power and
     [3, 'residential'], [4, 'residential'], [5, 'residential'], [6, 'residential'],
   ]);
   settleDay(quest5); settleDay(quest5);
-  expect(quest5.lastTickSummary).toMatchObject({ lowCarbonPercent: expect.any(Number), dailyCarbon: expect.any(Number) });
+  // 5단계 '탄소 전환선'의 세 조건을 실제 정산 수치로 확인한다 — 준비 상태만 보면
+  // 어느 조건이 아슬아슬한지 회귀에서 드러나지 않는다.
+  expect(quest5.lastTickSummary.lowCarbonPercent)
+    .toBeGreaterThanOrEqual(QUEST_REQUIREMENTS.TRANSITION_LOW_CARBON_PERCENT);
+  expect(quest5.lastTickSummary.dailyCarbon).toBeLessThanOrEqual(QUEST_REQUIREMENTS.TRANSITION_CARBON_MAX);
+  expect(quest5.lastTickSummary.netCredits).toBeGreaterThan(0);
   expect(quest5.questStatus).toBe('ready_to_claim');
 
   const quest6 = stateForFoundation(6, [
@@ -105,6 +111,14 @@ test('foundation quests one through six remain reachable with the real power and
   ]);
   quest6.baseline = { dailyWater: 15 };
   settleDay(quest6); settleDay(quest6);
+  // 6단계 '도시 물순환'의 규칙: 5단계에서 새로 들어온 핵발전 몫을 뺀 사용량이
+  // 4단계에 저장한 기준 도시(dailyWater 15) 이하여야 한다.
+  const nuclearWater = Object.entries(quest6.lastTickSummary.facilityEnvironment)
+    .reduce((total, [index, environment]) => (
+      quest6.grid[Number(index)]?.type === 'nuclear' ? total + (Number(environment.water) || 0) : total
+    ), 0);
+  expect(nuclearWater).toBeGreaterThan(0);
+  expect(quest6.lastTickSummary.dailyWater - nuclearWater).toBeLessThanOrEqual(quest6.baseline.dailyWater);
   expect(quest6.questStatus).toBe('ready_to_claim');
 });
 

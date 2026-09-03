@@ -203,7 +203,7 @@ test.describe('quest operations, celebration, reset, and save', () => {
     await expect(page.locator('#questCelebration')).toContainText('2040, 첫 시민');
   });
 
-  test('reset returns to quest 1, 08:00, and an empty city', async ({ gamePage: page }) => {
+  test('reset returns to quest 1, 2040-01-01, and an empty city', async ({ gamePage: page }) => {
     await openHudPanel(page, 'build');
     await clickCell(page, 0);
     await page.evaluate(() => {
@@ -229,7 +229,8 @@ test.describe('quest operations, celebration, reset, and save', () => {
       };
     });
     const { snapshot } = resetResult;
-    expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, hour: 8, timeScale: 1 } });
+    // 1틱 = 1게임일로 정리되며 gameTime에서 hour가 사라졌다(Task 2의 render_game_to_text 축소).
+    expect(snapshot).toMatchObject({ quest: 1, credits: 10, gameTime: { year: 2040, month: 1, day: 1, label: '2040-01-01', timeScale: 1 } });
     expect(snapshot.entities).toEqual([]);
     expect(resetResult).toMatchObject({
       simulation: { timeScale: 1, paused: false, pauseReasons: [] },

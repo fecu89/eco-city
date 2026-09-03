@@ -59,6 +59,7 @@ import {
 } from 'lucide';
 import anime from 'animejs';
 import { eventBus, Events } from '../core/EventBus.js';
+import { prefersReducedMotion } from './motionPreference.js';
 
 // data-lucide="..." 속성으로 쓰는 아이콘만 명시적으로 등록 — 전체 아이콘셋 대신 트리쉐이킹.
 // 주의: lucide의 replaceElement()는 data-lucide 값을 PascalCase로 변환해 이 맵에서 찾는다
@@ -280,7 +281,13 @@ function showEntry(entry, html) {
   modalEl.classList.remove('hidden');
   applyDialogSemantics();
   eventBus.emit(Events.MODAL_OPEN, publicInfo(entry));
-  anime({ targets: cardEl, scale: [0.96, 1], opacity: [0, 1], duration: 220, easing: 'easeOutCubic' });
+  if (prefersReducedMotion()) {
+    // 애니메이션 없이 최종 상태로 바로 놓는다 — anime가 남기던 인라인 값과 같은 자리다.
+    cardEl.style.opacity = '1';
+    cardEl.style.transform = 'none';
+  } else {
+    anime({ targets: cardEl, scale: [0.96, 1], opacity: [0, 1], duration: 220, easing: 'easeOutCubic' });
+  }
   focusFirstInCard();
 }
 

@@ -101,6 +101,42 @@ test('facility motion renders at a throttled cadence and a pausing modal clears 
   expect(await page.evaluate(() => window.__getCityRendererStats().ambientMotionPaused)).toBe(false);
 });
 
+test('a bird visit survives daily settlements and ends only when the flock lands or the green is gone', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
+    window.__refreshGameForTest();
+  });
+
+  expect(await page.evaluate(() => window.__triggerBirdVisitForTest(4, 3))).toBe(true);
+  expect(await page.evaluate(() => window.__getCityRendererStats().birdCount)).toBe(3);
+
+  await page.evaluate(() => {
+    window.__settleSimulationDay();
+    window.__settleSimulationDay();
+  });
+  expect(await page.evaluate(() => window.__getCityRendererStats().birdCount)).toBe(3);
+
+  await page.evaluate(() => window.__finishBirdVisitForTest());
+  expect(await page.evaluate(() => window.__getCityRendererStats().birdCount)).toBe(0);
+});
+
+test('a bird visit is cancelled when its green cell stops being green', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    window.__GAME_STATE__.grid[4] = { type: 'green', level: 1, priority: 'normal', operationMode: 'normal' };
+    window.__refreshGameForTest();
+  });
+
+  expect(await page.evaluate(() => window.__triggerBirdVisitForTest(4, 2))).toBe(true);
+  await page.evaluate(() => {
+    window.__GAME_STATE__.grid[4] = null;
+    window.__refreshGameForTest();
+  });
+
+  expect(await page.evaluate(() => window.__getCityRendererStats().birdCount)).toBe(0);
+});
+
 test('removing an animated facility immediately clears its pooled effect', async ({ gamePage: page }) => {
   await renderAmbientCity(page);
   await page.evaluate(() => window.__triggerFacilityAmbientForTest('factory', 0, 1500));

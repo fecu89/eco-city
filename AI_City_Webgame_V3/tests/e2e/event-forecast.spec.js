@@ -40,7 +40,8 @@ test('forecast transitions do not create a continuous render loop at 4x', async 
   await page.evaluate(() => {
     const state = window.__GAME_STATE__;
     state.progression.chapter = 3;
-    state.events.schedule = [{ id: 'wind-ui', type: 'lowWind', announceAt: 0, startAt: 24, endAt: 30 }];
+    // 은퇴한 lowWind 대신 현재 덱의 이벤트를 예보한다 — 정의가 없으면 예보 토스트 리스너가 던진다.
+    state.events.schedule = [{ id: 'wind-ui', type: 'stagnantAir', announceAt: 0, startAt: 24, endAt: 30 }];
     window.__setTimeScale(4);
   });
   const before = await page.evaluate(() => window.__getCityRendererStats().renderCount);

@@ -24,7 +24,8 @@
       <div class="board-stage">
           <div class="board-wrap">
             <div class="board-size-chip" id="boardSizeChip">육각 반경 2 · 19칸</div>
-            <div class="board-grid" id="cityGrid" aria-label="육각 도시 건설 대지"></div>
+            <!-- 안내(aria-label)와 키 동작은 GridView가 Constants의 문구로 채운다. -->
+            <div class="board-grid" id="cityGrid" tabindex="0" aria-label="육각 도시 건설 대지"></div>
           <div class="board-overlay hidden" id="boardOverlay"><div class="crisis-stamp">CLIMATE ALERT</div></div>
         </div>
       </div>
@@ -32,7 +33,8 @@
       <header class="topbar world-status">
         <div class="brand">
           <div class="brand-mark">40</div>
-          <div class="brand-copy"><strong>기후 생존 도시</strong><span id="phaseText">복구 퀘스트 1 / 6</span></div>
+          <!-- 아래 빈 자리들은 부팅 직후 첫 렌더가 채운다. 마크업에 문구를 적어 두면 코드와 갈라진다. -->
+          <div class="brand-copy"><strong>기후 생존 도시</strong><span id="phaseText"></span></div>
         </div>
 
         <div class="simulation-hud" id="simulationHud">
@@ -49,12 +51,12 @@
           <button type="button" id="fastForwardBtn" data-time-action="fast" aria-label="1배속과 4배속 전환" title="4배속">4×</button>
         </div>
         <span id="simCarbon" class="sr-only">저탄소 0%</span>
-        <span class="sr-only climate-normal" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
+        <span class="sr-only" id="simAlert"><b>평상시</b><small>기후 경보</small></span>
       </header>
 
-      <div class="forecast-strip" id="forecastStrip" aria-live="polite" hidden>
+      <div class="forecast-strip" id="forecastStrip" hidden>
         <i data-lucide="cloud-sun" aria-hidden="true"></i>
-        <span><small>도시 기후 예보</small><b>CH.3에서 활성화</b></span>
+        <span><small>도시 기후 예보</small><b>예보 대기</b></span>
       </div>
 
       <div class="hud-controls" id="hudControls">
@@ -75,7 +77,7 @@
             <div class="quest-panel-current" aria-live="polite">
               <div class="quest-panel-header" tabindex="0" aria-label="퀘스트 창. 방향키로 이동 가능">
                 <div class="quest-summary-line">
-                  <span class="eyebrow" id="questPanelLevel">LEVEL 1 / 15</span>
+                  <span class="eyebrow" id="questPanelLevel"></span>
                   <h2 id="questPanelTitle">2040, 첫 시민</h2>
                   <span class="quest-summary-divider" aria-hidden="true">—</span>
                   <p id="questPanelGoal">주거지 2개를 건설하세요.</p>
@@ -86,7 +88,7 @@
                 </div>
               </div>
               <div class="quest-progress"><span id="questPanelProgressBar"></span></div>
-              <div class="quest-reward" id="questPanelReward">보상 4.00 💰 · 화력발전 해금</div>
+              <div class="quest-reward" id="questPanelReward"></div>
               <div class="quest-panel-actions">
                 <button class="btn primary" id="questPanelClaimBtn" type="button" disabled>진행 중</button>
                 <button class="btn secondary" id="questPanelMapBtn" type="button">전체 퀘스트</button>
@@ -101,7 +103,7 @@
 
           <section class="glass panel-block status-panel hud-panel" id="statusPanel" data-hud-panel="status">
             <div class="panel-title compact floating-panel-header" tabindex="0" aria-label="도시 상태 창. 방향키로 이동 가능"><h3>도시 상태</h3><div class="panel-title-actions"><span class="model-label">일일 운영값</span><button class="icon-btn hud-close" type="button" data-hud-close><i data-lucide="x"></i></button></div></div>
-            <div class="status-workforce" id="statusWorkforce" aria-live="polite"><i data-lucide="users" aria-hidden="true"></i><span>사용 인력 0 / 전체 인구 0</span></div>
+            <div class="status-workforce" id="statusWorkforce"><i data-lucide="users" aria-hidden="true"></i><span>사용 인력 0 / 전체 인구 0</span></div>
             <canvas id="cityChart" height="190"></canvas>
           </section>
 
@@ -143,7 +145,7 @@
               <span data-metric="labor" aria-label="예상 필요 인력과 전체 인구"><small>인력/인구</small><b data-value>0/0명</b><em data-delta>±0</em></span>
             </div>
             <details class="build-forecast-timeline" id="buildForecastTimeline">
-              <summary><span>완공 예측</span><b data-forecast-summary>0시간</b></summary>
+              <summary><span>완공 예측</span><b data-forecast-summary>0일</b></summary>
               <ol data-forecast-events></ol>
             </details>
           </div>

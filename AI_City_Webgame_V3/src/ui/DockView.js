@@ -9,6 +9,9 @@ let dockEl = null;
 let detailEl = null;
 let panelEl = null;
 let detailFacilityKey = null;
+// 시설 카드를 고르는 즉시 독 패널을 접어 보드를 드러낸다(어디에 지을지 보여야 하므로).
+// 칸을 골라 확정·취소하거나, 패널이 닫히거나, 건설 버튼으로 다시 펼치면 풀린다.
+let collapsedForPlacement = false;
 
 const FACILITY_DISPLAY_ORDER = new Map(FACILITY_BUILD_ORDER.map((facility, index) => [facility, index]));
 
@@ -17,11 +20,33 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   detailEl = sharedDetailEl;
   panelEl = sharedPanelEl;
   eventBus.on(Events.BUILD_PLAN_CHANGED, renderDock);
-  eventBus.on(Events.BUILD_PLAN_CLEARED, renderDock);
-  eventBus.on(Events.BUILD_PLAN_COMMITTED, renderDock);
+  eventBus.on(Events.BUILD_PLAN_CLEARED, () => expandDock());
+  eventBus.on(Events.BUILD_PLAN_COMMITTED, () => expandDock());
+  eventBus.on(Events.HUD_PANEL_CHANGED, () => expandDock());
+  // 접힌 독 상태에서 건설 버튼을 다시 누르면 패널을 닫는 대신 독을 다시 펼친다 —
+  // 그래야 다른 시설로 바꾸려는 사람이 "버튼을 눌렀는데 아무 일도 없다"고 느끼지 않는다.
+  eventBus.on(Events.HUD_PANEL_CLOSE_REQUESTED, (request) => {
+    if (request?.name !== 'build' || !collapsedForPlacement) return;
+    request.preventClose();
+    expandDock();
+  });
   eventBus.on(Events.GAME_RESET, () => {
     detailFacilityKey = null;
+    collapsedForPlacement = false;
   });
+}
+
+function expandDock() {
+  collapsedForPlacement = false;
+  renderDock();
+}
+
+function collapseDockForPlacement(pickedButton) {
+  collapsedForPlacement = true;
+  // 키보드로 카드를 골랐다면 포커스를 보드로 옮겨 방향키로 바로 칸을 고를 수 있게 한다.
+  const board = pickedButton?.ownerDocument.getElementById('cityGrid');
+  if (pickedButton && pickedButton === pickedButton.ownerDocument.activeElement) board?.focus({ preventScroll: true });
+  renderDock();
 }
 
 export function facilityPresentation(key) {
@@ -102,10 +127,11 @@ function orderedFacilities() {
 
 export function renderDock() {
   const pending = gameState.constructionPlan.length > 0;
-  // 건설 위치를 정하면 독 패널 자체(배경까지)를 완전히 접어, 3D 보드 위 미리보기와
-  // O/X 위젯만 보이게 한다. 확정·취소하면 패널이 다시 미끄러져 나온다.
-  panelEl?.classList.toggle('build-panel--collapsed', pending);
-  if (pending) return;
+  // 시설을 고르거나 건설 위치를 정하면 독 패널 자체(배경까지)를 완전히 접어, 3D 보드 위
+  // 미리보기와 O/X 위젯만 보이게 한다. 확정·취소하면 패널이 다시 미끄러져 나온다.
+  const collapsed = pending || collapsedForPlacement;
+  panelEl?.classList.toggle('build-panel--collapsed', collapsed);
+  if (collapsed) return;
 
   const existingButtons = new Map([...dockEl.querySelectorAll('[data-facility]')]
     .map((button) => [button.dataset.facility, button]));
@@ -150,7 +176,7 @@ export function renderDock() {
           return;
         }
         selectFacility(key);
-        renderDock();
+        collapseDockForPlacement(btn);
       });
     }
     dockEl.appendChild(btn);

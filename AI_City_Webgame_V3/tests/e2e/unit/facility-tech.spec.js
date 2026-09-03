@@ -95,7 +95,12 @@ test('permit, technology, credit, and facility locks explain the exact next acti
   gameState.research.techLevels.solar = 2;
   gameState.credits = 0;
   expect(upgradeRequirementMessage(gameState, validateUpgrade(gameState, 0))).toContain('크레딧');
+  // 태양광은 퀘스트 보상이 아니라 6단계 뒤 첫 확장 방향(동부)으로 열린다.
   expect(facilityUnlockMessage(gameState, 'solar')).toContain('퀘스트 6');
+  expect(facilityUnlockMessage(gameState, 'solar')).toContain('동부 확장');
+  // 방향을 고르고 나면 반대편 재생에너지는 8단계 보상이 실제 다음 행동이다.
+  gameState.expansion.firstChoice = 'east';
+  expect(facilityUnlockMessage(gameState, 'wind')).toContain('퀘스트 8');
   expect(facilityUnlockMessage(gameState, 'tidal')).toContain('조력 발전 실증');
 });
 
@@ -145,23 +150,33 @@ test('green upgrades require their dedicated research after the city permit', ()
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
 });
 
-test('completed solar research can upgrade solar and satisfy quest 8', () => {
+// 8단계는 '데이터센터 현대화'다 — 스마트 전력망 연구와 가동 가능한 데이터센터 Lv.2를 함께 요구한다.
+// "연구가 강화를 열고, 공사가 끝나야 조건이 성립한다"는 원래 구조는 그대로 두고 대상만 현재 퀘스트에 맞춘다.
+test('completed smart grid research can upgrade the data center and satisfy quest 8', () => {
   gameState.stage = 5;
   gameState.questIndex = 8;
-  gameState.questProgress.quizPassed = true;
-  gameState.grid[0] = { type: 'solar', level: 1 };
+  gameState.grid[0] = { type: 'data', level: 1 };
   gameState.grid[1] = { type: 'residential', level: 1 };
   gameState.credits = 100;
   gameState.upgradePermitLevel = 2;
-  gameState.research.completedIds.add('solar2');
-  gameState.research.techLevels.solar = 2;
+  gameState.research.completedIds.add('smartGrid');
+  expect(evaluateCurrentQuest(gameState).ready).toBe(false);
   expect(validateUpgrade(gameState, 0)).toMatchObject({ ok: true, nextLevel: 2 });
   expect(upgradeCell(0)).toMatchObject({ ok: true, level: 1, targetLevel: 2, durationDays: 8 });
   expect(gameState.grid[0]).toMatchObject({ level: 1, project: { kind: 'upgrade', fromLevel: 1, toLevel: 2 } });
   expect(evaluateCurrentQuest(gameState).ready).toBe(false);
-  for (let hour = 0; hour < 8; hour++) advanceConstructionProjects(gameState);
+  for (let day = 0; day < 8; day++) advanceConstructionProjects(gameState);
   expect(gameState.grid[0]).toMatchObject({ level: 2, project: null });
   expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+
+  // 같은 규칙이 재생에너지에도 적용된다 — 연구를 마친 시설만 Lv.2로 올릴 수 있다.
+  // 태양광 Lv.2는 인력을 더 쓰므로 주거지를 한 채 더 두어 인력 부족이 판정을 가리지 않게 한다.
+  gameState.grid[3] = { type: 'residential', level: 1 };
+  gameState.grid[2] = { type: 'solar', level: 1 };
+  expect(validateUpgrade(gameState, 2)).toMatchObject({ ok: false, reason: 'technology_required' });
+  gameState.research.completedIds.add('solar2');
+  gameState.research.techLevels.solar = 2;
+  expect(validateUpgrade(gameState, 2)).toMatchObject({ ok: true, nextLevel: 2 });
 });
 
 test('a facility with an active project cannot be upgraded or demolished again', () => {

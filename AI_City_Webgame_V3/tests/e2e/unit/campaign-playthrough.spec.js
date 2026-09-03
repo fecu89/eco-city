@@ -1,9 +1,25 @@
 import { test, expect } from '@playwright/test';
-import { GameState } from '../../../src/core/GameState.js';
-import { CAMPAIGN_PACING } from '../../../src/core/Constants.js';
+import { GameState, gameState } from '../../../src/core/GameState.js';
+import { CAMPAIGN_PACING, STAGES, STRESS_TEST_RULES } from '../../../src/core/Constants.js';
+import { questForState } from '../../../src/core/QuestDefinitions.js';
+import { stressTestTotalDays } from '../../../src/core/EventDefinitions.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
+import { commitConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
+import {
+  demolishCell,
+  expandBoard,
+  upgradeCell,
+  validatePlacement,
+} from '../../../src/systems/BoardSystem.js';
+import { createHexCoordinates, isOuterRing } from '../../../src/systems/HexGridSystem.js';
+import {
+  accelerateResearchFromQuiz,
+  advanceResearchOneDay,
+  researchDemandByIndex,
+  startResearch,
+} from '../../../src/systems/ResearchSystem.js';
 import {
   applySimulationQuestProgress,
   claimCurrentQuest,
@@ -281,4 +297,194 @@ test('human pacing keeps a fifteen-to-thirty minute target and meaningful decisi
     expect(window.decisions.length).toBeLessThanOrEqual(4);
     expect(new Set(window.decisions).size).toBe(window.decisions.length);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 실제 건설 경로만 쓰는 기준 캠페인(서부 분기).
+//
+// 위의 테스트들은 배치 고정용으로 state.grid에 직접 쓴다 — 특정 도시 모양에서 규칙이
+// 어떻게 계산되는지를 빠르게 못 박기 위해서다. 그 대신 시설 허가·비용·인력·공사일 같은
+// "실제로 지을 수 있는가"는 전혀 검증되지 않는다(리뷰 M6가 그렇게 빠져나갔다).
+// 이 캠페인은 반대다: 1단계부터 19단계까지 모든 건물을 validatePlacement로 확인하고
+// commitConstructionPlan으로 세우며, 강화·철거도 실제 보드 API를 쓴다. 크레딧은 시작
+// 10에서 시작해 퀘스트 보상과 도시 수입으로만 충당한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const referenceSettle = createDaySettler({
+  calculatePowerNetwork,
+  settleEconomy,
+  getResearchDemand: researchDemandByIndex,
+  advanceResearch: advanceResearchOneDay,
+  evaluateQuest: applySimulationQuestProgress,
+});
+
+function settleReferenceDays(days) {
+  for (let day = 0; day < days; day += 1) {
+    referenceSettle(gameState);
+    expect(gameState.gameOver, `day ${gameState.elapsedGameDays}: ${gameState.gameOverReason}`).toBe(false);
+    expect(gameState.credits, `day ${gameState.elapsedGameDays} credits`).toBeGreaterThanOrEqual(0);
+  }
+}
+
+// 계획에 담기 전에 validatePlacement이 통과해야 하고, 확정 뒤에는 공사가 실제 게임일만큼 걸린다.
+function buildReference(...placements) {
+  gameState.constructionPlan = placements.map(([index, type]) => ({ index, type }));
+  placements.forEach(([index, type]) => {
+    expect(
+      validatePlacement(gameState, type, index, {
+        plan: gameState.constructionPlan.filter((item) => item.index !== index),
+      }),
+      `${type} at ${index} on quest ${gameState.questIndex}`,
+    ).toMatchObject({ ok: true });
+  });
+  const result = commitConstructionPlan(gameState);
+  expect(result.ok, result.errors?.map(({ message }) => message).join(' | ')).toBe(true);
+  settleReferenceDays(Math.max(...result.projects.map(({ durationDays }) => durationDays)));
+  result.projects.forEach(({ index }) => expect(gameState.grid[index].project).toBeNull());
+  return result;
+}
+
+function upgradeReference(index) {
+  const result = upgradeCell(index);
+  expect(result, `upgrade ${index}`).toMatchObject({ ok: true });
+  settleReferenceDays(result.durationDays);
+  expect(gameState.grid[index]).toMatchObject({ level: result.targetLevel, project: null });
+}
+
+// 퀴즈 4문항을 맞히면 연구가 끝난다(전용 문항 수 = RESEARCH_RULES.QUIZ_QUESTION_COUNT).
+function researchReference(researchId, dataCenterIndex) {
+  expect(startResearch(gameState, researchId, dataCenterIndex), researchId).toMatchObject({ ok: true });
+  for (let answer = 0; answer < 4; answer += 1) accelerateResearchFromQuiz(gameState, researchId);
+  expect(gameState.research.completedIds.has(researchId), researchId).toBe(true);
+}
+
+function settleUntilReferenceReady(maximumDays = 80) {
+  for (let day = 0; day < maximumDays && gameState.questStatus !== 'ready_to_claim'; day += 1) {
+    settleReferenceDays(1);
+  }
+  expect(
+    gameState.questStatus,
+    `quest ${gameState.questIndex}: ${JSON.stringify(gameState.questProgress)}`,
+  ).toBe('ready_to_claim');
+}
+
+function claimReference(expectedQuest) {
+  expect(gameState.questIndex).toBe(expectedQuest);
+  const result = claimCurrentQuest(gameState);
+  expect(result.ok, `claim quest ${expectedQuest}: ${result.reason}`).toBe(true);
+  return result;
+}
+
+test('a west-branch city earns every one of the nineteen quests through the real placement path', () => {
+  gameState.reset();
+  expect(gameState.credits).toBe(10);
+
+  // 1블록 — 도시 기반 (1~6).
+  buildReference([1, 'residential'], [2, 'residential']);
+  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+  claimReference(1);
+
+  buildReference([13, 'thermal']);
+  buildReference([4, 'factory']);
+  settleUntilReferenceReady();
+  claimReference(2);
+
+  buildReference([8, 'green']);
+  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+  claimReference(3);
+
+  buildReference([0, 'data']);
+  settleUntilReferenceReady();
+  claimReference(4);
+  // 4단계 보상 시점에 기준 도시가 저장되고 연구 메뉴가 열린다.
+  expect(gameState.researchMenuUnlocked).toBe(true);
+  expect(gameState.baseline.dailyWater).toBeGreaterThan(0);
+
+  // 핵발전은 인력을 6명 더 쓴다 — 주거지를 같은 계획에 넣지 않으면 확정이 거부된다.
+  buildReference([5, 'nuclear'], [3, 'residential'], [7, 'residential']);
+  settleUntilReferenceReady();
+  claimReference(5);
+
+  buildReference([6, 'cooling']);
+  settleUntilReferenceReady();
+  const foundationClaim = claimReference(6);
+  expect(foundationClaim.expandGrid).toBe(true);
+  expect(expandBoard(gameState, 'west')).toMatchObject({ ok: true, phase: 1, unlockedFacility: 'wind' });
+
+  // 2블록 — 재난 대비 준비 (7~10), 서부 분기.
+  expect(questForState(gameState).goal).toContain('풍력 예측 제어');
+  researchReference('wind2', 0);
+  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+  claimReference(7);
+
+  upgradeReference(0);
+  researchReference('smartGrid', 0);
+  expect(evaluateCurrentQuest(gameState).ready).toBe(true);
+  const secondExpansion = claimReference(8);
+  expect(secondExpansion).toMatchObject({ secondExpansionSide: 'east', unlockedFacilities: ['solar'] });
+  expect(expandBoard(gameState, 'east')).toMatchObject({ ok: true, phase: 2 });
+
+  const eastSite = gameState.expansion.activeCellIndices.find((index) => index >= 21 && index <= 29);
+  buildReference([eastSite, 'solar']);
+  researchReference('solar2', 0);
+  settleUntilReferenceReady();
+  claimReference(9);
+
+  researchReference('tidal1', 0);
+  const coast = gameState.expansion.activeCellIndices
+    .find((index) => !gameState.grid[index] && isOuterRing(index, createHexCoordinates(3), 3));
+  buildReference([coast, 'tidal'], [20, 'residential']);
+  settleUntilReferenceReady();
+  claimReference(10);
+  expect(gameState).toMatchObject({
+    questIndex: 11,
+    progression: { chapter: 3 },
+    climateCampaign: { status: 'briefing' },
+  });
+
+  // 3블록 — 대한민국 기후재난 (11~18). 12단계 배터리 조건을 미리 준비한다.
+  buildReference([9, 'battery'], [10, 'residential']);
+
+  // 브리핑을 수락한 순간 24일 예보가 걸리고, 그 준비 기간에 도시를 고칠 수 있다.
+  const preparations = {
+    // 가뭄은 데이터센터·핵발전 물을 밀어올린다. 냉각 감축량은 시설 레벨에 비례하므로
+    // 핵발전을 Lv.2로 올리면 예보 직전 사용량을 그대로 지킬 수 있다.
+    15: () => upgradeReference(5),
+    // 저장 허브를 갖춘 도시는 화력 예비력을 은퇴시킬 수 있다 — 대기 정체 구간의 화력 탄소
+    // 계수(1.35배)를 아예 없애는 선택이다.
+    16: () => {
+      const retirement = demolishCell(13);
+      expect(retirement, 'retire the fossil reserve').toMatchObject({ ok: true });
+    },
+  };
+  for (let quest = 11; quest <= 18; quest += 1) {
+    expect(acknowledgeClimateBriefing(gameState), `briefing ${quest}`).toMatchObject({ ok: true });
+    preparations[quest]?.();
+    settleUntilReferenceReady();
+    expect(gameState.climateCampaign.lastResult).toMatchObject({ passed: true, questIndex: quest });
+    claimReference(quest);
+  }
+
+  expect(gameState.questIndex).toBe(19);
+  expect(gameState.stressTest.status).toBe('ready');
+  expect(gameState.climateCampaign.completedEventTypes).toEqual([
+    'heatwave', 'monsoon', 'typhoon', 'coldWave',
+    'drought', 'stagnantAir', 'dryWildfire', 'stormSurge',
+  ]);
+  expect(gameState.progression.objectiveSetId).toBeNull();
+
+  // 4블록 — 최종시험 (19). 시험 중에도 보드는 편집 가능한 재설계 단계로 남는다.
+  expect(gameState.stage).toBe(STAGES.REDESIGN);
+  settleReferenceDays(1);
+  expect(startStressTest(gameState)).toMatchObject({ ok: true, attempts: 1 });
+  expect(gameState.stressTest.waterBaseline).toBe(gameState.lastTickSummary.dailyWater);
+  settleReferenceDays(stressTestTotalDays());
+
+  expect(gameState.stressTest.result, JSON.stringify(gameState.stressTest.result))
+    .toMatchObject({ passed: true, days: stressTestTotalDays(), waterViolationDays: 0 });
+  expect(gameState.stressTest.result.tidalEnergyDelivered)
+    .toBeGreaterThanOrEqual(STRESS_TEST_RULES.MIN_TIDAL_DELIVERY);
+  expect(gameState.campaignComplete).toBe(true);
+  expect(gameState.stage).toBe(STAGES.REPORT);
+  expect(gameState.credits).toBeGreaterThan(0);
 });

@@ -46,3 +46,26 @@ test('final stress test starts from the quest panel, owns the forecast strip, an
   await page.locator('#stressResultClose').click();
   await expect(page.locator('#questPanelClaimBtn')).toHaveText('테스트 재도전');
 });
+
+// 시험을 통과하면 같은 버튼이 "최종 보고서 보기"로 바뀐다. 예전에는 그 클릭이
+// claimCurrentQuest로 떨어져 already_claimed를 돌려받고 아무 일도 일어나지 않았다.
+test('시험을 통과한 뒤 퀘스트 버튼이 최종 보고서를 연다', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(0);
+    const state = window.__GAME_STATE__;
+    state.questIndex = 19;
+    state.progression.chapter = 4;
+    state.stressTest.status = 'passed';
+    state.stressTest.phaseIndex = 7;
+    state.stressTest.result = { passed: true };
+    window.__refreshGameForTest();
+  });
+
+  await page.locator('[data-hud-target="quest"]').first().click();
+  await expect(page.locator('#questPanelClaimBtn')).toHaveText('최종 보고서 보기');
+  await expect(page.locator('#questPanelClaimBtn')).toBeEnabled();
+
+  await page.locator('#questPanelClaimBtn').click();
+  await expect(page.locator('#modalCard')).toBeVisible();
+  await expect(page.locator('#modalCard')).toContainText('기후 생존 도시 성적표');
+});

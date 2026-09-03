@@ -199,7 +199,8 @@ test.describe('fullscreen world HUD', () => {
       state.research.jobs = {
         solar2: { id: 'solar2', dataCenterIndex: 1, status: 'running', elapsedEffectiveDays: 0 },
       };
-      state.events.schedule = [{ id: 'wind-now', type: 'lowWind', announceAt: 0, startAt: 0, endAt: 6 }];
+      // lowWind는 은퇴한 이벤트다. 현재 덱에서 풍력을 깎는 재난은 stagnantAir(무풍·미세먼지)다.
+      state.events.schedule = [{ id: 'wind-now', type: 'stagnantAir', announceAt: 0, startAt: 0, endAt: 6 }];
       state.events.activeId = 'wind-now';
       state.lastTickSummary = {
         dailyCarbon: 2,
@@ -222,7 +223,8 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#modalCard')).toContainText('전력 부족 원인');
     await expect(page.locator('#modalCard')).toContainText('전력 부족 3E');
     await expect(page.locator('#modalCard')).toContainText('집중 연구 +2E');
-    await expect(page.locator('#modalCard')).toContainText('무풍');
+    await expect(page.locator('#modalCard')).toContainText('무풍·미세먼지');
+    await expect(page.locator('#modalCard')).toContainText('풍력 출력이 급감');
   });
 
   test('time navigation has one play-pause toggle and one 1x-4x speed toggle', async ({ gamePage: page }) => {
@@ -293,7 +295,9 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#advisorPanel')).toHaveCount(0);
   });
 
-  test('build palette stays open after selecting a facility', async ({ gamePage: page }) => {
+  // 시설을 고르면 팔레트는 열린 채(hud-panel-active) 접혀서 보드를 드러내고, 건설 버튼을
+  // 다시 누르면 닫히는 대신 펼쳐지며 고른 시설이 그대로 선택돼 있다.
+  test('build palette collapses after selecting a facility and reopens from the build button with the selection kept', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__GAME_STATE__.questIndex = 5;
       window.__GAME_STATE__.unlockedFacilities.add('factory');
@@ -303,6 +307,12 @@ test.describe('fullscreen world HUD', () => {
     await page.locator('#facilityDock .facility-btn', { hasText: '공장' }).click();
 
     await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
+    await expect(page.locator('#buildPanel')).toHaveClass(/build-panel--collapsed/);
+    expect(await page.evaluate(() => window.__GAME_STATE__.selectedFacility)).toBe('factory');
+
+    await page.locator('[data-hud-target="build"]').first().click();
+    await expect(page.locator('#buildPanel')).toHaveClass(/hud-panel-active/);
+    await expect(page.locator('#buildPanel')).not.toHaveClass(/build-panel--collapsed/);
     await expect(page.locator('#facilityDock .facility-btn', { hasText: '공장' })).toHaveClass(/active/);
   });
 
@@ -327,7 +337,8 @@ test.describe('fullscreen world HUD', () => {
       .resolves.toEqual(['credit', 'power', 'carbon', 'water', 'labor']);
     await expect(detail.locator('[data-metric="credit"]')).toHaveAttribute('aria-label', '크레딧');
     await expect(detail.locator('[data-metric="power"]')).toHaveAttribute('aria-label', '전력');
-    await expect(detail.locator('[data-metric="labor"]')).toContainText('인구 +10');
+    // 주거지 Lv.1 인구는 WORKFORCE_LEVELS.residential[1] = 6이다.
+    await expect(detail.locator('[data-metric="labor"]')).toContainText('인구 +6');
     await panel.locator('[data-facility="factory"]').hover();
     await expect(detail.locator('[data-metric="labor"]')).toContainText('필요 인력 4명');
     expect(Number.parseFloat(await card.locator('.facility-card-identity strong').evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
@@ -630,6 +641,34 @@ test.describe('fullscreen world HUD', () => {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.__GAME_STATE__ && window.__getCityRendererStats?.().theme === 'light');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
+  // 동작 줄이기를 켠 사용자에게는 미끄러져 들어오는 연출 없이 토스트가 바로 완성된 상태로 보여야 한다.
+  test('reduced motion shows a toast at full opacity without waiting for an animation', async ({ gamePage: page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const shown = await page.evaluate(async () => {
+      window.__EVENT_BUS__.emit(window.__EVENTS__.TOAST_SHOW, { title: '동작 줄이기 알림', duration: 30000 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const toast = document.querySelector('#toastStack .toast');
+      // 애니메이션이 도는지는 인라인 값으로 본다 — anime가 프레임마다 여기에 쓴다.
+      // (계산값은 동작 줄이기에서 전역 transition-duration이 0이 아니게 되는 바람에 한 프레임 뒤처진다.)
+      return { text: toast?.textContent, opacity: toast?.style.opacity, transform: toast?.style.transform };
+    });
+    expect(shown).toEqual({ text: '동작 줄이기 알림', opacity: '1', transform: 'none' });
+  });
+
+  // 저장 파일에서 온 문자열은 innerHTML로 들어가도 마크업이 되면 안 된다.
+  test('a tampered save string stays text inside the HUD guidance note', async ({ gamePage: page }) => {
+    const injected = '<img src=x onerror="window.__HUD_ESCAPE_FAILED__ = true">진단';
+    await page.evaluate((label) => {
+      const state = window.__GAME_STATE__;
+      state.stressTest = { status: 'failed', phaseIndex: 0, phaseDay: 0, result: { passed: false, diagnosis: { label } } };
+      window.__refreshGameForTest();
+    }, injected);
+
+    await expect(page.locator('#teacherNote p')).toHaveText(injected);
+    await expect(page.locator('#teacherNote img')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__HUD_ESCAPE_FAILED__)).toBeUndefined();
   });
 
   test('graphics lighting is fixed to day, dusk, or night instead of following simulation time', async ({ gamePage: page }) => {

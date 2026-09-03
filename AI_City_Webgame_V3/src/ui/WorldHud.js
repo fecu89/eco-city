@@ -78,8 +78,15 @@ export function closeHudPanel({ restoreFocus = true } = {}) {
 }
 
 export function toggleHudPanel(name, opener) {
-  if (activePanel === name) closeHudPanel();
-  else openHudPanel(name, opener);
+  if (activePanel !== name) {
+    openHudPanel(name, opener);
+    return;
+  }
+  // 이미 열린 패널의 버튼을 다시 누르면 닫는다. 다만 패널이 스스로 내용을 접어 둔 상태라면
+  // (건설 독이 시설 선택 직후 보드를 드러내려고 접힌 경우) 닫는 대신 다시 펼칠 기회를 준다.
+  const request = { name, prevented: false, preventClose() { request.prevented = true; } };
+  eventBus.emit(Events.HUD_PANEL_CLOSE_REQUESTED, request);
+  if (!request.prevented) closeHudPanel();
 }
 
 export function syncWorldHud() {

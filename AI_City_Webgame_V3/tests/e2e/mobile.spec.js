@@ -70,6 +70,23 @@ test.describe('mobile city controls', () => {
     await expect(page.locator('#questPanel')).toHaveClass(/hud-panel-active/);
   });
 
+  // 손가락으로 누르는 화면에서는 어떤 버튼도 44×44보다 작으면 안 된다(WCAG 2.5.5 기준).
+  test('every touch control keeps a 44px hit area on a coarse pointer', async ({ gamePage: page }) => {
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+    await page.locator('.mobile-bar [data-hud-target="quest"]').click();
+
+    for (const selector of ['.quest-panel-tools .icon-btn', '#timeControls button', '#simulationHud > button']) {
+      const targets = await page.locator(selector).evaluateAll((nodes) => nodes
+        .filter((node) => node.checkVisibility())
+        .map((node) => {
+          const rect = node.getBoundingClientRect();
+          return { node: node.id || node.className, width: Math.round(rect.width), height: Math.round(rect.height) };
+        }));
+      expect(targets.length, selector).toBeGreaterThan(0);
+      expect(targets.filter(({ width, height }) => width < 44 || height < 44), selector).toEqual([]);
+    }
+  });
+
   test('mobile build cards repeat only identity and cost while one shared area explains the selection', async ({ gamePage: page }) => {
     await page.locator('.mobile-bar [data-hud-target="build"]').click();
     const firstCard = page.locator('#facilityDock .facility-btn').first();
@@ -88,7 +105,7 @@ test.describe('mobile city controls', () => {
 
     const panel = page.locator('#questPanel');
     await expect(panel).toHaveClass(/hud-panel-active/);
-    await expect(panel.locator('#questPanelLevel')).toHaveText('LEVEL 1 / 15');
+    await expect(panel.locator('#questPanelLevel')).toHaveText('LEVEL 1 / 19');
     await expect(panel.locator('#questPanelTitle')).toHaveText('2040, 첫 시민');
     await expect(panel.locator('#questPanelGoal')).toContainText('주거지 2개');
     await expect(panel.locator('#questPanelClaimBtn')).toBeVisible();

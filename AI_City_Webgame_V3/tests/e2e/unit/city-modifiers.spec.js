@@ -44,6 +44,10 @@ test('operation context applies factory mode equally to power and economy', () =
   const state = new GameState();
   state.grid[0] = { type: 'thermal', level: 1, priority: 'normal' };
   state.grid[1] = { type: 'residential', level: 1, priority: 'essential' };
+  // 주거지 Lv.1 인력이 6명이라 한 채로는 화력+공장 일자리 9개를 못 채우고, 인력 부족
+  // 계수(industryFill)가 운전 모드 계수 위에 겹쳐 검증하려는 값을 가린다. 이 테스트가 보는
+  // 것은 "운전 모드 계수가 전력과 경제에 똑같이 적용되는가"이므로 인력을 충분히 채운다.
+  state.grid[3] = { type: 'residential', level: 1, priority: 'essential' };
   state.grid[2] = factory(2, 'eco');
   const modifierContext = buildCityModifierContext(state);
   const power = calculatePowerNetwork({ grid: state.grid, modifierContext, hour: 12 });

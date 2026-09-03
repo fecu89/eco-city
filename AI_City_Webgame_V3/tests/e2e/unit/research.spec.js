@@ -15,6 +15,8 @@ import {
 } from '../../../src/systems/ResearchSystem.js';
 import { createUpgradeProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { startResearchQuiz } from '../../../src/systems/QuizSystem.js';
+import { buildCityModifierContext } from '../../../src/systems/CityModifierSystem.js';
+import { RESEARCH_TUNING } from '../../../src/core/Constants.js';
 
 function stateWithDataCenter({ credits = 60, index = 3, level = 1 } = {}) {
   const state = new GameState();
@@ -229,6 +231,32 @@ test('completed branch research exposes its distinct simulation effects', () => 
     batteryReservePolicies: true,
     batteryEmergencyReserve: true,
   });
+});
+
+// 풍력 완화 연구(wind2)는 원래 은퇴한 이벤트 id 'lowWind'에만 걸려 있어 어떤 재난에서도
+// 발동하지 않았다. 지금 덱에서 바람을 깎는 재난은 stagnantAir(풍력 0.25)다.
+function windResearchSupplyUnder(eventType, { researched } = {}) {
+  const state = new GameState();
+  state.grid[0] = { type: 'wind', level: 1, priority: 'normal' };
+  state.events.schedule = [{ id: 'evt-1', type: eventType, announceAt: 0, startAt: 0, endAt: 6 }];
+  state.events.activeId = 'evt-1';
+  if (researched) state.research.completedIds = new Set(['wind2']);
+  return buildCityModifierContext(state).byFacility[0].research.supply;
+}
+
+test('풍력 완화 연구가 바람을 깎는 재난에서 실제로 출력을 되돌린다', () => {
+  const relief = RESEARCH_TUNING.LOW_WIND_SUPPLY_RESEARCHED / RESEARCH_TUNING.LOW_WIND_SUPPLY_BASE;
+
+  // 무풍·미세먼지(stagnantAir): 연구 전에는 완화가 없고, wind2를 마치면 완화가 더 붙는다.
+  const stagnantBase = windResearchSupplyUnder('stagnantAir');
+  const stagnantResearched = windResearchSupplyUnder('stagnantAir', { researched: true });
+  expect(stagnantBase).toBeCloseTo(1, 5);
+  expect(stagnantResearched).toBeCloseTo(1.15 * relief, 5);
+  expect(stagnantResearched).toBeGreaterThan(stagnantBase * 1.15);
+
+  // 바람을 깎지 않는 재난(폭염)에서는 상시 보너스(1.15)만 남는다.
+  expect(windResearchSupplyUnder('heatwave', { researched: true })).toBeCloseTo(1.15, 5);
+  expect(windResearchSupplyUnder('heatwave')).toBeCloseTo(1, 5);
 });
 
 test('finishing one job applies its technology once and leaves other jobs running', () => {

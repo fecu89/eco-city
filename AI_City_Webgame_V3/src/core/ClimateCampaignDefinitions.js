@@ -1,3 +1,5 @@
+import { EVENT_FORECAST_DAYS } from './Constants.js';
+
 const freezeModifiers = (modifiers = {}) => Object.freeze(Object.fromEntries(
   Object.entries(modifiers).map(([facilityType, values]) => [facilityType, Object.freeze({ ...values })]),
 ));
@@ -172,7 +174,7 @@ const climateQuest = ({
   details: Object.freeze([...details]),
   eventType,
   objective,
-  forecastDays: 24,
+  forecastDays: EVENT_FORECAST_DAYS,
   targetDays,
   carbonTarget,
   batteryTarget,
@@ -191,7 +193,7 @@ export const CLIMATE_QUESTS = Object.freeze({
     id: 'extreme-heat',
     title: '폭염 경보',
     goal: '폭염 중 필수시설 전력 공급률 90% 이상을 4일 연속 유지하세요.',
-    details: ['24일 예보 동안 배터리와 주거 전력 우선순위를 준비하세요.', '폭염 활성 기간에만 연속 일수가 누적됩니다.'],
+    details: [`${EVENT_FORECAST_DAYS}일 예보 동안 배터리와 주거 전력 우선순위를 준비하세요.`, '폭염 활성 기간에만 연속 일수가 누적됩니다.'],
     eventType: 'heatwave',
     objective: 'essential',
     questReward: { credits: 8, unlockResearch: ['green2'], upgradePermitFacilities: ['solar', 'tidal'] },

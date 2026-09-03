@@ -4,6 +4,15 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { assetIdsByPhase, getAsset } from './assetRegistry.js';
 
+// 머티리얼만 dispose하면 텍스처는 VRAM에 남는다. three의 material은 텍스처 슬롯을
+// 이름으로 알려주지 않으므로 Texture인 속성을 전부 훑어 함께 해제한다.
+function disposeMaterialWithTextures(material) {
+  Object.values(material).forEach((value) => {
+    if (value?.isTexture) value.dispose();
+  });
+  material.dispose?.();
+}
+
 export class AssetLoader {
   constructor({ gltfLoader = null } = {}) {
     this.loader = gltfLoader || new GLTFLoader();
@@ -69,20 +78,23 @@ export class AssetLoader {
     };
   }
 
-  dispose() {
+  // 진행 중인 로드가 끝난 뒤에야 해제할 수 있으므로 Promise를 돌려준다 —
+  // 호출자가 await 해야 VRAM이 실제로 비었는지 확인할 수 있다.
+  async dispose() {
     const seen = new Set();
-    this.loadedById.forEach((promise) => promise.then((gltf) => {
+    const pending = [...this.loadedById.values()].map((promise) => promise.then((gltf) => {
       if (!gltf || seen.has(gltf)) return;
       seen.add(gltf);
       gltf.scene.traverse((object) => {
         object.geometry?.dispose?.();
         const materials = Array.isArray(object.material) ? object.material : [object.material];
-        materials.filter(Boolean).forEach((material) => material.dispose?.());
+        materials.filter(Boolean).forEach(disposeMaterialWithTextures);
       });
     }).catch(() => {}));
     this.urlPromises.clear();
     this.loadedById.clear();
     this.failures = {};
+    await Promise.all(pending);
   }
 }
 

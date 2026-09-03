@@ -4,6 +4,7 @@ import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { setModal, closeModal, getModalState, MODAL_PRIORITY, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits, round1 } from './format.js';
+import { prefersReducedMotion } from './motionPreference.js';
 import {
   cellStats,
   demolitionRefund,
@@ -23,9 +24,10 @@ import { bindResearchPanel, refreshResearchPanelLive, researchPanelMarkup } from
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import * as Report from '../systems/ReportSystem.js';
 import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
+import { OPERATIONAL_PAUSE_IDS } from '../systems/CityFailureSystem.js';
 import { BATTERY_POLICIES, OPERATION_MODES, availableOperationModes } from '../core/OperationDefinitions.js';
 import { EXPANSION_SIDES, ZONE_TRAITS } from '../core/ZoneDefinitions.js';
-import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
 import { startStressTest } from '../systems/StressTestSystem.js';
 import {
   buildCityModifierContext,
@@ -92,18 +94,18 @@ export function initStageModals(refreshCallback, options = {}) {
 export function openExpansionChoiceModal() {
   const traitMarkup = (side) => EXPANSION_SIDES[side].traits.map((traitId) => {
     const trait = ZONE_TRAITS[traitId];
-    return `<li><i data-lucide="${trait.icon}"></i><span><strong>${trait.label}</strong><small>${trait.description}</small></span></li>`;
+    return `<li><i data-lucide="${escapeHtml(trait.icon)}"></i><span><strong>${escapeHtml(trait.label)}</strong><small>${escapeHtml(trait.description)}</small></span></li>`;
   }).join('');
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">CITY EXPANSION</span><h2>첫 확장 방향을 선택하세요</h2></div></div>
-    <p class="expansion-choice-intro">선택한 9칸과 해당 재생에너지가 먼저 열립니다. 8단계 데이터센터 현대화를 마치면 반대편 9칸도 개방됩니다.</p>
+    <p class="expansion-choice-intro">선택한 9칸과 해당 재생에너지가 먼저 열립니다. ${CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST}번째 퀘스트 데이터센터 현대화를 마치면 반대편 9칸도 개방됩니다.</p>
     <div class="expansion-choice-grid">
       ${Object.values(EXPANSION_SIDES).map((side) => `<button type="button" class="expansion-choice-card" data-expansion-side="${side.id}">
         <span class="expansion-direction">${side.id === 'east' ? 'EAST · 동부' : 'WEST · 서부'}</span>
-        <strong>${side.label}</strong>
-        <p>${side.description}</p>
+        <strong>${escapeHtml(side.label)}</strong>
+        <p>${escapeHtml(side.description)}</p>
         <ul>${traitMarkup(side.id)}</ul>
-        <b>9칸 개방 · ${FACILITIES[side.facility].name} 해금 · 유지비 +1.00 💰/일</b>
+        <b>9칸 개방 · ${escapeHtml(FACILITIES[side.facility].name)} 해금 · 유지비 +1.00 💰/일</b>
       </button>`).join('')}
     </div>
   `, { id: 'expansion-choice', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.IMPORTANT });
@@ -177,12 +179,12 @@ export function openHelpModal() {
       <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 원하는 칸에 반투명 계획으로 올린 뒤, 하단의 건설 확정을 눌러 한꺼번에 착공합니다. 미리보기의 X로 계획 전체를 취소할 수 있습니다.</p></article>
       <article><span>02</span><h3>운영</h3><p>1배속에서 1초마다 1일이 흐르며 수입·전력·탄소·물이 정산됩니다. 화면에는 날짜만 표시됩니다.</p></article>
       <article><span>03</span><h3>전력망</h3><p>거리가 멀수록 송전 손실이 커지고 저장장치는 중심과 인접한 6방향의 손실을 줄입니다.</p></article>
-      <article><span>04</span><h3>기후 퀘스트</h3><p>6개 기초 임무 뒤에는 폭염·장마·태풍·한파 등 8개 기후에 각각 24일 동안 대비합니다.</p></article>
+      <article><span>04</span><h3>기후 퀘스트</h3><p>6개 기초 퀘스트 뒤에는 폭염·장마·태풍·한파 등 8개 기후에 각각 ${EVENT_FORECAST_DAYS}일 동안 대비합니다.</p></article>
       <article><span>05</span><h3>기후 대응</h3><p>기상이변 퀘스트를 시작하면 ${EVENT_FORECAST_DAYS}일 대비 기간이 바로 흐르며 자동으로 일시정지하지 않습니다. 일일 탄소 ${CARBON_CRISIS.SAFE_DAILY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_DAYS}일이 지나면 도시가 중단됩니다.</p></article>
       <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 50%입니다.</p></article>
     </div>
-    <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → 8개 한국형 기후 대응 → 41일 복합기후 시험 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
-    <div class="callout"><strong>시설 허가</strong><p>퀘스트 레벨마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 폭염 경보 퀘스트 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
+    <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → 8개 한국형 기후 대응 → ${stressTestTotalDays()}일 복합기후 시험 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
+    <div class="callout"><strong>시설 허가</strong><p>퀘스트마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 폭염 경보 퀘스트 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
     <div class="callout"><strong>인구와 필요 인력</strong><p>주거지는 전체 인구를 늘리고, 발전소·공장·데이터센터 같은 운영 시설은 인력을 사용합니다. 계획 전체의 필요 인력이 인구를 넘으면 건설을 확정할 수 없습니다.</p></div>
     <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_DAYS.CAPSTONE / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 4문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
     <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값이며, 조력발전은 섬의 현재 최외곽에만 배치할 수 있습니다.</p></div>
@@ -233,10 +235,11 @@ function metricCauseData(metric) {
   if (metric === 'power') {
     data.current = margin < 0 ? `전력 부족 ${round1(Math.abs(margin))}E` : `전력 여유 +${margin}E`;
     if (activeResearchCount) data.causes.push(`집중 연구 +${round1(activeResearchCount * RESEARCH_RULES.EXTRA_DEMAND)}E`);
-    if (pressure?.type === 'lowWind') data.causes.push('무풍 · 풍력 출력이 평소의 35%로 감소');
-    if (pressure?.type === 'lowWindNight') data.causes.push('무풍 야간 · 풍력 -60%, 태양광 출력 정지');
-    if (pressure?.type === 'nightPeak') data.causes.push('야간 피크 · 주거 수요 +25%, 태양광 출력 감소');
-    if (pressure?.type === 'heatwave') data.causes.push('폭염 · 주거 전력 수요 +25%');
+    // 진행 중인 재난은 정의에서 직접 읽는다. 예전에는 이벤트 id마다 문구를 하드코딩했는데,
+    // 은퇴한 id(lowWind·lowWindNight·nightPeak)만 남고 현재 덱 8종 중 폭염 하나만 설명돼
+    // 실제로 전력을 깎고 있는 재난이 원인 목록에서 빠졌다.
+    const activeEvent = pressure?.type ? CITY_EVENTS[pressure.type] : null;
+    if (activeEvent) data.causes.push(`${activeEvent.label} · ${activeEvent.description}`);
     groupedFacilityValues(summary.facilityPower, 'demand').forEach((label) => data.causes.push(`${label}E 수요`));
     data.action = '시설 모드를 절약으로 바꾸거나, 필수시설 우선순위·배터리 정책·발전 여유를 조정하세요.';
   } else if (metric === 'credit') {
@@ -326,11 +329,11 @@ export function openFacilityInspectorModal(index) {
     : supportedModes?.[selectedMode]?.label || '표준';
   const operationModeMarkup = supportedModes ? `
     <section class="facility-mode-control" aria-label="시설 운영 모드">
-      <div class="facility-mode-head"><div><span>OPERATION MODE</span><strong>운영 모드</strong></div><b>${selectedModeLabel}</b></div>
+      <div class="facility-mode-head"><div><span>OPERATION MODE</span><strong>운영 모드</strong></div><b>${escapeHtml(selectedModeLabel)}</b></div>
       <div class="segmented-control facility-mode-options" id="facilityModeControls">
         ${Object.values(supportedModes).map((definition) => {
           const unlocked = availableModes.has(definition.id);
-          return `<button type="button" data-operation-mode="${definition.id}" class="${(cell.operationMode || 'normal') === definition.id ? 'active' : ''}" ${unlocked ? '' : 'disabled'} title="${unlocked ? escapeHtml(definition.description) : 'Lv.2부터 해금'}"><strong>${definition.label}</strong><small>${unlocked ? definition.description : 'Lv.2 해금'}</small></button>`;
+          return `<button type="button" data-operation-mode="${escapeHtml(definition.id)}" class="${(cell.operationMode || 'normal') === definition.id ? 'active' : ''}" ${unlocked ? '' : 'disabled'} title="${unlocked ? escapeHtml(definition.description) : 'Lv.2부터 해금'}"><strong>${escapeHtml(definition.label)}</strong><small>${unlocked ? escapeHtml(definition.description) : 'Lv.2 해금'}</small></button>`;
         }).join('')}
       </div>
       <div class="mode-change-forecast" id="modeChangeForecast" aria-live="polite"><p>모드를 선택하면 변경 전후 운영 수치를 확인할 수 있습니다.</p></div>
@@ -340,7 +343,7 @@ export function openFacilityInspectorModal(index) {
     : new Set();
   const batteryPolicyMarkup = cell.type === 'battery' ? `
     <section class="facility-mode-control" aria-label="배터리 운영 정책">
-      <div class="facility-mode-head"><div><span>RESERVE POLICY</span><strong>저장 전력 사용 정책</strong></div><b>${BATTERY_POLICIES[cell.batteryPolicy || 'auto'].label}</b></div>
+      <div class="facility-mode-head"><div><span>RESERVE POLICY</span><strong>저장 전력 사용 정책</strong></div><b>${escapeHtml(BATTERY_POLICIES[cell.batteryPolicy || 'auto'].label)}</b></div>
       <div class="segmented-control facility-mode-options" id="batteryPolicyControls">
         ${Object.values(BATTERY_POLICIES).map((policy) => {
           const unlocked = batteryPolicies.has(policy.id);
@@ -349,7 +352,7 @@ export function openFacilityInspectorModal(index) {
             : policy.id === 'auto'
               ? ''
               : '배터리 Lv.2와 차세대 저장 화학 연구 필요';
-          return `<button type="button" data-battery-policy="${policy.id}" class="${(cell.batteryPolicy || 'auto') === policy.id ? 'active' : ''}" ${unlocked ? '' : 'disabled'} title="${unlocked ? `${Math.round(policy.reserveRatio * 100)}% 예비량` : lockReason}"><strong>${policy.label}</strong><small>${unlocked ? policy.essentialOnlyBelowReserve ? '50% 아래는 필수시설만 사용' : policy.reserveRatio ? `${Math.round(policy.reserveRatio * 100)}% 이하 방전 금지` : '필요에 따라 자동 충방전' : lockReason}</small></button>`;
+          return `<button type="button" data-battery-policy="${escapeHtml(policy.id)}" class="${(cell.batteryPolicy || 'auto') === policy.id ? 'active' : ''}" ${unlocked ? '' : 'disabled'} title="${unlocked ? `${Math.round(policy.reserveRatio * 100)}% 예비량` : lockReason}"><strong>${escapeHtml(policy.label)}</strong><small>${unlocked ? policy.essentialOnlyBelowReserve ? '50% 아래는 필수시설만 사용' : policy.reserveRatio ? `${Math.round(policy.reserveRatio * 100)}% 이하 방전 금지` : '필요에 따라 자동 충방전' : lockReason}</small></button>`;
         }).join('')}
       </div>
     </section>` : '';
@@ -477,7 +480,7 @@ function startUpgradeProject(index) {
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: 'UPGRADE STARTED',
     title: `${facility.name} 강화 공사 시작`,
-    text: `Lv.${result.targetLevel} 완공까지 ${result.durationDays}게임일 · 현재 성능은 제한 가동됩니다.`,
+    text: `Lv.${result.targetLevel} 완공까지 ${result.durationDays}일 · 현재 성능은 제한 가동됩니다.`,
   });
   return result;
 }
@@ -512,7 +515,7 @@ function openUpgradeForecastModal(index, validation) {
   setModal(`
     <div data-upgrade-forecast>
       <div class="modal-head"><div><span class="eyebrow">UPGRADE FORECAST</span><h2>${facility.icon} ${facility.name} Lv.${cell.level} → Lv.${validation.nextLevel}</h2></div><button class="icon-btn close-modal" aria-label="강화 예측 닫기"><i data-lucide="x"></i></button></div>
-      <p class="muted">${forecast.horizonDays}게임일 동안 기존 시설은 제한 가동되며, 완공 틱부터 새 레벨 성능으로 정산됩니다.</p>
+      <p class="muted">${forecast.horizonDays}일 동안 기존 시설은 제한 가동되며, 완공 틱부터 새 레벨 성능으로 정산됩니다.</p>
       <div class="upgrade-forecast-grid">
         ${snapshots.map(([id, label, snapshot]) => `<section><strong>${label}</strong>${generator ? `<span data-upgrade-capacity="${id}">발전 가능량 ${forecastValue(snapshot, 'facilityGenerationAvailable', 'E')}</span><span>도시 공급 ${forecastValue(snapshot, 'deliveredPower', 'E')} / 수요 ${forecastValue(snapshot, 'demand', 'E')}</span>` : `<span>전력 ${forecastValue(snapshot, 'deliveredPower', 'E')} / ${forecastValue(snapshot, 'demand', 'E')}</span>`}<span>순수익 ${forecastValue(snapshot, 'netCredits', ' 💰/일')}</span><span>CO₂ ${forecastValue(snapshot, 'dailyCarbon', '/일')}</span><span>물 ${forecastValue(snapshot, 'dailyWater', '/일')}</span></section>`).join('')}
       </div>
@@ -557,7 +560,7 @@ function openConstructionProjectModal(index) {
   const targetLabel = project.kind === 'build' ? `Lv.${cell.level}` : `Lv.${project.toLevel}`;
 
   setModal(`
-    <div class="facility-console construction-console" data-facility-console="${cell.type}" data-construction-console="${project.kind}">
+    <div class="facility-console" data-facility-console="${cell.type}" data-construction-console="${project.kind}">
       <header class="facility-console-header">
         <div class="facility-console-identity"><span class="facility-console-icon">${facility.icon}</span><div><span class="eyebrow">${project.kind === 'build' ? 'CONSTRUCTION SITE' : 'FACILITY UPGRADE'}</span><h2>${facility.name} · ${kindLabel}</h2><p>도시 시설 #${index} · 목표 ${targetLabel}</p></div></div>
         <div class="facility-console-live"><span>남은 ${remaining}일</span><b>${PROJECT_STAGE_LABELS[projectStage(project)]}</b></div>
@@ -567,7 +570,7 @@ function openConstructionProjectModal(index) {
         <section class="construction-project-status">
           <div class="construction-project-heading"><span>${kindLabel}</span><strong data-project-progress>${percent}%</strong></div>
           <div class="construction-project-bar" role="progressbar" aria-label="공사 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><i data-project-progress-bar style="width:${percent}%"></i></div>
-          <div class="construction-project-time"><span>${project.elapsedDays} / ${project.durationDays} 게임일</span><b data-project-remaining>남은 ${remaining}일</b></div>
+          <div class="construction-project-time"><span>${project.elapsedDays} / ${project.durationDays}일</span><b data-project-remaining>남은 ${remaining}일</b></div>
         </section>
         <div class="construction-stage-row" aria-label="공사 단계">
           ${['foundation', 'skeleton', 'shell'].map((stage) => `<span class="${projectStage(project) === stage ? 'active' : ''}">${PROJECT_STAGE_LABELS[stage]}</span>`).join('')}
@@ -687,7 +690,7 @@ export function openReportModal() {
       <div class="summary-card"><span>생존 시험</span><strong>${report.stress.passed ? '통과' : '기록 없음'}</strong></div>
     </div>
     <div class="report-axis-grid">
-      ${Object.entries(report.axes).map(([id, item]) => `<article><div><span>${axisLabels[id]}</span><b>${item.score} / ${item.max}</b></div><div class="objective-card-progress"><i style="width:${item.value}%"></i></div><small>${item.value}점 지표</small></article>`).join('')}
+      ${Object.entries(report.axes).map(([id, item]) => `<article><div><span>${axisLabels[id]}</span><b>${item.score} / ${item.max}</b></div><div class="report-axis-progress"><i style="width:${item.value}%"></i></div><small>${item.value}점 지표</small></article>`).join('')}
     </div>
     <div class="summary-grid">
       <div class="summary-card"><span>일일 순수익</span><strong>${formatCredits(operation.averageNetIncome)}/일</strong></div>
@@ -702,13 +705,13 @@ export function openReportModal() {
     <div class="callout"><strong>운영 패널티 ${report.penalties}점</strong><p>긴급지원과 장기 탄소 압력이 있을 때만 운영 100점에서 차감됩니다. 과밀 ${formatCredits(operation.overcrowdingCost)} · 건강/민원 ${formatCredits(operation.healthCost)}</p></div>
     <div class="modal-actions"><button class="btn secondary" id="exportBtn"><i data-lucide="download"></i> 결과 저장</button>${quizComplete ? '' : '<button class="btn secondary" id="finalBonusQuizBtn">개념 퀴즈 · 최대 +10</button>'}<button class="btn primary" id="closeFinalBtn">도시 계속 보기</button></div>
   `, { id: 'final-report', pausesSimulation: true });
-  anime({ targets: '.final-rank .rank-icon', scale: [0.4, 1], rotate: [-15, 0], duration: 500, easing: 'easeOutElastic(1, .6)' });
+  if (!prefersReducedMotion()) {
+    anime({ targets: '.final-rank .rank-icon', scale: [0.4, 1], rotate: [-15, 0], duration: 500, easing: 'easeOutElastic(1, .6)' });
+  }
   $modal('#closeFinalBtn').addEventListener('click', closeModal);
   $modal('#exportBtn').addEventListener('click', exportResultFile);
   $modal('#finalBonusQuizBtn')?.addEventListener('click', () => eventBus.emit(Events.FINAL_QUIZ_REQUESTED, {}));
 }
-
-const stressTestTotalDays = () => STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
 
 export function openStressTestModal(onStarted = null) {
   const previous = gameState.stressTest.result;
@@ -851,7 +854,7 @@ export function openCarbonGameOverModal({ dailyCarbon = 0, onReset } = {}) {
 }
 
 export function openOperationalRiskModal({ reason } = {}) {
-  const credit = reason === 'credit-12';
+  const credit = reason === OPERATIONAL_PAUSE_IDS.CREDIT;
   const creditDaysLeft = CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS - CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS;
   const essentialDaysLeft = CITY_FAILURE_RULES.ESSENTIAL_GAME_OVER_DAYS - CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS;
   setModal(`

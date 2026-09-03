@@ -1,3 +1,6 @@
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import {
@@ -17,6 +20,7 @@ import { validatePlacement } from '../../../src/systems/BoardSystem.js';
 import { assessConstructionPlan } from '../../../src/systems/ConstructionPlanSystem.js';
 import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
+import { EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../../../src/core/EventDefinitions.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 
 const powered = (ratio = 1) => ({ demand: 2, delivered: 2 * ratio, ratio });
@@ -396,4 +400,41 @@ test('emergency support is offered only while it is still available at the credi
   requestEmergencySupport(state);
   state.credits = EMERGENCY_SUPPORT.CREDIT_THRESHOLD;
   expect(canRequestEmergencySupport(state)).toBe(false);
+});
+
+test('the final test reports its progress from the stress-test phases', () => {
+  const state = new GameState();
+  state.questIndex = CAMPAIGN_QUEST_INDEXES.FINAL_TEST;
+  state.stressTest = { status: 'ready', phaseIndex: 0, phaseDay: 0 };
+  expect(questProgressFraction(state)).toBe(0);
+
+  // 첫 두 구간을 끝내고 세 번째 구간 하루를 지난 도시.
+  const completedDays = STRESS_PHASES[0].durationDays + STRESS_PHASES[1].durationDays + 1;
+  state.stressTest = { status: 'running', phaseIndex: 2, phaseDay: 1 };
+  expect(questProgressFraction(state)).toBeCloseTo(completedDays / stressTestTotalDays(), 10);
+
+  state.stressTest = { status: 'passed', phaseIndex: 0, phaseDay: 0 };
+  expect(questProgressFraction(state)).toBe(1);
+});
+
+// 예보 준비 기간은 EVENT_FORECAST_DAYS 하나가 정한다. 문구가 다시 숫자를 적으면 값이 갈라진다.
+test('no source file writes the climate forecast window as a literal', async () => {
+  const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../src');
+  const collect = async (dir) => {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return collect(full);
+      return entry.isFile() && /\.(js|css)$/.test(entry.name) ? [full] : [];
+    }));
+    return nested.flat();
+  };
+  const files = await collect(srcRoot);
+  expect(files.length).toBeGreaterThan(30);
+  const literal = `${EVENT_FORECAST_DAYS}일`;
+  const offenders = [];
+  for (const file of files) {
+    if ((await readFile(file, 'utf8')).includes(literal)) offenders.push(path.relative(srcRoot, file));
+  }
+  expect(offenders).toEqual([]);
 });

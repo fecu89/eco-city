@@ -1,4 +1,4 @@
-import { QUESTS, questForState } from '../core/QuestDefinitions.js';
+import { questForState } from '../core/QuestDefinitions.js';
 import { EMERGENCY_SUPPORT, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
@@ -11,6 +11,7 @@ import {
   currentClimateQuestEvaluation,
   isClimateQuestActive,
 } from './ClimateQuestSystem.js';
+import { stressTestProgressFraction } from './StressTestSystem.js';
 
 const facilities = (state, type) => state.grid.filter((cell) => isOperationalCell(cell) && cell.type === type);
 
@@ -68,6 +69,7 @@ export function questProgressFraction(state) {
     if (!targetDays) return 0;
     return clampFraction((evaluation.bestConsecutiveDays || evaluation.consecutiveDays || 0) / targetDays);
   }
+  if (state.questIndex === CAMPAIGN_QUEST_INDEXES.FINAL_TEST) return stressTestProgressFraction(state);
   const countRule = COUNT_QUEST_TARGETS[state.questIndex];
   if (countRule) return clampFraction(facilities(state, countRule.type).length / countRule.target);
   if (state.questIndex === CAMPAIGN_QUEST_INDEXES.PREPARATION_START) return researchQuestFraction(state);

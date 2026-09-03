@@ -57,7 +57,12 @@ export function calculateEnvironmentalOperations({
     const stats = effectiveFacilityStats(cell, facilityModifierAt(modifierContext, index));
     const operation = facilityOperations[index] || {};
     const powerRatio = Math.max(0, Math.min(1, Number(operation.powerRatio) || 0));
-    const operationRatio = Math.max(0, Math.min(1, Number(operation.operationRatio) || 0));
+    // 화면용 operationRatio는 소수 첫째 자리로 반올림돼 있다. 배출·냉각수는 급전량에
+    // 연속적으로 비례해야 하므로 반올림 전 값이 있으면 그것을 쓴다.
+    const rawOperationRatio = Number.isFinite(Number(operation.operationRatioRaw))
+      ? Number(operation.operationRatioRaw)
+      : Number(operation.operationRatio);
+    const operationRatio = Math.max(0, Math.min(1, rawOperationRatio || 0));
     // 발전 시설은 대기 운전만으로도 바닥선만큼 배출하고, 그 위로는 급전량에 비례한다.
     const generationRatio = Math.max(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO, operationRatio);
     const carbonFactor = stats.carbon < 0

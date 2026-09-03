@@ -1,4 +1,4 @@
-import { BOARD, FACILITIES, GAME, TIME, WORKFORCE_RULES } from '../core/Constants.js';
+import { BOARD, FACILITIES, GAME, SAVE_MESSAGES, TIME, WORKFORCE_RULES } from '../core/Constants.js';
 import { SAVE_VERSION, normalizeCell } from '../core/GameState.js';
 import { gameState } from '../core/GameState.js';
 import { roundCredits } from '../core/Money.js';
@@ -17,12 +17,31 @@ let saveTimer = null;
 let simulationSaveTimer = null;
 let lastSimulationSaveAt = 0;
 
+// 저장소가 막힌 브라우저에서는 자동저장이 매번 조용히 실패한다. 로그는 실패할 때마다 남기되,
+// 토스트는 세션당 한 번만 띄운다 — 정산·건설마다 같은 경고가 쌓이면 화면을 덮는다.
+let storageBlockedNotified = false;
+
+function notifyStorageBlocked() {
+  console.warn(SAVE_MESSAGES.AUTOSAVE_FAILED_LOG);
+  if (storageBlockedNotified) return;
+  storageBlockedNotified = true;
+  eventBus.emit(Events.TOAST_SHOW, {
+    title: SAVE_MESSAGES.STORAGE_BLOCKED_TITLE,
+    text: SAVE_MESSAGES.STORAGE_BLOCKED_TEXT,
+    priority: true,
+  });
+}
+
 function persist() {
+  let payload;
   try {
-    writeStorage(GAME.AUTOSAVE_KEY, JSON.stringify(gameState.serialize()));
+    payload = JSON.stringify(gameState.serialize());
   } catch (err) {
-    console.warn('자동저장 실패:', err);
+    console.warn(`${SAVE_MESSAGES.AUTOSAVE_FAILED_LOG}:`, err);
+    return;
   }
+  // writeStorage는 예외를 삼키고 false만 돌려준다. 반환값을 버리면 실패가 그대로 묻힌다.
+  if (!writeStorage(GAME.AUTOSAVE_KEY, payload)) notifyStorageBlocked();
 }
 
 function scheduleSave() {
@@ -592,6 +611,31 @@ function resetClimateStateForPreparation(data) {
 
 const allCellIndices = () => Array.from({ length: BOARD.MAX_CELLS }, (_, index) => index);
 
+// 기후전 구간(11~18)에서는 캠페인이 이벤트 일정을 통째로 소유한다(campaignOwnsSchedule).
+// 그런데 v8 저장의 climateCampaign.status는 'locked'(또는 없음)일 수 있고, 그대로 옮기면
+// 캠페인이 일정을 놓아 버려 무작위 이벤트 덱이 기후 퀘스트 위에 겹쳐 깔린다.
+// 브리핑부터 다시 시작하도록 상태만 정규화한다 — 이미 통과한 이벤트 기록은 그대로 둔다.
+const CAMPAIGN_SCHEDULE_STATUSES = ['briefing', 'preparation', 'active', 'result'];
+
+function normalizeClimateCampaignForMigration(data, questIndex) {
+  if (questIndex < CAMPAIGN_QUEST_INDEXES.CLIMATE_START
+    || questIndex > CAMPAIGN_QUEST_INDEXES.CLIMATE_END) return null;
+  const campaign = data.climateCampaign || {};
+  if (CAMPAIGN_SCHEDULE_STATUSES.includes(campaign.status)) return null;
+  return {
+    climateCampaign: {
+      ...campaign,
+      status: 'briefing',
+      eventType: null,
+      scheduledEventId: null,
+      progress: {},
+      attempt: Math.max(0, Number(campaign.attempt) || 0),
+      lastResult: campaign.lastResult ?? null,
+      completedEventTypes: [...(campaign.completedEventTypes || [])],
+    },
+  };
+}
+
 // 준비 퀘스트가 주는 강화 허가 레벨(7단계 보상 Lv.2). 퀘스트 정의가 유일한 출처다.
 const PREPARATION_UPGRADE_PERMIT_LEVEL = QUESTS.reduce((level, quest) => (
   PREPARATION_QUEST_IDS.includes(quest.id)
@@ -684,6 +728,7 @@ export function migrateV8ToV9(data) {
     progression,
     ...grantSkippedPreparation(data, questIndex),
     ...(resetClimate || {}),
+    ...(resetClimate ? {} : normalizeClimateCampaignForMigration(data, questIndex) || {}),
   };
 }
 

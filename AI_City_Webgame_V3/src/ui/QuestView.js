@@ -19,11 +19,12 @@ import {
   startResearchQuiz,
 } from '../systems/QuizSystem.js';
 import { expandGrid } from '../systems/BoardSystem.js';
+import { stressTestProgressFraction } from '../systems/StressTestSystem.js';
 import { setModal, closeModal, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits } from './format.js';
 import { rewardText } from './questText.js';
 import { eventBus, Events } from '../core/EventBus.js';
-import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
+import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
 import {
   acknowledgeClimateBriefing,
   currentClimateQuestEvaluation,
@@ -203,9 +204,9 @@ export function renderQuest() {
     node.textContent = evaluation.ready
       ? '보상 받기'
       : canBrief
-        ? '24일 대비 시작'
+        ? `${EVENT_FORECAST_DAYS}일 대비 시작`
         : canRetry
-          ? '24일 준비부터 재도전'
+          ? `${EVENT_FORECAST_DAYS}일 준비부터 재도전`
           : campaign?.status === 'preparation'
             ? `${evaluation.startsInDays}일 후 시작`
             : campaign?.status === 'active'
@@ -232,10 +233,6 @@ export function renderQuest() {
 function renderStressTestPanel() {
   const stress = gameState.stressTest;
   if (!stress || ['locked', 'legacy_complete'].includes(stress.status)) return false;
-  const totalDays = STRESS_PHASES.reduce((sum, phase) => sum + phase.durationDays, 0);
-  const completedDays = STRESS_PHASES
-    .slice(0, stress.phaseIndex)
-    .reduce((sum, phase) => sum + phase.durationDays, 0) + (stress.phaseDay || 0);
   const phase = STRESS_PHASES[Math.min(stress.phaseIndex, STRESS_PHASES.length - 1)];
   const statusText = stress.status === 'running'
     ? `${phase.label} ${stress.phaseDay}/${phase.durationDays}일`
@@ -243,7 +240,7 @@ function renderStressTestPanel() {
       ? '도시 보완 후 재도전 가능'
       : stress.status === 'passed'
         ? '생존 성공 · 운영 보고서 준비 완료'
-        : '41일 · 8구간 복합기후 시험 준비 완료';
+        : `${stressTestTotalDays()}일 · ${STRESS_PHASES.length}구간 복합기후 시험 준비 완료`;
   eachNode(els.level, (node) => {
     node.textContent = stress.status === 'running'
       ? `최종 기후시험 · 구간 ${stress.phaseIndex + 1} / ${STRESS_PHASES.length}`
@@ -252,9 +249,7 @@ function renderStressTestPanel() {
   eachNode(els.title, (node) => { node.textContent = '대한민국 복합기후 시험'; });
   eachNode(els.goal, (node) => { node.textContent = statusText; });
   eachNode(els.reward, (node) => { node.textContent = '통과 후 도시 운영 프로필과 최종 보고서'; });
-  eachNode(els.bar, (node) => {
-    node.style.width = `${stress.status === 'passed' ? 100 : Math.min(100, completedDays / totalDays * 100)}%`;
-  });
+  eachNode(els.bar, (node) => { node.style.width = `${stressTestProgressFraction(gameState) * 100}%`; });
   eachNode(els.claim, (node) => {
     node.disabled = stress.status === 'running';
     node.textContent = stress.status === 'ready'
@@ -267,7 +262,7 @@ function renderStressTestPanel() {
   });
   eachNode(els.root, (node) => node.classList.toggle('quest-ready', stress.status !== 'running'));
   if (els.details) {
-    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationDays}일</small></span>`).join('')}</div><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 · 안전일 ${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하(건조 위기 구간, 시험 시작 시 사용량 기준) · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내</p>${stress.result && !stress.result.passed ? `<p class="objective-stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
+    els.details.innerHTML = `<div class="stress-quest-phases">${STRESS_PHASES.map((item, index) => `<span class="${index < stress.phaseIndex || stress.status === 'passed' ? 'complete' : index === stress.phaseIndex && stress.status === 'running' ? 'active' : ''}"><b>${index + 1}. ${escapeHtml(item.label)}</b><small>${item.durationDays}일</small></span>`).join('')}</div><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 · 안전일 ${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하(건조 위기 구간, 시험 시작 시 사용량 기준) · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내</p>${stress.result && !stress.result.passed ? `<p class="stress-diagnosis">${escapeHtml(stress.result.diagnosis?.label || '')}</p>` : ''}`;
     els.details.classList.remove('hidden');
   }
   els.expand?.classList.add('hidden');
@@ -356,7 +351,7 @@ function renderQuestQuizResultModal(result) {
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">QUIZ RESULT</span><h2>${result.passed ? '퀴즈 통과' : '다시 준비하세요'}</h2></div></div>
     <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>통과 기준</span><strong>${result.passThreshold}/${result.total}</strong></div></div>
-    <div class="callout"><strong>${result.passed ? '보상을 받을 수 있습니다.' : '도시 상태는 그대로 유지됩니다.'}</strong><p>${result.passed ? '퀘스트 카드에서 보상을 받아 다음 레벨로 이동하세요.' : '설명을 확인한 뒤 퀴즈만 다시 풀 수 있습니다.'}</p></div>
+    <div class="callout"><strong>${result.passed ? '보상을 받을 수 있습니다.' : '도시 상태는 그대로 유지됩니다.'}</strong><p>${result.passed ? '퀘스트 카드에서 보상을 받아 다음 퀘스트로 이동하세요.' : '설명을 확인한 뒤 퀴즈만 다시 풀 수 있습니다.'}</p></div>
     <div class="modal-actions"><button class="btn primary" id="questQuizFinish">${result.passed ? '확인' : '다시 풀기'}</button></div>
   `, { id: 'quiz', pausesSimulation: true });
   $modal('#questQuizFinish').addEventListener('click', () => {
@@ -376,7 +371,7 @@ export function openQuestMap() {
     <div class="modal-head"><div><span class="eyebrow">QUEST MAP</span><h2>기후 생존 퀘스트</h2></div><button class="icon-btn" id="questMapClose">×</button></div>
     <div class="quest-map-list">${QUESTS.map((baseQuest) => {
       const quest = questForState(gameState, baseQuest.index);
-      return `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${quest.title}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`;
+      return `<div class="quest-map-item ${gameState.claimedQuestIds.has(quest.id) ? 'done' : quest.index === gameState.questIndex ? 'active' : 'locked'}"><b>${quest.index}. ${escapeHtml(quest.title)}</b><span>${gameState.claimedQuestIds.has(quest.id) ? '완료' : quest.index === gameState.questIndex ? '진행 중' : '잠김'}</span></div>`;
     }).join('')}</div>
     ${canRequestEmergencySupport(gameState) ? `<button class="btn secondary full" id="emergencyCreditBtn">긴급지원 ${formatCredits(EMERGENCY_SUPPORT.GRANT)}</button>` : ''}
   `);

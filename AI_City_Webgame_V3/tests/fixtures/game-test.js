@@ -11,7 +11,9 @@ export const test = base.extend({
     await page.waitForFunction(() => window.__GAME_STATE__ && typeof window.render_game_to_text === 'function', {
       timeout: 10000,
     });
-    // 로딩 화면(#loadingScreen)은 약 1.2초간 전체 화면을 덮어 클릭을 막는다(의도된 연출).
+    // 로딩 화면(#loadingScreen)은 실제 에셋 로딩 진행률을 따라가며 전체 화면을 덮어 클릭을 막는다.
+    // 에셋 이벤트가 오지 않아도 LOADING_SCREEN.MAX_WAIT_MS(3.5초) + DONE_DELAY_MS(0.3초) 뒤에는
+    // 반드시 `.done`이 붙으므로 아래 5초 대기 안에 들어온다.
     // JS 상태가 준비된 것과 화면이 실제로 클릭 가능해진 것은 다르므로, 로딩 화면이 완전히
     // 사라질 때까지 기다린다 — 안 그러면 실제 마우스 좌표 클릭이 로딩 화면에 막혀 씹힌다.
     // 주의: `.done` 클래스는 opacity/visibility를 CSS `transition:.4s`로 바꾸는데, visibility는

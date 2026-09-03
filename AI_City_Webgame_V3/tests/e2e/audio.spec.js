@@ -9,7 +9,8 @@ test('runtime background track is web-compressed while the source master stays o
   expect(runtime / source).toBeLessThan(0.5);
 });
 
-test('background music starts after the first gesture and stops cleanly from settings', async ({ page }) => {
+// 실제 오디오 장치 없이 배경음·효과음 경로를 관찰하기 위한 프로브.
+async function installAudioProbe(page) {
   await page.addInitScript(() => {
     localStorage.clear();
     window.__audioProbe = {
@@ -69,9 +70,16 @@ test('background music starts after the first gesture and stops cleanly from set
     window.AudioContext = FakeAudioContext;
     window.webkitAudioContext = FakeAudioContext;
   });
+}
 
+async function bootWithAudioProbe(page) {
+  await installAudioProbe(page);
   await page.goto('/');
   await page.waitForFunction(() => window.__GAME_STATE__ && document.getElementById('loadingScreen')?.classList.contains('done'));
+}
+
+test('background music starts after the first gesture and stops cleanly from settings', async ({ page }) => {
+  await bootWithAudioProbe(page);
   await page.waitForTimeout(500);
   await expect(page.locator('#musicBtn')).toHaveClass(/active/);
   await page.locator('#storyNext').click();
@@ -88,4 +96,31 @@ test('background music starts after the first gesture and stops cleanly from set
   await page.locator('#musicBtn').click();
   await expect(page.locator('#musicBtn')).not.toHaveClass(/active/);
   await expect.poll(() => page.evaluate(() => window.__audioProbe.musicPauses)).toBe(1);
+});
+
+test('muting sound effects leaves the background music playing', async ({ page }) => {
+  await bootWithAudioProbe(page);
+  for (let pageIndex = 0; pageIndex < 3; pageIndex++) await page.locator('#storyNext').click();
+  await expect.poll(() => page.evaluate(() => window.__audioProbe.musicPlays)).toBe(1);
+
+  await page.locator('[data-hud-target="settings"]').first().click();
+  await page.locator('#soundBtn').click();
+
+  expect(await page.evaluate(() => ({
+    sound: window.__GAME_STATE__.sound,
+    musicEnabled: window.__GAME_STATE__.musicEnabled,
+    musicPauses: window.__audioProbe.musicPauses,
+  }))).toEqual({ sound: false, musicEnabled: true, musicPauses: 0 });
+  await expect(page.locator('#musicBtn')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#musicBtn')).toHaveClass(/active/);
+});
+
+test('a keyboard-only player still starts the audio context on the first key', async ({ page }) => {
+  await bootWithAudioProbe(page);
+  expect(await page.evaluate(() => window.__getAudioState())).not.toBe('running');
+
+  await page.keyboard.press('Shift');
+
+  await expect.poll(() => page.evaluate(() => window.__getAudioState())).toBe('running');
+  await expect.poll(() => page.evaluate(() => window.__audioProbe.musicPlays)).toBe(1);
 });

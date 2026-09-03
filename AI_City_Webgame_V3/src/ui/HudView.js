@@ -1,17 +1,25 @@
 import { gameState } from '../core/GameState.js';
 import { refreshIcons } from './Modal.js';
-import { exactNumberLabel, formatCredits } from './format.js';
-import { CITY_EVENTS, STRESS_PHASES } from '../core/EventDefinitions.js';
-import { QUESTS, questForState } from '../core/QuestDefinitions.js';
+import { escapeHtml, exactNumberLabel, formatCredits } from './format.js';
+import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
+import { questForState } from '../core/QuestDefinitions.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 
 let els = null;
 let onStageUiChanged = () => {};
 
+// 각 구간의 마지막 퀘스트 번호는 캠페인 정의에서만 온다 — 숫자를 여기 적으면
+// 퀘스트 순서를 바꿀 때 안내 문구만 조용히 어긋난다.
+const FOUNDATION_QUEST_COUNT = CAMPAIGN_QUEST_INDEXES.FOUNDATION_END;
+const PREPARATION_QUEST_COUNT = CAMPAIGN_QUEST_INDEXES.PREPARATION_END
+  - CAMPAIGN_QUEST_INDEXES.PREPARATION_START + 1;
+const CLIMATE_QUEST_COUNT = CAMPAIGN_QUEST_INDEXES.CLIMATE_END
+  - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1;
+
 const QUEST_GUIDANCE = [
-  { through: 4, icon: 'building-2', text: '도시 정착: 수익 시설도 전력·탄소 비용과 함께 설계하세요.' },
-  { through: 5, icon: 'leaf', text: '탄소 전환: 핵발전으로 CO₂를 낮추고 도시 흑자를 유지하세요.' },
-  { through: 6, icon: 'recycle', text: '물순환 전환: 데이터센터의 폐열을 순환냉각으로 관리하세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.BASELINE_CAPTURE_QUEST, icon: 'building-2', text: '도시 정착: 수익 시설도 전력·탄소 비용과 함께 설계하세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.EXECUTION_STAGE_LAST_QUEST, icon: 'leaf', text: '탄소 전환: 핵발전으로 CO₂를 낮추고 도시 흑자를 유지하세요.' },
+  { through: CAMPAIGN_QUEST_INDEXES.FOUNDATION_END, icon: 'recycle', text: '물순환 전환: 데이터센터의 폐열을 순환냉각으로 관리하세요.' },
   { through: CAMPAIGN_QUEST_INDEXES.PREPARATION_END, icon: 'flask-conical', text: '전환 준비: 연구와 시설 강화를 마치고 풍력·조력 실증망을 가동하세요.' },
   { through: CAMPAIGN_QUEST_INDEXES.CLIMATE_END, icon: 'shield-check', text: '기후 대응: 저장 허브와 우선순위로 기후 충격을 버티세요.' },
   { through: CAMPAIGN_QUEST_INDEXES.FINAL_TEST, icon: 'users', text: '최종 시험: 운영 기록을 바탕으로 복합기후에 대응하세요.' },
@@ -44,7 +52,7 @@ function campaignHeader() {
         icon: stress.status === 'failed' ? 'wrench' : 'shield-check',
         text: stress.status === 'failed'
           ? stress.result?.diagnosis?.label || '진단 결과를 확인하고 도시를 보완한 뒤 재도전하세요.'
-          : '41일 복합 위기를 버티면 다음 단계는 최종 운영 보고서입니다.',
+          : `${stressTestTotalDays()}일 복합 위기를 버티면 다음 단계는 최종 운영 보고서입니다.`,
       },
     };
   }
@@ -55,18 +63,18 @@ function campaignHeader() {
     const event = CITY_EVENTS[gameState.climateCampaign?.eventType || quest?.eventType];
     const campaign = gameState.climateCampaign || {};
     const scheduled = gameState.events.schedule.find(({ id }) => id === campaign.scheduledEventId);
-    const remaining = scheduled ? Math.max(0, scheduled.startAt - gameState.elapsedGameDays) : 24;
+    const remaining = scheduled ? Math.max(0, scheduled.startAt - gameState.elapsedGameDays) : EVENT_FORECAST_DAYS;
     const text = campaign.status === 'briefing'
-      ? '퀘스트 창에서 예보를 확인하고 24일 대비를 시작하세요.'
+      ? `퀘스트 창에서 예보를 확인하고 ${EVENT_FORECAST_DAYS}일 대비를 시작하세요.`
       : campaign.status === 'preparation'
         ? `${remaining}일 뒤 ${event?.label || quest.title}이 시작됩니다. 건설·연구·운영모드를 준비하세요.`
         : campaign.status === 'active'
           ? `${event?.label || quest.title} 대응 중입니다. 퀘스트 조건을 실시간으로 유지하세요.`
           : campaign.lastResult?.passed
             ? '대응 조건을 달성했습니다. 퀘스트 창에서 보상을 받으세요.'
-            : '실패 원인을 확인하고 같은 도시로 24일 준비부터 재도전하세요.';
+            : `실패 원인을 확인하고 같은 도시로 ${EVENT_FORECAST_DAYS}일 준비부터 재도전하세요.`;
     return {
-      phase: `기후 대응 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1} / 8`,
+      phase: `기후 대응 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1} / ${CLIMATE_QUEST_COUNT}`,
       mission: quest.title,
       guidance: { icon: event?.icon || 'cloud-sun', text },
     };
@@ -76,14 +84,14 @@ function campaignHeader() {
     && gameState.questIndex <= CAMPAIGN_QUEST_INDEXES.PREPARATION_END) {
     const quest = questForState(gameState);
     return {
-      phase: `전환 준비 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.PREPARATION_START + 1} / 4`,
+      phase: `전환 준비 ${gameState.questIndex - CAMPAIGN_QUEST_INDEXES.PREPARATION_START + 1} / ${PREPARATION_QUEST_COUNT}`,
       mission: quest.title,
       guidance: guidanceForQuest(gameState.questIndex),
     };
   }
 
   return {
-    phase: `복구 퀘스트 ${gameState.questIndex} / 6`,
+    phase: `복구 퀘스트 ${gameState.questIndex} / ${FOUNDATION_QUEST_COUNT}`,
     mission: `기초 도시 복구 · ${gameState.questIndex}번째 퀘스트`,
     guidance: guidanceForQuest(gameState.questIndex),
   };
@@ -104,7 +112,9 @@ export function renderHud() {
 
   els.phaseText.textContent = header.phase;
   els.missionTitle.textContent = header.mission;
-  els.teacherNote.innerHTML = `<i data-lucide="${header.guidance.icon}"></i><p>${header.guidance.text}</p>`;
+  // 안내 문구에는 저장 파일에서 온 진단 문장이 섞일 수 있다. 저장을 손댄 브라우저에서
+  // 그 문자열이 마크업으로 실행되지 않도록 반드시 이스케이프한다.
+  els.teacherNote.innerHTML = `<i data-lucide="${escapeHtml(header.guidance.icon)}"></i><p>${escapeHtml(header.guidance.text)}</p>`;
   // 방금 다시 그린 노드만 넘긴다 — 문서 전체로 부르면 매 틱 페이지의 모든 아이콘이 새로 만들어진다.
   refreshIcons(els.teacherNote);
   onStageUiChanged();

@@ -89,7 +89,19 @@ export function settleEconomy({
     const upkeep = roundCredits(stats.upkeep);
     grossIncome += income;
     maintenance += upkeep;
-    facilityEconomy[index] = { income: round2(income), upkeep, powerRatio: round1(powerRatio), operationRatio: round1(operationRatio), laborMultiplier, pollutionMultiplier };
+    // operationRatio는 화면에 찍는 값이라 소수 첫째 자리로 반올림한다. 그런데 발전소의
+    // 탄소·냉각수는 이 비율에 그대로 비례하므로, 반올림된 값을 물리에 쓰면 급전량 4%가
+    // 0%로, 26%가 30%로 튀어 급전→배출 곡선이 계단이 된다. 반올림하지 않은 값을 따로 실어
+    // FacilityOperationSystem이 그것을 읽게 한다.
+    facilityEconomy[index] = {
+      income: round2(income),
+      upkeep,
+      powerRatio: round1(powerRatio),
+      operationRatio: round1(operationRatio),
+      operationRatioRaw: clamp01(operationRatio),
+      laborMultiplier,
+      pollutionMultiplier,
+    };
   });
 
   const environment = calculateEnvironmentalOperations({

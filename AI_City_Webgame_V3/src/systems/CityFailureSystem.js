@@ -11,6 +11,12 @@ const WARNING_THRESHOLDS = Object.freeze({
   ]),
 });
 
+// 일시정지 모달이 문자열 형식을 다시 만들지 않도록 id를 여기서 한 번만 정의한다.
+export const OPERATIONAL_PAUSE_IDS = Object.freeze({
+  CREDIT: `credit-${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}`,
+  ESSENTIAL: `essential-${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS}`,
+});
+
 function advanceCounter(current, unsafe) {
   return unsafe ? current + 1 : Math.max(0, current - 1);
 }
@@ -63,12 +69,10 @@ export function applyOperationalRisk(state, summary) {
     ...newlyCrossedWarnings(state, 'credit', creditBefore, negativeCreditDays),
     ...newlyCrossedWarnings(state, 'essential', essentialBefore, essentialBlackoutDays),
   ];
-  const creditPauseId = `credit-${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}`;
-  const essentialPauseId = `essential-${CITY_FAILURE_RULES.ESSENTIAL_PAUSE_DAYS}`;
-  const pauseTransition = warnings.includes(creditPauseId)
-    ? creditPauseId
-    : warnings.includes(essentialPauseId)
-      ? essentialPauseId
+  const pauseTransition = warnings.includes(OPERATIONAL_PAUSE_IDS.CREDIT)
+    ? OPERATIONAL_PAUSE_IDS.CREDIT
+    : warnings.includes(OPERATIONAL_PAUSE_IDS.ESSENTIAL)
+      ? OPERATIONAL_PAUSE_IDS.ESSENTIAL
       : null;
   let gameOverTransition = false;
   if (negativeCreditDays >= CITY_FAILURE_RULES.CREDIT_GAME_OVER_DAYS) {

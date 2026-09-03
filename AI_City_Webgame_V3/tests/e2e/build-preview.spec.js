@@ -44,6 +44,31 @@ for (const viewport of [
   await expect(page.locator('#confirmBuildBtn')).toBeHidden();
 });
 
+// 취소(X)도 확정(O)과 같은 규칙이다 — 취소하면 배치 모드가 풀려 마우스가 보통 상태로 돌아오고,
+// 다시 지으려면 독에서 시설을 다시 고른다.
+test('cancelling a build preview disarms placement until a facility is picked again', async ({ gamePage: page }) => {
+  await openBuild(page);
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(0));
+  await expect(page.locator('#cancelBuildBtn')).toBeVisible();
+  await page.locator('#cancelBuildBtn').click();
+  await expect(page.locator('#buildConfirm')).toBeHidden();
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+
+  const canvas = page.locator('.city-scene-3d-canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(150);
+  expect(await page.evaluate(() => window.__getCityRendererStats().ghostVisible)).toBe(false);
+
+  await page.evaluate(() => window.__clickCell(1));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+
+  await page.locator('#facilityDock [data-facility="residential"]').click();
+  await page.evaluate(() => window.__clickCell(1));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([{ index: 1, type: 'residential' }]);
+});
+
 test('confirming a build disarms placement until a facility is picked again', async ({ gamePage: page }) => {
   await openBuild(page);
   await page.evaluate(() => window.__clickCell(0));
@@ -153,6 +178,10 @@ test('facility permit blocks placement once the quest limit is reached', async (
   await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(2);
 
   // 이제 주거지 허가 한도(2/2)에 도달했으므로, 독 카드 자체가 비활성화되어 재선택을 막는다.
+  const residential = page.locator('[data-facility="residential"]');
+  await expect(residential).toHaveClass(/permit-capped/);
+  await expect(residential).toHaveAttribute('aria-disabled', 'true');
+  await expect(residential).toHaveAttribute('title', '주거지 — 주거지 허가 2/2. 퀘스트 2 완료 후 한도가 늘어납니다.');
   await page.evaluate(() => document.querySelector('[data-facility="residential"]').click());
   expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
   await expect(page.locator('.toast', { hasText: '허가' })).toBeVisible();
@@ -188,4 +217,49 @@ test('plan ghost reuses preallocated GPU layers across sequential placements and
 
   await page.locator('#cancelBuildBtn').click();
   await expect.poll(() => page.evaluate(() => window.__getCityRendererStats().planGhostCount)).toBe(0);
+});
+
+// 시설 카드를 고르는 즉시 독 패널이 접혀 보드가 드러나야 한다(어디에 지을지 보여야 하므로).
+// 확정(O)·취소(X) 뒤에는 패널이 돌아오고, 접힌 상태에서 건설 버튼을 다시 누르면
+// 패널이 닫히는 대신 다시 펼쳐져 다른 시설을 고를 수 있다.
+for (const viewport of [
+  { name: 'desktop', width: 1280, height: 720 },
+  { name: 'mobile', width: 390, height: 780 },
+]) test(`${viewport.name} collapses the dock as soon as a facility is picked and brings it back after confirm, cancel, or the build button`, async ({ gamePage: page }) => {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await openBuild(page);
+  const panel = page.locator('#buildPanel');
+  const card = page.locator('#facilityDock [data-facility="residential"]');
+  const mobile = await page.evaluate(() => matchMedia('(max-width: 760px)').matches);
+  const trigger = page.locator(mobile ? '.mobile-bar [data-hud-target="build"]' : '.hud-rail [data-hud-target="build"]');
+
+  await card.click();
+  await expect(panel).toHaveClass(/build-panel--collapsed/);
+  await expect(card).toBeHidden();
+  expect(await page.evaluate(() => window.__getWorldHudState().activePanel)).toBe('build');
+
+  // 접혀 있어도 배치는 무장돼 있다 — 칸을 고르면 계획이 잡히고 취소하면 독이 돌아온다.
+  await page.evaluate(() => window.__clickCell(0));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan.length)).toBe(1);
+  await expect(panel).toHaveClass(/build-panel--collapsed/);
+  await page.locator('#cancelBuildBtn').click();
+  await expect(panel).not.toHaveClass(/build-panel--collapsed/);
+  await expect(card).toBeVisible();
+
+  // 접힌 상태에서 건설 버튼은 패널을 닫지 않고 다시 펼친다.
+  await card.click();
+  await expect(panel).toHaveClass(/build-panel--collapsed/);
+  await trigger.click();
+  await expect(panel).not.toHaveClass(/build-panel--collapsed/);
+  await expect(panel).toHaveClass(/hud-panel-active/);
+  await expect(card).toBeVisible();
+  expect(await page.evaluate(() => window.__getWorldHudState().activePanel)).toBe('build');
+
+  // 확정하면 독이 돌아오고 다음 시설을 고를 수 있다.
+  await card.click();
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(1);
+  await expect(panel).not.toHaveClass(/build-panel--collapsed/);
+  await expect(card).toBeVisible();
 });

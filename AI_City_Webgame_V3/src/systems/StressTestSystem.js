@@ -1,7 +1,7 @@
 import { CARBON_CRISIS, STAGES, STRESS_TEST_RULES } from '../core/Constants.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { STRESS_PHASES } from '../core/EventDefinitions.js';
+import { STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
 import {
   cityModifierForClimate,
   facilityModifierForClimate,
@@ -29,6 +29,17 @@ function emptyMetrics() {
     consecutiveBankruptcyDays: 0,
     maxConsecutiveBankruptcyDays: 0,
   };
+}
+
+// 최종시험 진행률(0~1). 퀘스트 진행 바와 시험 패널이 같은 값을 쓴다.
+export function stressTestProgressFraction(state) {
+  const stress = state?.stressTest;
+  if (!stress) return 0;
+  if (stress.status === 'passed') return 1;
+  const completedDays = STRESS_PHASES
+    .slice(0, stress.phaseIndex)
+    .reduce((sum, phase) => sum + phase.durationDays, 0) + (stress.phaseDay || 0);
+  return Math.max(0, Math.min(1, completedDays / stressTestTotalDays()));
 }
 
 export function currentStressPhase(state) {
@@ -145,7 +156,7 @@ function diagnosis(result) {
   if (result.averageCarbon > STRESS_TEST_RULES.MAX_AVERAGE_CARBON
     || result.daysAtOrBelowEight < STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS
     || result.daysAboveTen > STRESS_TEST_RULES.MAX_HIGH_CARBON_DAYS) {
-    return { id: 'carbon', label: '41일 탄소 조건을 모두 만족하지 못했습니다.' };
+    return { id: 'carbon', label: `${stressTestTotalDays()}일 탄소 조건을 모두 만족하지 못했습니다.` };
   }
   if (result.carbonExtreme) return { id: 'carbon_extreme', label: '탄소 위험이 극단 단계에 도달했습니다.' };
   return { id: 'survived', label: '도시가 모든 복합 위기를 견뎠습니다.' };

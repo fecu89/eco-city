@@ -98,6 +98,9 @@ test('renewable placement preview uses real solar wind and three tidal site bonu
   expandBoard(state, 'west');
   state.unlockedFacilities.add('tidal');
   state.research.techLevels.tidal = 1;
+  // 조력 건설 허가는 10단계('해안 조력 실증')부터 1기다. 1단계 상태로는 시설 허가에서
+  // 먼저 막혀 지형 보너스 판정에 닿지 못한다.
+  state.questIndex = 10;
   const coords = createHexCoordinates(3);
   const emptyGrid = Array(37).fill(null);
 

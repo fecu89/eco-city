@@ -25,6 +25,59 @@ async function renderRepresentativeCity(page) {
   await page.waitForFunction((before) => window.__getCityRendererStats().renderCount > before, renderCount);
 }
 
+// 예산의 기준이 되는 최악의 경우: 37칸이 모든 (시설, 레벨) 조합을 동시에 갖고(레벨마다
+// 실제 GLB가 다른 시설은 조합마다 InstancedMesh를 하나씩 더 쓴다) 야간 창문 조명, 공사
+// 기초·비계 두 현장, 연기와 상태등 ambient, 호버 고스트, 계획 고스트, 선택 마커까지
+// 한 프레임에 모두 켜진 상태다. 이 조합의 실측치는 47 draw calls이고 예산은 실측 + 2다
+// (ADR-0003에 같은 수치와 시나리오를 기록해 두었다).
+const WORST_CASE_DRAW_CALL_BUDGET = 49;
+
+async function renderWorstCaseCity(page) {
+  await page.waitForFunction(() => window.__getCityAssetStatus?.().state === 'ready');
+  await page.waitForFunction(() => window.__getCityRendererStats?.().environment?.state === 'ready');
+  const renderCount = await page.evaluate(() => window.__getCityRendererStats().renderCount);
+  await page.evaluate(() => {
+    const types = [
+      'residential', 'factory', 'data', 'thermal', 'nuclear',
+      'solar', 'wind', 'battery', 'cooling', 'green', 'tidal',
+    ];
+    const state = window.__GAME_STATE__;
+    state.boardRadius = 3;
+    state.expansion = {
+      phase: 2,
+      firstChoice: 'east',
+      activeCellIndices: Array.from({ length: 37 }, (_, index) => index),
+    };
+    // 0~32번 칸이 11종 x 3레벨 조합을 모두 채운다(11과 3이 서로소라 33칸이면 전부 나온다).
+    state.grid = Array.from({ length: 37 }, (_, index) => (index < 33
+      ? { type: types[index % types.length], level: (index % 3) + 1 }
+      : null));
+    state.grid[33] = {
+      type: 'thermal',
+      level: 1,
+      project: { kind: 'build', type: 'thermal', elapsedDays: 1, durationDays: 5 },
+    };
+    state.grid[34] = {
+      type: 'data',
+      level: 2,
+      project: { kind: 'upgrade', fromLevel: 2, toLevel: 3, elapsedDays: 4, durationDays: 8 },
+    };
+    state.selectedCell = 0;
+    window.__setWorldHourForTest(2);
+    window.__refreshGameForTest();
+    // 마지막 renderGrid 뒤에 세워야 고스트가 살아 있다(renderGrid는 candidateIndex를 지운다).
+    window.__setBuildPreviewForTest({
+      enabled: true,
+      type: 'residential',
+      candidateIndex: 35,
+      plannedItems: [{ index: 36, type: 'residential' }],
+    });
+    window.__triggerFacilityAmbientForTest('thermal', 3, 4000);
+    window.__triggerFacilityAmbientForTest('data', 2, 1600);
+  });
+  await page.waitForFunction((before) => window.__getCityRendererStats().renderCount > before, renderCount);
+}
+
 test.describe('performance', () => {
   test('boots with a single WebGL context and a static decorative background', async ({ page }) => {
     await page.addInitScript(() => {
@@ -72,7 +125,9 @@ test.describe('performance', () => {
       window.__refreshGameForTest();
     });
     await page.locator('[data-hud-target="build"]').first().click();
-    for (let i = 0; i < 10; i++) {
+    // 15단계 주거지 누적 허가는 9기다(FACILITY_LIMITS_BY_QUEST). 허가를 넘겨 카드가 잠기면
+    // 검증하려는 "연속 배치가 예외를 던지지 않는가"가 아니라 허가 판정을 재는 테스트가 된다.
+    for (let i = 0; i < 9; i++) {
       await page.locator('[data-facility="residential"]').click();
       await page.evaluate((index) => window.__clickCell(index), i);
       await page.locator('#confirmBuildBtn').click();
@@ -80,7 +135,7 @@ test.describe('performance', () => {
         await page.locator('#confirmRiskyBuild').click();
       }
     }
-    await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(10);
+    await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.grid.filter(Boolean).length)).toBe(9);
     await page.waitForTimeout(300);
     expect(errors).toEqual([]);
   });
@@ -105,6 +160,27 @@ test.describe('performance', () => {
     // (레벨당 InstancedMesh 최대 1개 추가, 실제로 쓰이는 조합만 지연 생성). 37칸 전부가
     // 이 시설들의 서로 다른 레벨을 동시에 갖는 최악의 경우를 기준으로 측정했다(실측 38).
     expect(stats.drawCalls).toBeLessThanOrEqual(40);
+  });
+
+  test('the worst-case night city with construction, ambient, and both ghosts stays inside the draw-call budget', async ({ gamePage: page }) => {
+    await renderWorstCaseCity(page);
+    const stats = await page.evaluate(() => window.__getCityRendererStats());
+
+    // 예산이 조용히 헐거워지지 않도록, 최악의 경우를 이루는 레이어가 실제로 다 켜졌는지 먼저 확인한다.
+    expect(stats.occupiedCells).toBe(35);
+    expect(stats.worldPhase).toBe('night');
+    expect(stats.buildingLightCount).toBeGreaterThan(0);
+    expect(stats.constructionSiteCount).toBe(2);
+    expect(stats.smokeEffectCount).toBeGreaterThan(0);
+    expect(stats.statusLightCount).toBeGreaterThan(0);
+    expect(stats.windRotorCount).toBeGreaterThan(0);
+    expect(stats.greenDetailInstances).toBeGreaterThan(0);
+    expect(stats.residentAgentCount).toBeGreaterThan(0);
+    expect(stats.ghostVisible).toBe(true);
+    expect(stats.planGhostCount).toBe(1);
+    expect(stats.environment.state).toBe('ready');
+
+    expect(stats.drawCalls).toBeLessThanOrEqual(WORST_CASE_DRAW_CALL_BUDGET);
   });
 
   test('active zones, operating modes, and a climate event stay inside the same render budget', async ({ gamePage: page }) => {
@@ -253,11 +329,12 @@ test.describe('performance', () => {
       state.grid[2].operationMode = 'boost';
       state.grid[7].batteryPolicy = 'reserve30';
       state.events.schedule = [{
-        id: 'perf-stagnant-air', type: 'stagnantAir', announceAt: 40, startAt: 46, endAt: 52,
+        id: 'perf-stagnant-air', type: 'stagnantAir', announceAt: 34, startAt: 40, endAt: 52,
       }];
-      state.events.activeId = null;
+      state.events.activeId = 'perf-stagnant-air';
       window.__refreshGameForTest();
     });
+    // HUD가 새 상태를 다 그린 뒤에 버퍼 카운터를 0으로 되돌리기 위한 동기화 지점이다.
     await expect(page.locator('#forecastStrip')).toContainText('무풍·미세먼지');
     await page.evaluate(() => {
       window.__GPU_BUFFER_COUNTS__.created = 0;

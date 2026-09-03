@@ -61,6 +61,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
   }
 
   function onPointerDown(event) {
+    completedGestures.delete(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
     if (pointers.size > 1) {
       multiTouch = true;
@@ -77,19 +78,34 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
     if (dx * dx + dy * dy >= threshold * threshold) entry.moved = true;
   }
 
-  function finishPointer(event) {
+  function gestureIsClick(entry) {
+    return Boolean(entry) && !entry.moved && !multiTouch && pointers.size === 1;
+  }
+
+  function onPointerUp(event) {
     const entry = pointers.get(event.pointerId);
     if (!entry) return;
-    const click = !entry.moved && !multiTouch && pointers.size === 1;
-    completedGestures.set(event.pointerId, click);
+    completedGestures.set(event.pointerId, gestureIsClick(entry));
     pointers.delete(event.pointerId);
     if (pointers.size === 0) multiTouch = false;
   }
 
+  // 취소된 포인터는 클릭이 아니다. 판정을 남겨 두면 아무도 읽지 않는 항목이 쌓인다.
+  function onPointerCancel(event) {
+    completedGestures.delete(event.pointerId);
+    pointers.delete(event.pointerId);
+    if (pointers.size === 0) multiTouch = false;
+  }
+
+  // pointerup 리스너 등록 순서와 무관하게 같은 답을 준다 — 이미 정리된 포인터는 기록된
+  // 판정을, 아직 살아 있는 포인터는 현재 제스처 상태를 그대로 읽는다.
   function isGestureClick(pointerId) {
-    const click = completedGestures.get(pointerId) === true;
-    completedGestures.delete(pointerId);
-    return click;
+    if (completedGestures.has(pointerId)) {
+      const click = completedGestures.get(pointerId) === true;
+      completedGestures.delete(pointerId);
+      return click;
+    }
+    return gestureIsClick(pointers.get(pointerId));
   }
 
   function reset(radius = getBoardRadius()) {
@@ -161,8 +177,8 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
     controls.removeEventListener('end', onEnd);
     domElement.removeEventListener('pointerdown', onPointerDown);
     domElement.removeEventListener('pointermove', onPointerMove);
-    domElement.removeEventListener('pointerup', finishPointer);
-    domElement.removeEventListener('pointercancel', finishPointer);
+    domElement.removeEventListener('pointerup', onPointerUp);
+    domElement.removeEventListener('pointercancel', onPointerCancel);
     controls.dispose();
     pointers.clear();
     completedGestures.clear();
@@ -173,8 +189,8 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
   controls.addEventListener('end', onEnd);
   domElement.addEventListener('pointerdown', onPointerDown);
   domElement.addEventListener('pointermove', onPointerMove);
-  domElement.addEventListener('pointerup', finishPointer);
-  domElement.addEventListener('pointercancel', finishPointer);
+  domElement.addEventListener('pointerup', onPointerUp);
+  domElement.addEventListener('pointercancel', onPointerCancel);
   reset(boardRadius);
 
   return { controls, update, reset, resize, fitAspect, isGestureClick, getState, setOrbitForTest, dispose };

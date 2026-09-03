@@ -1,9 +1,9 @@
 // 모든 게임 밸런스 수치는 실제 실측값이 아니라 교수학습용 상대값이다.
 
+// 값은 저장 파일에 그대로 들어가므로 남은 단계의 번호를 다시 매기지 않는다.
+// DIAGNOSIS(4)는 옛 저장을 되살리는 hydrate 보정에서만 쓰인다.
 export const STAGES = {
   EXECUTION: 1,
-  CRISIS: 2,
-  CONCEPTS: 3,
   DIAGNOSIS: 4,
   REDESIGN: 5,
   REPORT: 6,
@@ -36,6 +36,37 @@ export const BOARD = Object.freeze({
   EXPANDED_CELLS: 37,
   HEX_SIZE: 0.56,
   MAX_CELLS: 37,
+});
+
+// 3D 보드는 포인터로만 조작할 수 있었다. 아래 값은 키보드 커서(#cityGrid 포커스 상태)가
+// 쓰는 키 이름과 화면 낭독 문구다.
+export const BOARD_KEYBOARD = Object.freeze({
+  // 화면 좌표계 기준 방향 벡터(y는 아래로 증가한다). 이웃 칸을 화면에 투영한 뒤
+  // 이 벡터와 내적이 가장 큰 칸으로 커서를 옮긴다.
+  MOVE_VECTORS: Object.freeze({
+    ArrowRight: Object.freeze({ x: 1, y: 0 }),
+    ArrowLeft: Object.freeze({ x: -1, y: 0 }),
+    ArrowUp: Object.freeze({ x: 0, y: -1 }),
+    ArrowDown: Object.freeze({ x: 0, y: 1 }),
+  }),
+  // 투영이 불가능할 때(카메라 미준비) 쓰는 축좌표 대체 방향. 각 화살표마다 우선순위 순.
+  AXIAL_FALLBACK: Object.freeze({
+    ArrowRight: Object.freeze([Object.freeze({ q: 1, r: 0 }), Object.freeze({ q: 1, r: -1 })]),
+    ArrowLeft: Object.freeze([Object.freeze({ q: -1, r: 0 }), Object.freeze({ q: -1, r: 1 })]),
+    ArrowUp: Object.freeze([Object.freeze({ q: 0, r: -1 }), Object.freeze({ q: 1, r: -1 })]),
+    ArrowDown: Object.freeze([Object.freeze({ q: 0, r: 1 }), Object.freeze({ q: -1, r: 1 })]),
+  }),
+  HOME_KEY: 'Home',
+  CLEAR_KEY: 'Escape',
+  ACTIVATE_KEYS: Object.freeze(['Enter', ' ', 'Spacebar']),
+  HOME_INDEX: 0,
+  // 화살표 방향과 이웃 칸이 이룬 각도가 너무 벌어지면(내적이 이 값 미만) 옮기지 않는다.
+  MIN_DIRECTION_DOT: 0.2,
+  ROLE: 'application',
+  ARIA_LABEL: '육각 도시 건설 대지. 화살표 키로 칸을 옮기고 Enter 또는 Space로 선택합니다. Home은 중앙 칸, Escape는 선택 해제입니다.',
+  EMPTY_CELL_TEXT: '빈 대지',
+  cellAnnouncement: (index, description) => `칸 ${index}: ${description}`,
+  facilityDescription: (name, level) => `${name} Lv.${level}`,
 });
 
 export const HEX_TILE_VISUALS = Object.freeze({
@@ -165,6 +196,12 @@ export const CAMPAIGN_PACING = Object.freeze({
     }),
   ]),
 });
+
+// 한 게임일이 현실 1초이므로 퀘스트 시작 후 EVENT_FORECAST_DAYS만큼의 운영·재정 준비 구간을 보장한다.
+// 준비 구간은 자동으로 일시정지하지 않으며, 실제 재해가 활성화될 때만 상단 상태를 표시한다.
+// core/*Definitions.js도 순환 없이 읽을 수 있도록 상수는 여기에 둔다.
+export const EVENT_FORECAST_DAYS = 24;
+export const EVENT_GAP_DAYS = 3;
 
 export const AUDIO = Object.freeze({
   BGM_URL: '/assets/eco-city.mp3',
@@ -361,6 +398,18 @@ export const ECONOMY_RULES = {
   GENERATION_IDLE_EMISSION_RATIO: 0.25,
 };
 
+export const RESEARCH_TUNING = Object.freeze({
+  // 바람을 깎는 재난에서 풍력이 유지하는 출력 비율. 연구 전이 기준값이고 wind2가 이를 끌어올린다.
+  LOW_WIND_SUPPLY_BASE: 0.35,
+  LOW_WIND_SUPPLY_RESEARCHED: 0.5,
+});
+
+export const SAVE_MESSAGES = Object.freeze({
+  AUTOSAVE_FAILED_LOG: '자동저장 실패',
+  STORAGE_BLOCKED_TITLE: '자동저장을 할 수 없습니다',
+  STORAGE_BLOCKED_TEXT: '브라우저 저장 공간이 막혀 있어 새로고침하면 도시가 사라집니다.',
+});
+
 export const CITY_CAMERA = {
   FOV: 42,
   NEAR: 0.1,
@@ -384,6 +433,23 @@ export const CITY_MOTION = {
   DEMOLISH_MS: 320,
   SELECT_PULSE_MS: 1400,
 };
+
+export const LOADING_SCREEN = Object.freeze({
+  // 에셋 상태 이벤트가 끝내 오지 않아도(3D 씬 자체가 못 뜨는 기기) 게임을 막지 않는다.
+  // 이 값 + DONE_DELAY_MS는 테스트 fixture의 `#loadingScreen.done` 대기(5초)보다 짧아야 한다.
+  MAX_WAIT_MS: 3500,
+  DONE_DELAY_MS: 300,
+});
+
+// 3D 씬 위에 투영되는 DOM 오버레이(공사 진행 배지, 건설 확정 O/X 위젯) 규칙.
+export const CITY_WORLD_OVERLAY = Object.freeze({
+  // 진행률이 이만큼도 움직이지 않았으면 프레임마다 배지 DOM을 다시 쓰지 않는다.
+  CONSTRUCTION_HUD_MIN_PROGRESS_DELTA: 0.005,
+  // 가장자리 칸의 투영 좌표는 컨테이너 밖으로 나갈 수 있다. 항상 보이는 영역 안쪽에
+  // 머물도록 오버레이 크기만큼 여백(px)을 두고 고정한다.
+  OX_WIDGET_MARGIN: Object.freeze({ x: 60, top: 70, bottom: 20 }),
+  CONSTRUCTION_HUD_MARGIN: Object.freeze({ x: 56, top: 34, bottom: 12 }),
+});
 
 export const CITY_AMBIENT = {
   RESIDENT_AGENTS_PER_CELL: 2,

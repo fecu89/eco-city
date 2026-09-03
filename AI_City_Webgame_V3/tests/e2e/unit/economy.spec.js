@@ -4,6 +4,7 @@ import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.j
 import { calcMetrics, demolitionRefund } from '../../../src/systems/BoardSystem.js';
 import { createHexCoordinates, neighborIndices } from '../../../src/systems/HexGridSystem.js';
 import { ECONOMY_RULES, FACILITIES } from '../../../src/core/Constants.js';
+import { calculateEnvironmentalOperations } from '../../../src/systems/FacilityOperationSystem.js';
 
 const cells = (types) => types.map((type) => ({ type, level: 1, priority: 'normal' }));
 const fullyPowered = (grid) => Object.fromEntries(grid.map((_, index) => [index, { demand: 1, delivered: 1, ratio: 1 }]));
@@ -234,6 +235,48 @@ test('a thermal plant emits only the idle floor while low-carbon dispatch covers
 
   expect(dispatched.facilityEconomy[0].operationRatio).toBeGreaterThan(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO);
   expect(dispatched.facilityEnvironment[0].carbon).toBeGreaterThan(idleFloor);
+});
+
+// 화면에 찍는 operationRatio는 소수 첫째 자리로 반올림된다. 그 값을 배출 계산에 그대로
+// 쓰면 급전 26%가 30%로 튀고 4%가 0%로 떨어져 급전→탄소 곡선이 계단이 된다.
+// EconomySystem은 반올림하지 않은 operationRatioRaw를 함께 실어야 한다.
+test('발전소 탄소는 반올림된 표시값이 아니라 실제 급전 비율을 따른다', () => {
+  const grid = [{ type: 'thermal', level: 1, priority: 'normal' }];
+  const round1 = (value) => Math.round(value * 10) / 10;
+  const carbonAt = (ratio) => calculateEnvironmentalOperations({
+    grid,
+    coords: createHexCoordinates(2),
+    facilityOperations: { 0: { powerRatio: 1, operationRatio: round1(ratio), operationRatioRaw: ratio } },
+  }).byFacility[0].carbon;
+  const full = FACILITIES.thermal.carbon;
+  const idleFloor = full * ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO;
+
+  // 급전 4%는 대기 배출 바닥선(25%) 아래라 바닥선만큼만 나온다 — 반올림 때문이 아니다.
+  expect(carbonAt(0.04)).toBeCloseTo(idleFloor, 2);
+  // 급전 26%는 바닥선 위다. 반올림된 0.3이 아니라 0.26 그대로여야 한다.
+  expect(carbonAt(0.26)).toBeCloseTo(full * 0.26, 2);
+  expect(carbonAt(0.26)).toBeLessThan(full * 0.3);
+  // 24%는 바닥선 아래이므로 여전히 바닥선이다 — 경계가 0.25에서만 갈린다.
+  expect(carbonAt(0.24)).toBeCloseTo(idleFloor, 2);
+});
+
+test('정산이 내보내는 발전 가동률은 표시값과 원본값을 함께 싣는다', () => {
+  const coords = createHexCoordinates(2);
+  const grid = Array(19).fill(null);
+  grid[0] = { type: 'thermal', level: 1, priority: 'normal' };
+  grid[1] = { type: 'solar', level: 1, priority: 'normal' };
+  [2, 3, 4, 5].forEach((index) => { grid[index] = { type: 'residential', level: 1, priority: 'essential' }; });
+
+  const settled = settleDispatchedGrid(grid, coords);
+  const economy = settled.facilityEconomy[0];
+  // 이 배치의 실제 급전 비율은 반올림 경계를 넘는다(0.37 → 표시값 0.4).
+  expect(economy.operationRatioRaw).toBeGreaterThan(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO);
+  expect(economy.operationRatioRaw).not.toBe(economy.operationRatio);
+  expect(economy.operationRatio).toBe(Math.round(economy.operationRatioRaw * 10) / 10);
+
+  // 탄소는 표시값(0.4)이 아니라 원본 급전 비율을 따른다.
+  expect(settled.facilityEnvironment[0].carbon).toBeCloseTo(FACILITIES.thermal.carbon * economy.operationRatioRaw, 2);
+  expect(settled.facilityEnvironment[0].carbon).toBeLessThan(FACILITIES.thermal.carbon * economy.operationRatio);
 });
 
 test('nuclear cooling water scales with the energy the plant actually dispatches', () => {

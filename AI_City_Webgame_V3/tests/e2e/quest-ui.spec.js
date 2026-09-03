@@ -10,6 +10,8 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#questTracker')).toHaveCount(0);
     const panel = await openQuestPanel(page);
     await expect(panel).toContainText('LEVEL 1 / 19');
+    // index.html은 이 세 자리를 비워 두고 부팅 첫 렌더가 채운다. 빈 채로 남으면 여기서 걸린다.
+    await expect(page.locator('#phaseText')).toHaveText('복구 퀘스트 1 / 6');
     await expect(page.locator('#questPanelTitle')).toHaveText('2040, 첫 시민');
     await expect(page.locator('#questPanelReward')).toContainText('공장·화력발전 해금');
     await expect(page.locator('#questPanelReward')).not.toContainText('thermal');
@@ -218,7 +220,7 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('#modal')).toBeHidden();
     await expect(page.locator('.toast.quest-reward-alert')).toContainText('연구도시의 씨앗 완료');
     const alert = page.locator('.toast.quest-alert');
-    await expect(alert).toContainText('LEVEL 5 / 19');
+    await expect(alert).toContainText('퀘스트 5 / 19');
     await expect(alert).toContainText('탄소 전환선');
     await expect(alert).toContainText('저탄소 전력 40% 이상, CO₂ 12 이하와 흑자를 2일 유지하세요.');
     await expect(alert).toContainText('보상 8.00 💰 · 핵발전 해금');
@@ -301,5 +303,52 @@ test.describe('quest economy HUD', () => {
     await expect(page.locator('.final-score-breakdown')).toContainText('+10 / 10');
     expect(await page.locator('.final-score-breakdown .summary-card').first().locator('strong').textContent()).toBe(operatingBefore);
     await expect(page.locator('#finalBonusQuizBtn')).toHaveCount(0);
+  });
+
+  test('the quest panel offers the one-time emergency grant at the credit floor', async ({ gamePage: page }) => {
+    const panel = await openQuestPanel(page);
+    await expect(panel.locator('#questPanelEmergencyBtn')).toBeHidden();
+
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      window.__GAME_STATE__.credits = 1;
+      window.__refreshGameForTest();
+    });
+
+    const emergency = panel.locator('#questPanelEmergencyBtn');
+    await expect(emergency).toBeVisible();
+    await expect(emergency).toHaveText('긴급지원 4.00 💰');
+    await emergency.click();
+    expect(await page.evaluate(() => ({
+      credits: window.__GAME_STATE__.credits,
+      used: window.__GAME_STATE__.emergencySupport.used,
+    }))).toEqual({ credits: 5, used: true });
+    // 캠페인당 한 번뿐이므로 다시 크레딧이 바닥나도 버튼은 돌아오지 않는다.
+    await expect(emergency).toBeHidden();
+    await page.evaluate(() => {
+      window.__GAME_STATE__.credits = 1;
+      window.__refreshGameForTest();
+    });
+    await expect(emergency).toBeHidden();
+  });
+
+  test('quest 7 fills its progress bar with the running research, not a day counter', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      const state = window.__GAME_STATE__;
+      state.questIndex = 7;
+      state.questStatus = 'active';
+      state.progression.chapter = 2;
+      state.climateCampaign.status = 'locked';
+      state.grid[0] = { type: 'data', level: 1, priority: 'normal' };
+      state.research.jobs.solar2 = {
+        id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 60, status: 'running', paidCost: 10,
+      };
+      window.__refreshGameForTest();
+    });
+
+    const panel = await openQuestPanel(page);
+    await expect(panel.locator('#questPanelTitle')).toHaveText('태양광 연구 기초');
+    expect(await panel.locator('#questPanelProgressBar').evaluate((node) => node.style.width)).toBe('50%');
   });
 });

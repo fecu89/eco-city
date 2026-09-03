@@ -1,6 +1,7 @@
 import anime from 'animejs';
 import { eventBus, Events } from '../core/EventBus.js';
 import { UI_FEEDBACK } from '../core/Constants.js';
+import { prefersReducedMotion } from './motionPreference.js';
 
 const MAX_VISIBLE_TOASTS = 3;
 
@@ -15,7 +16,21 @@ export function initToastView(el) {
 }
 
 function removeToast(div) {
-  anime(priorityAnimation(div, false));
+  playToast(div, false);
+}
+
+// 동작 줄이기를 켠 사용자에게는 미끄러지는 대신 바로 나타나고 바로 사라진다.
+function playToast(div, entering) {
+  if (!prefersReducedMotion()) {
+    anime(priorityAnimation(div, entering));
+    return;
+  }
+  if (!entering) {
+    div.remove();
+    return;
+  }
+  div.style.opacity = '1';
+  div.style.transform = 'none';
 }
 
 function priorityAnimation(div, entering) {
@@ -94,7 +109,7 @@ export function showToast({
     div.appendChild(actionButton);
   }
   stackEl.appendChild(div);
-  anime(priorityAnimation(div, true));
+  playToast(div, true);
   setTimeout(() => {
     if (div.isConnected) removeToast(div);
   }, duration);

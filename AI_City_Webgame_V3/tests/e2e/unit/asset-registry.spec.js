@@ -101,6 +101,9 @@ test('selected wind models stay lightweight enough for repeated mobile instances
   for (const id of ['industrial.windmillLow', 'industrial.windmill']) {
     const wind = report.models.find((item) => item.id === id);
     expect(wind.stats.bytes).toBeLessThan(50 * 1024);
+    // 풍력은 도시에 여러 기가 동시에 서므로 삼각형 예산이 곧 모바일 프레임이다.
+    // 현재 선택된 두 모델은 각각 456이며, 예산 800은 교체 여지를 둔 상한이다.
+    expect(wind.stats.triangles).toBeLessThanOrEqual(800);
   }
 });
 

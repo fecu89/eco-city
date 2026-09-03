@@ -7,6 +7,7 @@ import {
   CITY_BUILDING_ORIENTATION,
   CITY_CAMERA,
   CITY_MOTION,
+  CITY_WORLD_OVERLAY,
   facilityColorFor,
   GREEN_VISUAL_LAYOUTS,
   HEX_TILE_VISUALS,
@@ -17,10 +18,10 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { assetLoader } from '../assets/AssetLoader.js';
 import { FACILITY_ASSET_IDS } from '../assets/assetRegistry.js';
 import {
-  getCityNeutralTexture,
+  disposeCityAssets,
+  disposeReplacedFallbackGeometries,
   getFacilityGeometry,
   getFacilityMaterial,
-  getSupplementGeometry,
   initCityAssets,
 } from '../level/CityAssetLoader.js';
 import { createCameraController } from '../systems/CameraController.js';
@@ -38,7 +39,6 @@ export { GREEN_VISUAL_LAYOUTS };
 const MAX_CELLS = BOARD.EXPANDED_CELLS;
 const TILE_BASE_COLOR = 0x0d1f31;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
-const SUPPLEMENT_TYPES = FACILITY_TYPES.filter((type) => CITY_ASSETS[type].supplement);
 const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
   + 3
@@ -73,6 +73,15 @@ const MARKER_COLORS = {
 const _matrixObject = new THREE.Object3D();
 const _color = new THREE.Color();
 const _identityQuaternion = new THREE.Quaternion();
+const _worldPoint = { x: 0, z: 0 };
+const _projection = new THREE.Vector3();
+const _overlayPoint = { x: 0, y: 0 };
+const _overlayMetrics = { offsetX: 0, offsetY: 0, width: 0, height: 0, containerWidth: 0, containerHeight: 0 };
+const _ambientEffectByCell = new Map();
+
+// 공사 진행 배지와 건설 확정 O/X 위젯은 미리보기 모형 바로 위 같은 높이에 붙는다.
+const CONSTRUCTION_HUD_HEIGHT = 1.02;
+const BUILD_OX_WIDGET_HEIGHT = 1.02;
 
 let renderer;
 let scene;
@@ -82,9 +91,13 @@ let canvasEl;
 let containerEl;
 let cameraHintEl;
 let buildOxWidgetEl;
+let buildOxConfirmEl;
 let buildOxWidgetState = null;
+let buildOxWidgetVisible = false;
 const constructionHudEls = new Map();
 const constructionHudPool = [];
+const constructionHudIndices = new Set();
+let lastTickProgress = 0;
 let resizeObserver;
 let cameraInteractionReady = false;
 let currentRadius = BOARD.INITIAL_RADIUS;
@@ -110,6 +123,10 @@ let ghostMesh;
 let ghostMaterial;
 let planGhostMaterial;
 let hoveredPreviewIndex = -1;
+// 포인터 없이 보드를 쓰는 경로. #cityGrid에 포커스가 있을 때만 살아 있고, 호버와 같은
+// 표시 수단(무장 상태면 고스트, 아니면 선택 링)을 그대로 재사용한다.
+let keyboardCursorIndex = -1;
+let ghostSignature = null;
 let buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
 let currentWorldHour = 8;
 let currentSkyState = getSkyState(currentWorldHour);
@@ -139,7 +156,6 @@ const extraLevelMeshes = new Map(); // key: `${type}:${level}` — 레벨마다 
 const facilityCellIndexBuckets = new Map(); // key: type 또는 `${type}:${level}` — updateFacilityInstances의 렌더 버킷
 const cellInstanceRef = new Map(); // cellIndex -> { mesh, instanceIndex } — 통계에서 실제로 어느 메시에 쓰였는지 찾는다.
 const planGhostMeshes = new Map();
-const supplementMeshes = new Map();
 const typeCellIndices = new Map(FACILITY_TYPES.map((type) => [type, []]));
 let worldPhase = getWorldPhase(8);
 const residentialIndices = [];
@@ -150,6 +166,10 @@ const activeAmbientEffects = new Map();
 const ownedGeometries = new Set();
 const ownedMaterials = new Set();
 let ambientEffectSequence = 0;
+// prewarm 렌더 직후의 texture 수는 three가 map 없는 머티리얼에 바인딩하는 내부 공용
+// 빈 텍스처뿐이다(three 모듈 싱글턴이라 앱이 해제할 수 없다). 씬이 실제로 올린 텍스처는
+// 이 기준선 위로 늘어난 몫이고, 해제 뒤에는 다시 기준선으로 돌아와야 한다.
+let rendererBaselineTextures = 0;
 let lastAmbientFrameAt = 0;
 let ambientFrameUpdateCount = 0;
 
@@ -454,13 +474,6 @@ function createSceneLayers() {
     planGhostMeshes.set(type, mesh);
   });
 
-  const supplementPlaceholder = ownGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 10));
-  SUPPLEMENT_TYPES.forEach((type) => {
-    const mesh = makeInstancedMesh(supplementPlaceholder, facilityMaterial, MAX_CELLS);
-    mesh.name = `facility-${type}-supplement`;
-    supplementMeshes.set(type, mesh);
-  });
-
   stateRingMaterial = ownMaterial(new THREE.MeshBasicMaterial({
     color: 0xffffff,
     side: THREE.DoubleSide,
@@ -568,7 +581,6 @@ function prewarmGpuBuffers() {
     tileMesh,
     ...facilityMeshes.values(),
     ...planGhostMeshes.values(),
-    ...supplementMeshes.values(),
     stateRingMesh,
     constructionFoundationMesh,
     constructionScaffoldMesh,
@@ -608,15 +620,9 @@ function refreshLoadedAssets() {
     const runtimeMaterial = buildRuntimeFacilityMaterial(type, level);
     if (runtimeMaterial) mesh.material = runtimeMaterial;
   });
-  SUPPLEMENT_TYPES.forEach((type) => {
-    const geometry = getSupplementGeometry(type);
-    if (geometry) supplementMeshes.get(type).geometry = geometry;
-  });
-  const texture = getCityNeutralTexture();
-  if (texture) {
-    facilityMaterial.map = texture;
-    facilityMaterial.needsUpdate = true;
-  }
+  // 모든 메시가 실제 GLB로 갈아탄 뒤에 폴백 geometry를 버린다(교체 전에 버리면 다음
+  // 렌더가 같은 버퍼를 다시 올린다).
+  disposeReplacedFallbackGeometries();
   resourceRevision++;
   updateInstances(currentConfigs, currentCoords);
   updateStaticAmbientInstances();
@@ -651,78 +657,193 @@ function markerColorFor(config) {
   return null;
 }
 
-function worldPosition(index, coordinates = currentCoords) {
+function worldPosition(index, coordinates = currentCoords, out = _worldPoint) {
   const coord = coordinates[index];
-  return coord ? axialToWorld(coord, BOARD.HEX_SIZE) : { x: 0, z: 0 };
+  if (!coord) {
+    out.x = 0;
+    out.z = 0;
+    return out;
+  }
+  return axialToWorld(coord, BOARD.HEX_SIZE, out);
+}
+
+// 캔버스/컨테이너 rect는 프레임당 한 번만 재고 두 오버레이(공사 배지, O/X 위젯)가 나눠 쓴다.
+function readOverlayMetrics() {
+  if (!camera || !canvasEl || !containerEl) return null;
+  const rect = canvasEl.getBoundingClientRect();
+  const containerRect = containerEl.getBoundingClientRect();
+  _overlayMetrics.offsetX = rect.left - containerRect.left;
+  _overlayMetrics.offsetY = rect.top - containerRect.top;
+  _overlayMetrics.width = rect.width;
+  _overlayMetrics.height = rect.height;
+  _overlayMetrics.containerWidth = containerRect.width;
+  _overlayMetrics.containerHeight = containerRect.height;
+  return _overlayMetrics;
+}
+
+function projectToOverlay(index, height, metrics) {
+  const { x, z } = worldPosition(index);
+  _projection.set(x, height, z).project(camera);
+  _overlayPoint.x = metrics.offsetX + (_projection.x + 1) * metrics.width / 2;
+  _overlayPoint.y = metrics.offsetY + (1 - _projection.y) * metrics.height / 2;
+  return _overlayPoint;
+}
+
+// 가장자리 칸의 투영 좌표는 컨테이너 밖으로 나갈 수 있다(카메라 앵글, 먼 칸). 오버레이가
+// 화면 밖에 숨어 읽히지도 눌리지도 않는 것을 막기 위해 항상 보이는 영역 안쪽에 고정한다.
+function clampOverlayPoint(point, metrics, margin) {
+  point.x = Math.min(Math.max(point.x, margin.x), Math.max(margin.x, metrics.containerWidth - margin.x));
+  point.y = Math.min(Math.max(point.y, margin.top), Math.max(margin.top, metrics.containerHeight - margin.bottom));
+  return point;
 }
 
 function createConstructionHud() {
-  const hud = document.createElement('div');
-  hud.className = 'world-construction-progress';
-  hud.dataset.worldConstructionProgress = '';
-  hud.hidden = true;
-  hud.innerHTML = '<div><strong>건설 중</strong><span>0%</span></div><em role="progressbar" aria-label="시설 공사 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></em>';
-  containerEl.appendChild(hud);
-  return hud;
+  const root = document.createElement('div');
+  root.className = 'world-construction-progress';
+  root.dataset.worldConstructionProgress = '';
+  root.hidden = true;
+  root.innerHTML = '<div><strong>건설 중</strong><span>0%</span></div><em role="progressbar" aria-label="시설 공사 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></em>';
+  containerEl.appendChild(root);
+  // 자식 노드는 배지 수명 동안 바뀌지 않는다. 프레임마다 querySelector를 네 번 도는 대신
+  // 한 번만 찾아 두고, 마지막으로 쓴 값도 함께 들고 있어 같은 값을 다시 쓰지 않는다.
+  return {
+    root,
+    label: root.querySelector('strong'),
+    percent: root.querySelector('span'),
+    progressbar: root.querySelector('[role="progressbar"]'),
+    fill: root.querySelector('[role="progressbar"] i'),
+    lastProgress: null,
+    lastLeft: null,
+    lastTop: null,
+    lastSelected: null,
+    lastKind: null,
+    visible: false,
+  };
 }
 
 function acquireConstructionHud(config) {
-  let hud = constructionHudEls.get(config.index);
-  if (!hud) {
-    hud = constructionHudPool.pop() || createConstructionHud();
-    constructionHudEls.set(config.index, hud);
+  let badge = constructionHudEls.get(config.index);
+  if (!badge) {
+    badge = constructionHudPool.pop() || createConstructionHud();
+    constructionHudEls.set(config.index, badge);
+    badge.lastProgress = null;
+    badge.lastLeft = null;
+    badge.lastTop = null;
+    badge.lastSelected = null;
+    badge.lastKind = null;
+    badge.root.dataset.projectIndex = String(config.index);
   }
-  hud.dataset.projectIndex = String(config.index);
-  hud.dataset.projectKind = config.project.kind;
-  return hud;
+  if (badge.lastKind !== config.project.kind) {
+    badge.lastKind = config.project.kind;
+    badge.root.dataset.projectKind = config.project.kind;
+    // 문구('건설 중'/'강화 중')가 진행률 델타 게이트에 걸려 옛 종류로 남지 않게 한다.
+    badge.lastProgress = null;
+  }
+  return badge;
 }
 
 function releaseInactiveConstructionHuds(activeIndices) {
-  constructionHudEls.forEach((hud, index) => {
+  constructionHudEls.forEach((badge, index) => {
     if (activeIndices.has(index)) return;
-    hud.hidden = true;
-    hud.classList.remove('selected');
-    delete hud.dataset.projectIndex;
-    delete hud.dataset.projectKind;
+    badge.root.hidden = true;
+    badge.visible = false;
+    badge.root.classList.remove('selected');
+    delete badge.root.dataset.projectIndex;
+    delete badge.root.dataset.projectKind;
     constructionHudEls.delete(index);
-    constructionHudPool.push(hud);
+    constructionHudPool.push(badge);
   });
 }
 
-function syncConstructionHud(tickProgress = 0) {
-  if (!camera || !canvasEl || !containerEl) return;
-  const projectConfigs = currentConfigs.filter((item) => item?.project);
-  const activeIndices = new Set(projectConfigs.map(({ index }) => index));
-  releaseInactiveConstructionHuds(activeIndices);
-  if (!projectConfigs.length) return;
+function collectConstructionIndices() {
+  constructionHudIndices.clear();
+  for (let index = 0; index < currentConfigs.length; index++) {
+    if (currentConfigs[index]?.project) constructionHudIndices.add(index);
+  }
+  return constructionHudIndices;
+}
 
-  camera.updateMatrixWorld();
-  const rect = canvasEl.getBoundingClientRect();
-  const containerRect = containerEl.getBoundingClientRect();
-  projectConfigs.forEach((config) => {
-    const hud = acquireConstructionHud(config);
-    const { x, z } = worldPosition(config.index);
-    const projected = new THREE.Vector3(x, 1.02, z).project(camera);
-    const screenX = rect.left - containerRect.left + (projected.x + 1) * rect.width / 2;
-    const screenY = rect.top - containerRect.top + (1 - projected.y) * rect.height / 2;
+function placeConstructionHuds(tickProgress, metrics) {
+  constructionHudIndices.forEach((index) => {
+    const config = currentConfigs[index];
+    const badge = acquireConstructionHud(config);
+    const point = clampOverlayPoint(
+      projectToOverlay(index, CONSTRUCTION_HUD_HEIGHT, metrics),
+      metrics,
+      CITY_WORLD_OVERLAY.CONSTRUCTION_HUD_MARGIN,
+    );
+    if (point.x !== badge.lastLeft) {
+      badge.lastLeft = point.x;
+      badge.root.style.left = `${point.x}px`;
+    }
+    if (point.y !== badge.lastTop) {
+      badge.lastTop = point.y;
+      badge.root.style.top = `${point.y}px`;
+    }
+    const selected = Boolean(config.selected);
+    if (selected !== badge.lastSelected) {
+      badge.lastSelected = selected;
+      badge.root.classList.toggle('selected', selected);
+    }
     const progress = projectProgress(config.project, tickProgress);
-    const percent = Math.round(progress * 100);
-    const label = config.project.kind === 'build' ? '건설 중' : '강화 중';
-    hud.style.left = `${screenX}px`;
-    hud.style.top = `${screenY}px`;
-    hud.classList.toggle('selected', Boolean(config.selected));
-    hud.querySelector('strong').textContent = label;
-    hud.querySelector('span').textContent = `${percent}%`;
-    const progressbar = hud.querySelector('[role="progressbar"]');
-    progressbar.setAttribute('aria-label', `${label} ${percent}%`);
-    progressbar.setAttribute('aria-valuenow', (progress * 100).toFixed(1));
-    progressbar.querySelector('i').style.width = `${progress * 100}%`;
-    hud.hidden = false;
+    // 진행률이 눈에 보일 만큼 움직이지 않았으면 텍스트·aria·막대를 다시 쓰지 않는다.
+    if (badge.lastProgress == null
+      || Math.abs(progress - badge.lastProgress) >= CITY_WORLD_OVERLAY.CONSTRUCTION_HUD_MIN_PROGRESS_DELTA) {
+      badge.lastProgress = progress;
+      const percent = Math.round(progress * 100);
+      const label = config.project.kind === 'build' ? '건설 중' : '강화 중';
+      badge.label.textContent = label;
+      badge.percent.textContent = `${percent}%`;
+      badge.progressbar.setAttribute('aria-label', `${label} ${percent}%`);
+      badge.progressbar.setAttribute('aria-valuenow', (progress * 100).toFixed(1));
+      badge.fill.style.width = `${progress * 100}%`;
+    }
+    if (!badge.visible) {
+      badge.visible = true;
+      badge.root.hidden = false;
+    }
   });
+}
+
+function placeBuildOxWidget(metrics) {
+  if (!buildOxWidgetEl) return;
+  if (!buildOxWidgetState || !metrics) {
+    if (buildOxWidgetVisible) {
+      buildOxWidgetVisible = false;
+      buildOxWidgetEl.hidden = true;
+    }
+    return;
+  }
+  const { index, disabled } = buildOxWidgetState;
+  const point = clampOverlayPoint(
+    projectToOverlay(index, BUILD_OX_WIDGET_HEIGHT, metrics),
+    metrics,
+    CITY_WORLD_OVERLAY.OX_WIDGET_MARGIN,
+  );
+  buildOxWidgetEl.style.left = `${point.x}px`;
+  buildOxWidgetEl.style.top = `${point.y}px`;
+  buildOxConfirmEl.disabled = Boolean(disabled);
+  if (!buildOxWidgetVisible) {
+    buildOxWidgetVisible = true;
+    buildOxWidgetEl.hidden = false;
+  }
+}
+
+// 두 오버레이는 같은 카메라 행렬과 같은 rect 측정을 쓴다. 한 프레임에 한 번만 재고
+// 그리라고 이 함수 하나로 묶는다. tickProgress를 생략하면 마지막으로 받은 값을 다시 쓴다 —
+// 카메라 이동 때문에 도는 렌더 프레임이 진행률을 0으로 되돌리면 안 되기 때문이다.
+function syncWorldOverlays(tickProgress = lastTickProgress) {
+  lastTickProgress = tickProgress;
+  const activeIndices = collectConstructionIndices();
+  releaseInactiveConstructionHuds(activeIndices);
+  const metrics = activeIndices.size || buildOxWidgetState ? readOverlayMetrics() : null;
+  if (metrics) camera.updateMatrixWorld();
+  if (metrics && activeIndices.size) placeConstructionHuds(tickProgress, metrics);
+  placeBuildOxWidget(metrics);
 }
 
 export function refreshCityConstructionProgress(tickProgress = 0) {
-  syncConstructionHud(tickProgress);
+  syncWorldOverlays(tickProgress);
 }
 
 function createBuildOxWidget() {
@@ -732,46 +853,17 @@ function createBuildOxWidget() {
   widget.innerHTML = '<button type="button" id="cancelBuildBtn" class="ox-btn ox-cancel" aria-label="건설 취소"><span aria-hidden="true">X</span></button>'
     + '<button type="button" id="confirmBuildBtn" class="ox-btn ox-confirm" aria-label="건설 확정"><span aria-hidden="true">O</span></button>';
   widget.querySelector('.ox-cancel').addEventListener('click', () => buildOxWidgetState?.onCancel?.());
-  widget.querySelector('.ox-confirm').addEventListener('click', () => {
+  buildOxConfirmEl = widget.querySelector('.ox-confirm');
+  buildOxConfirmEl.addEventListener('click', () => {
     if (buildOxWidgetState?.disabled) return;
     buildOxWidgetState?.onConfirm?.();
   });
   return widget;
 }
 
-// 건설 중 배지(world-construction-progress)와 같은 높이로 맞춰, 미리보기 모형 바로 위에 붙어 보이게 한다.
-const BUILD_OX_WIDGET_HEIGHT = 1.02;
-
-function syncBuildOxWidget() {
-  if (!buildOxWidgetEl) return;
-  if (!buildOxWidgetState || !camera || !canvasEl || !containerEl) {
-    buildOxWidgetEl.hidden = true;
-    return;
-  }
-  const { index, disabled } = buildOxWidgetState;
-  camera.updateMatrixWorld();
-  const rect = canvasEl.getBoundingClientRect();
-  const containerRect = containerEl.getBoundingClientRect();
-  const { x, z } = worldPosition(index);
-  const projected = new THREE.Vector3(x, BUILD_OX_WIDGET_HEIGHT, z).project(camera);
-  const rawX = rect.left - containerRect.left + (projected.x + 1) * rect.width / 2;
-  const rawY = rect.top - containerRect.top + (1 - projected.y) * rect.height / 2;
-  // 원거리 칸의 투영 좌표가 컨테이너 밖으로 나가면(가장자리 칸, 카메라 앵글) 위젯이 화면 밖에
-  // 숨어 클릭 불가능해지므로, 항상 보이는 영역 안쪽에 머물도록 여백을 두고 고정한다.
-  const marginX = 60;
-  const marginTop = 70;
-  const marginBottom = 20;
-  const screenX = Math.min(Math.max(rawX, marginX), Math.max(marginX, containerRect.width - marginX));
-  const screenY = Math.min(Math.max(rawY, marginTop), Math.max(marginTop, containerRect.height - marginBottom));
-  buildOxWidgetEl.style.left = `${screenX}px`;
-  buildOxWidgetEl.style.top = `${screenY}px`;
-  buildOxWidgetEl.querySelector('.ox-confirm').disabled = Boolean(disabled);
-  buildOxWidgetEl.hidden = false;
-}
-
 export function setBuildOxWidget(state) {
   buildOxWidgetState = state || null;
-  syncBuildOxWidget();
+  syncWorldOverlays();
 }
 
 function rebuildAmbientTopology() {
@@ -796,14 +888,24 @@ function rebuildAmbientTopology() {
   });
 
   residentAgentCount = residentialIndices.length * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL;
-  birdCount = 0;
-  birdVisit = null;
+  // 정산(1배속 1초)마다 이 함수가 다시 돌기 때문에, 여기서 방문을 무조건 지우면 2초짜리
+  // 새 방문 연출이 항상 중간에 끊긴다. 목적지 칸이 더 이상 녹지가 아닐 때만 취소한다.
+  if (birdVisit && !greenIndices.includes(birdVisit.greenIndex)) {
+    birdVisit = null;
+    birdCount = 0;
+  }
   updateStaticAmbientInstances();
+  // updateStaticAmbientInstances가 새 풀 위치에 새를 다시 주차하므로, 살아남은 방문은
+  // 즉시 현재 진행도로 다시 배치한다.
+  if (birdVisit) updateBirdVisit(performance.now());
   if (staleEffectIds.length) updateAmbientEffectInstances();
 }
 
 function ambientEffectForCell(cellIndex) {
-  return [...activeAmbientEffects.values()].find((effect) => effect.cellIndex === cellIndex) || null;
+  for (const effect of activeAmbientEffects.values()) {
+    if (effect.cellIndex === cellIndex) return effect;
+  }
+  return null;
 }
 
 function ambientProgress(effect, now) {
@@ -811,13 +913,17 @@ function ambientProgress(effect, now) {
 }
 
 function updateWindRotorInstances(now = performance.now()) {
-  const rotorIndices = typeCellIndices.get('wind')
-    .filter((cellIndex) => currentConfigs[cellIndex]?.project?.kind !== 'build');
-  rotorIndices.forEach((cellIndex, instanceIndex) => {
+  // 로터마다 활성 효과 Map을 복사하지 않고, 프레임당 한 번만 칸 -> 효과 색인을 만든다.
+  _ambientEffectByCell.clear();
+  activeAmbientEffects.forEach((effect) => _ambientEffectByCell.set(effect.cellIndex, effect));
+  const windCellIndices = typeCellIndices.get('wind');
+  let instanceIndex = 0;
+  for (const cellIndex of windCellIndices) {
+    if (currentConfigs[cellIndex]?.project?.kind === 'build') continue;
     const config = visualConfigAt(currentConfigs, cellIndex);
     const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
     const position = worldPosition(cellIndex);
-    const effect = ambientEffectForCell(cellIndex);
+    const effect = _ambientEffectByCell.get(cellIndex);
     const animatedTurn = effect
       ? ambientProgress(effect, now) * Math.PI * 2 * CITY_AMBIENT_MOTION.WIND_TURNS_PER_EFFECT
       : 0;
@@ -831,8 +937,9 @@ function updateWindRotorInstances(now = performance.now()) {
       cellIndex * 0.23 + animatedTurn,
     );
     windRotorMesh.setColorAt(instanceIndex, _color.setHex(facilityColorFor('wind', config.level)).lerp(MARKER_COLORS.good, 0.35));
-  });
-  finishInstances(windRotorMesh, rotorIndices.length);
+    instanceIndex++;
+  }
+  finishInstances(windRotorMesh, instanceIndex);
 }
 
 function updateStaticAmbientInstances() {
@@ -1178,7 +1285,6 @@ function updateFacilityInstances(configs, coordinates, now) {
     const mesh = separatorIndex === -1
       ? facilityMeshes.get(type)
       : getOrCreateFacilityLevelMesh(type, Number(bucketKey.slice(separatorIndex + 1)));
-    const supplement = supplementMeshes.get(type);
     indices.forEach((cellIndex, instanceIndex) => {
       const config = visualConfigAt(configs, cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
@@ -1190,15 +1296,8 @@ function updateFacilityInstances(configs, coordinates, now) {
       const facilityColor = facilityColorFor(type, config.level);
       mesh.setColorAt(instanceIndex, _color.setHex(facilityColor));
       cellInstanceRef.set(cellIndex, { mesh, instanceIndex });
-
-      if (supplement) {
-        const offset = type === 'nuclear' ? 0.2 : 0.22;
-        setInstance(supplement, instanceIndex, x + offset, visualY, z + 0.18, visualScale * 0.9);
-        supplement.setColorAt(instanceIndex, _color.setHex(facilityColor));
-      }
     });
     finishInstances(mesh, indices.length);
-    if (supplement) finishInstances(supplement, indices.length);
   });
 }
 
@@ -1305,7 +1404,8 @@ function updateMarkerInstances(configs, coordinates, now) {
   let ringCount = 0;
   configs.forEach((config, index) => {
     const { x, z } = worldPosition(index, coordinates);
-    const markerColor = markerColorFor(config);
+    // 키보드 커서는 어떤 진단 색보다 앞선다 — 지금 어디에 있는지가 먼저 보여야 한다.
+    const markerColor = index === keyboardCursorIndex ? MARKER_COLORS.selected : markerColorFor(config);
     if (markerColor) {
       const pulse = 1 + Math.sin((now / CITY_MOTION.SELECT_PULSE_MS) * Math.PI * 2) * 0.035;
       setInstance(stateRingMesh, ringCount, x, 0.135, z, pulse, -Math.PI / 2);
@@ -1403,9 +1503,9 @@ export function initCityScene3D(container) {
   rimLight.position.set(-6, 4, -4);
   scene.add(rimLight);
 
+  // 로딩 화면 문구/막대는 main.js가 단독으로 소유한다. 여기서는 진척만 알린다.
   initCityAssets((loaded, total) => {
-    const loadingText = document.getElementById('loadingText');
-    if (loadingText) loadingText.textContent = `3D 도시 모델 ${loaded}/${total}`;
+    eventBus.emit(Events.ASSETS_PROGRESS, { loaded, total });
   }).then((assetStatus) => {
     refreshLoadedAssets();
     if (assetStatus.errors.length) {
@@ -1422,6 +1522,7 @@ export function initCityScene3D(container) {
   cityEnvironment = createCityEnvironment3D({ scene, assetLoader });
   applyWorldTheme({ theme: document.documentElement.dataset.theme });
   prewarmGpuBuffers();
+  rendererBaselineTextures = renderer.info.memory.textures;
   cameraInteractionReady = false;
   cameraController = createCameraController({
     camera,
@@ -1489,17 +1590,7 @@ export function initCityScene3D(container) {
     if (!coord) return null;
     return { index, ...coord, ...worldPosition(index) };
   };
-  window.__getCellScreenPosition = (index) => {
-    if (!canvasEl || !camera || !currentCoords[index]) return null;
-    const { x, z } = worldPosition(index);
-    camera.updateMatrixWorld();
-    const projected = new THREE.Vector3(x, 0.04, z).project(camera);
-    const rect = canvasEl.getBoundingClientRect();
-    return {
-      x: rect.left + (projected.x + 1) * rect.width / 2,
-      y: rect.top + (1 - projected.y) * rect.height / 2,
-    };
-  };
+  window.__getCellScreenPosition = (index) => projectCellToScreen(index);
 
   cameraController.reset(currentRadius);
   resizeToContainer();
@@ -1551,11 +1642,23 @@ function raycastIndex() {
   return hit?.instanceId ?? -1;
 }
 
+function buildGhostSignature(index, type, config) {
+  // 고스트가 실제로 의존하는 값만 모은다. 같은 칸 위에서 마우스만 움직이면 이 값이 그대로라
+  // 프레임마다 needsRender를 세우지 않고, 반대로 배치 가능 여부나 계획이 바뀌면 다시 그린다.
+  return `${buildPreviewMode.enabled ? 1 : 0}|${index}|${type || ''}|${config?.empty ? 1 : 0}`
+    + `|${config?.plannedType || ''}|${config?.placementAllowed === false ? 0 : 1}|${resourceRevision}`;
+}
+
 function syncBuildGhost() {
   if (!ghostMesh) return;
-  const index = buildPreviewMode.candidateIndex ?? hoveredPreviewIndex;
+  // 포인터가 실제로 칸 위에 있으면 포인터가 이긴다. 그렇지 않을 때만 키보드 커서를 쓴다.
+  const index = buildPreviewMode.candidateIndex
+    ?? (hoveredPreviewIndex >= 0 ? hoveredPreviewIndex : keyboardCursorIndex);
   const config = currentConfigs[index];
   const type = buildPreviewMode.type;
+  const signature = buildGhostSignature(index, type, config);
+  if (signature === ghostSignature) return;
+  ghostSignature = signature;
   if (!buildPreviewMode.enabled || index == null || index < 0 || !type || !FACILITY_TYPES.includes(type) || !config?.empty || config.plannedType) {
     ghostMesh.visible = false;
     needsRender = true;
@@ -1626,8 +1729,7 @@ function renderFrame(now) {
     shouldRender = true;
   }
   if (!shouldRender || !renderer) return;
-  syncConstructionHud();
-  syncBuildOxWidget();
+  syncWorldOverlays();
   renderer.render(scene, camera);
   renderCount++;
   needsRender = false;
@@ -1658,13 +1760,38 @@ export function renderCityScene3D(cellConfigs, boardRadius) {
   rebuildAmbientTopology();
   syncPlanGhosts();
   syncBuildGhost();
-  syncConstructionHud();
-  syncBuildOxWidget();
+  syncWorldOverlays();
   needsRender = true;
 }
 
 export function setCellClickHandler(fn) {
   onCellClickCb = fn || (() => {});
+}
+
+// 칸 중심을 화면 좌표(뷰포트 기준)로 투영한다. 키보드 방향 이동이 "화면에서 오른쪽 칸"을
+// 고르는 데 쓰고, 테스트 훅 __getCellScreenPosition도 같은 값을 돌려준다.
+export function projectCellToScreen(index) {
+  if (!canvasEl || !camera || !currentCoords[index]) return null;
+  const { x, z } = worldPosition(index);
+  camera.updateMatrixWorld();
+  _projection.set(x, 0.04, z).project(camera);
+  const rect = canvasEl.getBoundingClientRect();
+  return {
+    x: rect.left + (_projection.x + 1) * rect.width / 2,
+    y: rect.top + (1 - _projection.y) * rect.height / 2,
+  };
+}
+
+export function setKeyboardCursor(index) {
+  const next = Number.isInteger(index) && index >= 0 && index < currentConfigs.length ? index : -1;
+  if (next === keyboardCursorIndex) return keyboardCursorIndex;
+  keyboardCursorIndex = next;
+  if (renderer) {
+    updateInstances(currentConfigs, currentCoords);
+    syncBuildGhost();
+    needsRender = true;
+  }
+  return keyboardCursorIndex;
 }
 
 export function getCityRendererStats() {
@@ -1731,7 +1858,7 @@ export function getCityRendererStats() {
     facilityVisualSamples,
     greenDetailInstances: greenDetailMesh?.count ?? 0,
     greenDetailCountsByLevel: { ...greenDetailCountsByLevel },
-    instancedLayers: 1 + facilityMeshes.size + extraLevelMeshes.size + supplementMeshes.size + planGhostMeshes.size + 9,
+    instancedLayers: 1 + facilityMeshes.size + extraLevelMeshes.size + planGhostMeshes.size + 9,
     resourceRevision,
     activeMotions: activeMotions.size,
     motionKinds: [...activeMotions.values()].map((motion) => motion.kind),
@@ -1757,6 +1884,7 @@ export function getCityRendererStats() {
     theme: currentTheme,
     firstTileColor,
     environment: cityEnvironment?.getStats() ?? { state: 'idle' },
+    keyboardCursorIndex,
     ghostVisible: Boolean(ghostMesh?.visible),
     ghostCount: ghostMesh?.visible ? 1 : 0,
     planGhostCount,
@@ -1777,7 +1905,26 @@ export function getCityRendererStats() {
   };
 }
 
-export function disposeCityScene3D() {
+// InstancedMesh는 geometry/material 외에 instanceMatrix·instanceColor 버퍼도 들고 있다.
+// dispose()가 그 attribute 버퍼를 지우고, 씬에서 떼어 내야 다음 렌더 리스트에도 안 남는다.
+function disposeInstancedLayer(mesh) {
+  if (!mesh) return;
+  mesh.removeFromParent();
+  mesh.dispose();
+}
+
+function disposeRuntimeMaterial(material) {
+  if (!material) return;
+  material.map?.dispose?.();
+  material.dispose();
+}
+
+// 런타임 자원을 모두 놓아 준다. 정상 플레이 경로에서는 호출되지 않으며(씬은 한 번 마운트되어
+// 페이지 수명을 함께한다) 누수 회귀 테스트가 이 경로를 검증한다.
+// 반환값은 해제가 끝난 시점의 renderer.info.memory 스냅샷이다 — renderer 참조를 놓은 뒤에는
+// 잴 수 없기 때문에 여기서 찍어서 돌려준다.
+export async function disposeCityScene3D() {
+  const disposedRenderer = renderer;
   renderer?.setAnimationLoop(null);
   resizeObserver?.disconnect();
   resizeObserver = null;
@@ -1797,33 +1944,78 @@ export function disposeCityScene3D() {
   reducedMotionQuery = null;
   cityEnvironment?.dispose();
   cityEnvironment = null;
-  constructionHudEls.forEach((hud) => hud.remove());
-  constructionHudPool.forEach((hud) => hud.remove());
+  constructionHudEls.forEach((badge) => badge.root.remove());
+  constructionHudPool.forEach((badge) => badge.root.remove());
   constructionHudEls.clear();
   constructionHudPool.length = 0;
+  constructionHudIndices.clear();
   buildOxWidgetEl?.remove();
   buildOxWidgetEl = null;
+  buildOxConfirmEl = null;
   buildOxWidgetState = null;
+  buildOxWidgetVisible = false;
+  cameraHintEl?.remove();
+  cameraHintEl = null;
   canvasEl?.removeEventListener('pointerdown', capturePointer);
   canvasEl?.removeEventListener('pointermove', updatePointer);
   canvasEl?.removeEventListener('pointerup', handlePointerClick);
   canvasEl?.removeEventListener('pointerleave', handlePointerLeave);
   cameraController?.dispose();
+  [
+    tileMesh,
+    stateRingMesh,
+    windRotorMesh,
+    ambientAgentMesh,
+    buildingLightMesh,
+    smokeEffectMesh,
+    statusLightMesh,
+    constructionFoundationMesh,
+    constructionScaffoldMesh,
+    greenDetailMesh,
+    ...facilityMeshes.values(),
+    ...extraLevelMeshes.values(),
+    ...planGhostMeshes.values(),
+  ].forEach(disposeInstancedLayer);
+  ghostMesh?.removeFromParent();
   ownedGeometries.forEach((geometry) => geometry.dispose());
-  ownedMaterials.forEach((material) => material.dispose());
-  renderer?.dispose();
+  ownedMaterials.forEach(disposeRuntimeMaterial);
+  scene?.clear();
+  // 실제 GLB geometry/material/텍스처는 CityAssetLoader가 소유한다. 씬이 에셋 로드를
+  // 시작했으니 정리도 여기서 함께 끝낸다(진행 중인 로드가 끝날 때까지 기다린다).
+  await disposeCityAssets();
+  const memory = {
+    geometries: disposedRenderer?.info.memory.geometries ?? 0,
+    textures: disposedRenderer?.info.memory.textures ?? 0,
+    baselineTextures: rendererBaselineTextures,
+  };
+  disposedRenderer?.dispose();
+  canvasEl = null;
+  camera = null;
+  scene = null;
+  hemisphereLight = null;
+  sunLight = null;
+  rimLight = null;
+  tileMesh = null;
+  tileMaterial = null;
+  stateRingMesh = null;
+  stateRingMaterial = null;
+  windRotorMesh = null;
+  ambientAgentMesh = null;
+  facilityMaterial = null;
   facilityMeshes.clear();
   extraLevelMeshes.clear();
   facilityCellIndexBuckets.clear();
   cellInstanceRef.clear();
   planGhostMeshes.clear();
-  supplementMeshes.clear();
   ownedGeometries.clear();
   ownedMaterials.clear();
   activeMotions.clear();
   activeAmbientEffects.clear();
+  _ambientEffectByCell.clear();
   residentialIndices.length = 0;
   greenIndices.length = 0;
+  typeCellIndices.forEach((indices) => { indices.length = 0; });
+  currentConfigs = [];
   residentAgentCount = 0;
   birdCount = 0;
   birdVisit = null;
@@ -1831,6 +2023,7 @@ export function disposeCityScene3D() {
   cameraController = null;
   ghostMesh = null;
   ghostMaterial = null;
+  ghostSignature = null;
   planGhostMaterial = null;
   buildingLightMesh = null;
   buildingLightMaterial = null;
@@ -1844,12 +2037,15 @@ export function disposeCityScene3D() {
   currentSkyState = getSkyState(currentWorldHour);
   visualHourOverride = null;
   hoveredPreviewIndex = -1;
+  keyboardCursorIndex = -1;
+  lastTickProgress = 0;
   buildPreviewMode = { enabled: false, type: null, candidateIndex: null, plannedItems: [], invalidIndices: [] };
   renderer = null;
   cameraInteractionReady = false;
   ambientEffectSequence = 0;
   lastAmbientFrameAt = 0;
   ambientFrameUpdateCount = 0;
+  return memory;
 }
 
 export function getCityCameraState() {

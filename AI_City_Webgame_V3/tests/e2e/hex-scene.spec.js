@@ -31,7 +31,12 @@ test('expansion choice opens only nine subtly zoned tiles without another draw-c
     stats: window.__getCityRendererStats(),
   }));
   expect(result.expansion).toMatchObject({ phase: 1, firstChoice: 'east' });
-  expect(await page.evaluate(() => window.__GAME_STATE__.progression.objectiveSetId)).toBe('transition-choice');
+  // 목표 세트 계층은 제거됐다. 확장이 실제로 주는 것은 반쪽 보드와 그 지역의 재생에너지다.
+  expect(await page.evaluate(() => ({
+    objectiveSetId: window.__GAME_STATE__.progression.objectiveSetId,
+    solarUnlocked: window.__GAME_STATE__.unlockedFacilities.has('solar'),
+    windUnlocked: window.__GAME_STATE__.unlockedFacilities.has('wind'),
+  }))).toEqual({ objectiveSetId: null, solarUnlocked: true, windUnlocked: false });
   expect(result.expansion.activeCellIndices).toHaveLength(28);
   expect(result.stats).toMatchObject({
     tileInstances: 37,

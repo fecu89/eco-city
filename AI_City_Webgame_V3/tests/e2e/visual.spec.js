@@ -177,7 +177,8 @@ test.describe('visual mobile', () => {
       window.__refreshGameForTest();
       window.__clickCell(0);
     });
-    await expect(page.locator('.research-grid > .research-card')).toHaveCount(9);
+    // 연구는 RESEARCH 정의 11종이 모두 목록에 뜬다.
+    await expect(page.locator('.research-grid > .research-card')).toHaveCount(11);
     await expect(page).toHaveScreenshot('facility-console-research-mobile.png', { maxDiffPixels: 18000 });
   });
 

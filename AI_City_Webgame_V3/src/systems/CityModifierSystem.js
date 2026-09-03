@@ -3,6 +3,7 @@ import {
   FACILITIES,
   FACILITY_ECONOMY,
   LEVEL_MULTIPLIERS,
+  RESEARCH_TUNING,
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
 import {
@@ -209,6 +210,23 @@ export function applyAutomaticOperationModes(state) {
   return changes;
 }
 
+// 풍력 완화 연구(wind2)는 원래 은퇴한 이벤트 id 'lowWind' 하나에만 걸려 있었다. 그 이벤트가
+// 사라진 뒤로는 어떤 재난에서도 발동하지 않는 죽은 코드였다. 이제는 "이 이벤트가 풍력 출력을
+// 실제로 깎는가"(해당 칸의 이벤트 공급 배율 < 1)로 판정한다 — 무풍·미세먼지(0.25),
+// 해안 초강풍(0.1), 겨울 재난(0.6)이 모두 여기에 해당한다.
+//
+// 배율은 옛 코드의 `lowWindSupply / 0.35`를 그대로 유지한다. 0.35는 은퇴한 lowWind의 풍력
+// 배율이자 연구 전 lowWindSupply 기준값이었고, 두 값이 같아 식이 애매했다. 이벤트 자체의
+// 배율로 나누면(`/ eventWindSupply`) 연구를 하지 않은 도시까지 무풍 피해가 0.25→0.35로
+// 줄고 해안 초강풍은 0.1→0.35로 사실상 무력해진다 — 재난 난이도는 설계자의 몫이므로
+// 건드리지 않는다. 연구가 실제로 사 준 몫(0.35→0.5, 약 +43%)만 곱한다.
+function lowWindRelief(facilityType, eventModifier, effects) {
+  if (facilityType !== 'wind') return 1;
+  const eventWindSupply = Number(eventModifier?.supply);
+  if (!Number.isFinite(eventWindSupply) || eventWindSupply >= 1) return 1;
+  return effects.lowWindSupply / RESEARCH_TUNING.LOW_WIND_SUPPLY_BASE;
+}
+
 export function buildCityModifierContext(state, {
   coords = null,
   calendar = null,
@@ -252,7 +270,7 @@ export function buildCityModifierContext(state, {
       supply: cell.type === 'solar'
         ? effects.solarSupply
         : cell.type === 'wind'
-          ? effects.windSupply * (activeEvent.event?.type === 'lowWind' ? effects.lowWindSupply / 0.35 : 1)
+          ? effects.windSupply * lowWindRelief(cell.type, eventBase, effects)
           : 1,
       income: cell.type === 'residential' ? greenSupport.income : 1,
       researchSpeed: cell.type === 'data' && (Number(cell.level) || 1) >= 3 && lowCarbonSurplus(state) >= 3

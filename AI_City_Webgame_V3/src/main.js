@@ -1,5 +1,5 @@
 import './style.css';
-import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, TIME } from './core/Constants.js';
+import { CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, LOADING_SCREEN, TIME } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -19,7 +19,7 @@ import { expansionChoicePending } from './systems/ZoneSystem.js';
 import { clearModalQueue, closeModal, getModalState, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
 import { initGridView, renderGrid } from './ui/GridView.js';
-import { finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
+import { disposeCityScene3D, finishBirdVisit, finishFacilityAmbientEffects, getCityCameraState, getCityRendererStats, refreshCityConstructionProgress, renderCityScene3D, resetCityCamera, setBuildPreviewMode, setCityCameraOrbitForTest, setVisualWorldHour, triggerBirdVisit, triggerFacilityAmbient } from './ui/CityScene3D.js';
 import { initDockView, renderDock } from './ui/DockView.js';
 import { initHudView, renderHud } from './ui/HudView.js';
 import { initQuestView, renderQuest } from './ui/QuestView.js';
@@ -145,6 +145,9 @@ function refreshAll() {
   renderForecast();
   updateChart();
   refreshAudioControls();
+  // 시계 루프가 쉬는 동안에는 날짜 라벨과 공사 배지의 유일한 갱신 지점이 여기다.
+  // 공사가 새로 시작됐다면 이 호출이 rAF 루프도 다시 깨운다.
+  continuousClockView?.renderNow();
 }
 
 function refreshAudioControls() {
@@ -467,24 +470,29 @@ function bindEvents() {
 
 }
 
-function simulateLoading() {
-  const steps = [
-    [24, '도시 보드 구성…'],
-    [48, '공간 규칙 연결…'],
-    [72, '시각화 로딩…'],
-    [92, '미션 준비…'],
-    [100, 'CLIMATE CITY 준비 완료'],
-  ];
-  steps.forEach(([p, t], i) => {
-    setTimeout(() => {
-      els.loadingBar.style.width = `${p}%`;
-      els.loadingText.textContent = t;
-      if (p === 100) setTimeout(() => els.loading.classList.add('done'), 300);
-    }, i * 220);
+// 로딩 화면은 실제 3D 에셋 진척만 보여준다(문구를 쓰는 곳은 여기 하나뿐이다).
+// 3D 씬이 로드를 시작하기 전에 구독해야 첫 진척 이벤트를 놓치지 않으므로 boot 맨 앞에서 부른다.
+function trackLoadingProgress() {
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    els.loadingBar.style.width = '100%';
+    els.loadingText.textContent = 'CLIMATE CITY 준비 완료';
+    setTimeout(() => els.loading.classList.add('done'), LOADING_SCREEN.DONE_DELAY_MS);
+  };
+  eventBus.on(Events.ASSETS_PROGRESS, ({ loaded, total }) => {
+    if (finished || !total) return;
+    els.loadingBar.style.width = `${Math.round((loaded / total) * 100)}%`;
+    els.loadingText.textContent = `3D 도시 모델 ${loaded}/${total}`;
   });
+  eventBus.on(Events.ASSETS_READY, finish);
+  eventBus.on(Events.ASSETS_FAILED, finish);
+  setTimeout(finish, LOADING_SCREEN.MAX_WAIT_MS);
 }
 
 function boot() {
+  trackLoadingProgress();
   initModal(els.modal, els.modalCard);
   initThemeManager(els.themeBtn, refreshIcons);
   initToastView(els.toastStack);
@@ -497,7 +505,7 @@ function boot() {
     balance: els.buildPlanBalance,
     error: els.buildPlanError,
     getForecast: constructionForecastForAssessment,
-  });
+  }, { announcer: els.srAnnouncer });
   initWorldLightingManager(els.worldLightingControls, setVisualWorldHour, refreshIcons);
   initDockView(els.facilityDock, els.facilityDetail, els.buildPanel);
   initHudView(els, syncWorldHud);
@@ -546,7 +554,7 @@ function boot() {
     if (!phaseStarted) return;
     eventBus.emit(Events.TOAST_SHOW, {
       kicker: `최종 테스트 ${gameState.stressTest.phaseIndex + 1}/${STRESS_PHASES.length}`,
-      title: `${phaseStarted.label} 단계 시작`,
+      title: `${phaseStarted.label} 구간 시작`,
       text: `${phaseStarted.durationDays}일 동안 도시 운영을 조정하세요.`,
       priority: true,
     });
@@ -602,6 +610,11 @@ function boot() {
       refreshCityConstructionProgress(tickProgress);
       refreshStageConstructionProgress(tickProgress);
     },
+    // 프레임 사이에 실제로 움직이는 것은 공사 진행 배지뿐이다. 시간이 멈춰 있거나
+    // 진행 중인 공사가 없으면 한 번만 그리고 rAF 루프를 쉰다.
+    shouldAnimate: () => !simulationController.getState().paused
+      && gameState.timeScale > 0
+      && gameState.grid.some((cell) => cell?.project),
   });
   eventBus.on(Events.MODAL_OPEN, ({ pausesSimulation, pauseReason }) => {
     if (pausesSimulation) {
@@ -644,6 +657,9 @@ function boot() {
       simulationController.pause('hidden');
     } else {
       simulationController.resume('hidden');
+      // 탭이 숨은 동안 rAF가 멈춰 시계·공사 배지는 숨기 직전 프레임 그대로다.
+      // 다음 rAF를 기다리지 말고 지금 한 번 그려서 되돌아온 순간의 시각을 보여 준다.
+      continuousClockView?.renderNow();
     }
   });
   simulationController.start();
@@ -663,7 +679,6 @@ function boot() {
   refreshTimeControls();
   syncTutorialHighlight();
 
-  simulateLoading();
   openStory();
 }
 
@@ -701,6 +716,13 @@ window.__triggerBirdVisitForTest = (greenIndex, birdCount = 2) => triggerBirdVis
 window.__finishBirdVisitForTest = () => finishBirdVisit();
 window.__triggerFacilityAmbientForTest = (type, cellIndex, durationMs) => triggerFacilityAmbient(type, cellIndex, durationMs);
 window.__finishFacilityAmbientForTest = () => finishFacilityAmbientEffects();
+window.__setBuildPreviewForTest = (preview) => setBuildPreviewMode(preview);
+// 정상 플레이에서는 아무도 부르지 않는다 — 해제 경로 누수 회귀 테스트 전용 훅이다.
+window.__disposeCitySceneForTest = () => {
+  continuousClockView?.stop();
+  simulationController?.pause('dispose-test');
+  return disposeCityScene3D();
+};
 
 window.render_game_to_text = () => {
   const m = gameState.metrics;

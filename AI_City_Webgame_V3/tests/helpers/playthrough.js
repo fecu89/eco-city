@@ -5,8 +5,15 @@ export async function clickCell(page, index) {
   // 건설 확정 후에는 무장이 해제되므로(한 번에 하나씩), 매번 현재 선택된 시설 카드를
   // 다시 눌러 배치 모드를 되살린다. 독이 접혀 있으면(이미 무언가 대기 중이거나 패널이
   // 닫혀 있으면) 조용히 건너뛴다.
-  const facility = await page.evaluate(() => window.__GAME_STATE__.selectedFacility);
+  const { facility, buildPanelActive } = await page.evaluate(() => ({
+    facility: window.__GAME_STATE__.selectedFacility,
+    buildPanelActive: window.__getWorldHudState().activePanel === 'build',
+  }));
   const card = page.locator(`#facilityDock [data-facility="${facility}"]`);
+  // 확정 직후 독 패널은 `build-panel--collapsed`가 풀리며 CSS 전환으로 다시 미끄러져 나온다.
+  // 전환이 끝나기 전에 isVisible을 물으면 false라 무장이 조용히 건너뛰어지므로,
+  // 건설 패널이 열려 있을 때는 실제 플레이어처럼 카드가 돌아올 때까지 기다린다.
+  if (buildPanelActive) await card.waitFor({ state: 'visible' });
   if (await card.isVisible().catch(() => false)) await card.click();
   await page.evaluate((i) => window.__clickCell(i), index);
   const confirm = page.locator('#confirmBuildBtn');
@@ -49,6 +56,26 @@ export async function buildPlanViaUi(page, placements) {
     ), [index, type]);
   }
   await completeProjectsViaGameClock(page, placements.map(([index]) => index));
+}
+
+// 연속 운영일 조건(2일)을 요구하는 퀘스트를 게임 시계로 넘긴다. 실시간 1초/일을 기다리지 않고
+// 정산만 진행시키므로, 조건 판정은 실제 시뮬레이션 그대로다.
+export async function settleUntilQuestReady(page, maximumDays = 40) {
+  const ready = await page.evaluate((limit) => {
+    for (let day = 0; day < limit; day += 1) {
+      if (window.__GAME_STATE__.questStatus === 'ready_to_claim') return true;
+      window.__settleSimulationDay();
+    }
+    return window.__GAME_STATE__.questStatus === 'ready_to_claim';
+  }, maximumDays);
+  if (!ready) {
+    const state = await page.evaluate(() => ({
+      quest: window.__GAME_STATE__.questIndex,
+      progress: window.__GAME_STATE__.questProgress,
+      summary: window.__GAME_STATE__.lastTickSummary,
+    }));
+    throw new Error(`quest ${state.quest} never became claimable: ${JSON.stringify(state.progress)}`);
+  }
 }
 
 export async function claimProgressViaUi(page) {

@@ -84,6 +84,32 @@ test('world and inspector progress bars advance continuously between settlement 
   }))).toEqual(paused);
 });
 
+test('a paused construction site writes nothing to its world progress badge between frames', async ({ gamePage: page }) => {
+  await page.evaluate(() => window.__setTimeScale(0));
+  await openBuild(page);
+  await page.evaluate(() => window.__clickCell(0));
+  await page.locator('#confirmBuildBtn').click();
+  await expect(page.locator('[data-world-construction-progress]:visible')).toHaveCount(1);
+  // 확정 직후의 일회성 갱신(패널 닫힘, 토스트)이 지나간 뒤부터 센다.
+  await page.waitForTimeout(200);
+
+  await page.evaluate(() => {
+    window.__badgeMutations = 0;
+    window.__badgeObserver = new MutationObserver((records) => { window.__badgeMutations += records.length; });
+    document.querySelectorAll('[data-world-construction-progress]').forEach((badge) => {
+      window.__badgeObserver.observe(badge, {
+        attributes: true, childList: true, characterData: true, subtree: true,
+      });
+    });
+  });
+  await page.waitForTimeout(300);
+
+  expect(await page.evaluate(() => {
+    window.__badgeObserver.disconnect();
+    return window.__badgeMutations;
+  })).toBe(0);
+});
+
 test('every simultaneous build project owns a visible world progress bar', async ({ gamePage: page }) => {
   await page.evaluate(() => window.__setTimeScale(0));
   await openBuild(page);

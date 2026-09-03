@@ -1,14 +1,37 @@
-import Chart from 'chart.js/auto';
 import { gameState } from '../core/GameState.js';
 import { CHART_MOTION, TIME } from '../core/Constants.js';
+import { prefersReducedMotion } from './motionPreference.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
+let Chart = null;
+let chartLoad = null;
 let chart = null;
 let canvasEl = null;
 
 export function initChartView(canvas) {
   canvasEl = canvas;
+}
+
+function isPanelVisible() {
+  return canvasEl
+    ?.closest('[data-hud-panel]')
+    ?.getAttribute('aria-hidden') === 'false';
+}
+
+// chart.js는 별도 청크로 빌드된다(vite.config.js). 도시 상태 패널을 처음 열 때만
+// 내려받으므로 첫 로딩에서 학교망이 받는 바이트가 줄어든다. 로드가 끝나기 전의
+// updateChart() 호출은 그냥 반환해도 안전하다 — 로드가 끝나면 여기서 updateChart()를
+// 다시 불러 gameState의 "그 시점 최신" 값으로 첫 렌더를 한다.
+function ensureChartLibrary() {
+  if (Chart || chartLoad) return;
+  chartLoad = import('chart.js/auto').then((module) => {
+    Chart = module.default;
+    if (canvasEl) updateChart();
+  }).catch(() => {
+    // 청크를 못 받아도 게임은 계속 돌아야 한다. 다음에 패널을 열면 다시 시도한다.
+    chartLoad = null;
+  });
 }
 
 export function chartValues(state = gameState) {
@@ -37,16 +60,19 @@ export function chartAnimationOptions({ panelVisible, reducedMotion, timeScale }
 }
 
 function currentAnimationOptions() {
-  const panelVisible = canvasEl
-    ?.closest('[data-hud-panel]')
-    ?.getAttribute('aria-hidden') === 'false';
-  const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-  return chartAnimationOptions({ panelVisible, reducedMotion, timeScale: gameState.timeScale });
+  return chartAnimationOptions({ panelVisible: isPanelVisible(), reducedMotion: prefersReducedMotion(), timeScale: gameState.timeScale });
 }
 
 export function updateChart() {
   const m = gameState.metrics;
   if (!m) return;
+  // 패널을 한 번도 열지 않았으면 차트를 만들지 않는다(청크도 받지 않는다).
+  // 한 번 열린 뒤에는 닫혀 있어도 계속 갱신한다 — 애니메이션 시간이 0이라 프레임을 쓰지 않는다.
+  if (!chart && !isPanelVisible()) return;
+  if (!Chart) {
+    ensureChartLibrary();
+    return;
+  }
   const values = chartValues(gameState);
   const labels = ['발전', '전력안정', '저탄소', '물관리', '공간연결'];
 
@@ -91,6 +117,11 @@ export function updateChart() {
 }
 
 export function requestChartResize() {
-  if (!chart) return;
+  // 도시 상태 패널이 열리는 순간의 유일한 호출 지점이다. 아직 차트가 없으면 여기가
+  // chart.js 청크를 내려받는 첫 계기가 된다(시계가 멈춘 상태에서도 차트가 뜬다).
+  if (!chart) {
+    updateChart();
+    return;
+  }
   requestAnimationFrame(() => chart.resize());
 }

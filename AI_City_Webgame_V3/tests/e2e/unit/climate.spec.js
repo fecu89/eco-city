@@ -38,12 +38,13 @@ test('sky keeps 08:00–16:00 equally bright and transitions through warm dawn a
   expect(night.illumination).toBeGreaterThanOrEqual(0.68);
 });
 
-test('wind and three-hour forecast are deterministic', () => {
+// 예보는 시(hour)가 아니라 게임일 단위이며, 태양광은 하루 평균(11/24)을 쓴다.
+test('wind and three-day forecast are deterministic', () => {
   expect([0, 1, 2, 3, 4].map(getWindMultiplier)).toEqual([0.6, 0.9, 1.1, 0.75, 0.6]);
   expect(getThreeDayForecast(18, 2)).toEqual([
-    { hour: 19, solar: 0, wind: 0.75 },
-    { hour: 20, solar: 0, wind: 0.6 },
-    { hour: 21, solar: 0, wind: 0.9 },
+    { dayIndex: 19, solar: 11 / 24, wind: 0.75 },
+    { dayIndex: 20, solar: 11 / 24, wind: 0.6 },
+    { dayIndex: 21, solar: 11 / 24, wind: 0.9 },
   ]);
 });
 

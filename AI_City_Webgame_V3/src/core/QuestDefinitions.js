@@ -1,4 +1,5 @@
 import { CLIMATE_QUESTS, CLIMATE_QUEST_ORDER } from './ClimateCampaignDefinitions.js';
+import { stressTestTotalDays } from './EventDefinitions.js';
 
 function quest(id, title, goal, credits, unlockFacilities, progressKind, details, {
   quizKind = null,
@@ -60,10 +61,10 @@ const RAW_QUESTS = [
     '화력발전을 먼저 짓고 완공을 기다린 뒤 공장을 이어서 지으면 운영비 손실을 줄일 수 있습니다.',
     '두 시설은 육각형 한 칸 거리로 인접해야 합니다.',
     '공장 전력 공급률과 가동률을 50% 이상으로 유지해 실제 수입을 2일 연속 발생시키세요.',
-    '완료하면 LEVEL 3부터 첫 녹지 1칸을 조성할 수 있습니다.',
+    '완료하면 다음 퀘스트부터 첫 녹지 1칸을 조성할 수 있습니다.',
   ]),
   quest('jobs-and-tax', '첫 녹지 조성', '녹지 1칸을 건설하세요.', 6, 'data', 'count', [
-    'LEVEL 2 보상으로 해금된 녹지를 1칸 건설하세요.',
+    '이전 퀘스트 보상으로 해금된 녹지를 1칸 건설하세요.',
     '녹지는 탄소를 낮추고 인접한 주거지의 생활권을 개선합니다.',
     '완료하면 데이터센터를 해금합니다.',
   ]),
@@ -107,7 +108,7 @@ const RAW_QUESTS = [
     '조력발전에서 소비시설로 실제 전력이 전달되는 날을 2일 연속 만드세요.',
   ], { upgradePermitFacilities: ['thermal', 'nuclear', 'wind'] }),
   ...CLIMATE_QUEST_ORDER.map((index) => campaignQuest(CLIMATE_QUESTS[index])),
-  quest('national-climate-test', '대한민국 복합기후 시험', '41일 복합 기후 스트레스 테스트를 통과하세요.', 0, null, 'stress', [
+  quest('national-climate-test', '대한민국 복합기후 시험', `${stressTestTotalDays()}일 복합 기후 스트레스 테스트를 통과하세요.`, 0, null, 'stress', [
     '8개 구간을 연속 운용하며 전력·경제·탄소·물 기준을 모두 지키세요.',
     '조력발전이 실제 전력을 공급해야 최종시험을 통과할 수 있습니다.',
     '녹지와 주거지 Lv.3는 필수 조건이 아닙니다.',

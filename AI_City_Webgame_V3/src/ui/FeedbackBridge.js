@@ -3,6 +3,7 @@ import { FACILITIES, UI_FEEDBACK } from '../core/Constants.js';
 import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { EVENT_FORECAST_DAYS } from '../core/EventDefinitions.js';
 import { rewardText } from './questText.js';
 
 function showQuestRewardAlert(quest, result) {
@@ -16,7 +17,7 @@ function showQuestRewardAlert(quest, result) {
       : result.expandSecondGrid
         ? `반대편 9칸과 ${FACILITIES[result.unlockedFacilities?.[0]]?.name || '재생에너지'} 실증 경로가 열렸습니다.`
       : nextQuest
-      ? `LEVEL ${nextQuest.index} / ${QUEST_COUNT} · ${nextQuest.title} — ${nextQuest.goal}`
+      ? `퀘스트 ${nextQuest.index} / ${QUEST_COUNT} · ${nextQuest.title} — ${nextQuest.goal}`
       : '최종 운영 성적표가 열렸습니다.',
     priority: true,
     kind: 'quest-alert quest-reward-alert',
@@ -29,7 +30,7 @@ function showQuestRewardAlert(quest, result) {
 function showQuestAlert(quest, ready = false) {
   eventBus.emit(Events.TOAST_SHOW, {
     kicker: ready ? '퀘스트 완료 조건 달성' : '새 퀘스트 시작',
-    title: `LEVEL ${quest.index} / ${QUEST_COUNT} · ${quest.title}`,
+    title: `퀘스트 ${quest.index} / ${QUEST_COUNT} · ${quest.title}`,
     text: quest.goal,
     meta: rewardText(quest),
     priority: true,
@@ -48,7 +49,7 @@ export function initFeedbackBridge() {
     eventBus.emit(Events.TOAST_SHOW, {
       kicker: '기후 대응 결과',
       title: `${quest?.title || '기후 재난'} 대응 실패`,
-      text: '조건을 달성하지 못했습니다. 24일 준비부터 재도전할 수 있습니다.',
+      text: `조건을 달성하지 못했습니다. ${EVENT_FORECAST_DAYS}일 준비부터 재도전할 수 있습니다.`,
       meta: '도시는 그대로 유지됩니다. 시설 구성과 운영 설정을 보완해 다시 도전하세요.',
       priority: true,
       kind: 'quest-alert climate-quest-result-alert',

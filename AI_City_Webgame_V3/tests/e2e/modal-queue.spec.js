@@ -1,4 +1,6 @@
 import { test, expect } from '../fixtures/game-test.js';
+import { CITY_FAILURE_RULES } from '../../src/core/Constants.js';
+import { OPERATIONAL_PAUSE_IDS } from '../../src/systems/CityFailureSystem.js';
 // 저장 파일에서 부팅하는 시나리오는 공용 fixture(스토리를 넘겨 주는)를 쓸 수 없어 직접 이동한다.
 import { test as rawTest } from '@playwright/test';
 
@@ -73,4 +75,18 @@ rawTest('a game-over save keeps the story queued behind the blocking modal until
   await page.locator('#restartAfterGameOver').click();
   await expect(page.locator('#storyTitle')).toHaveText('2040년, 멈춰가는 도시');
   expect(await page.evaluate(() => window.__getModalState())).toMatchObject({ id: 'story', queueLength: 0 });
+});
+
+// 일시정지 사유 id는 CityFailureSystem이 상수로 만든다. 모달이 형식을 다시 적으면
+// 임계값을 바꾸는 순간 파산 경고 자리에 정전 문구가 나온다.
+test('the operating pause modal names the bankruptcy risk for the id the failure system emits', async ({ gamePage: page }) => {
+  await page.evaluate(
+    (reason) => window.__EVENT_BUS__.emit(window.__EVENTS__.OPERATIONAL_RISK_PAUSE, { reason }),
+    OPERATIONAL_PAUSE_IDS.CREDIT,
+  );
+
+  await expect(page.locator('#modalCard')).toHaveAttribute('data-modal-id', 'operational-risk');
+  await expect(page.locator('#modalCard h2')).toHaveText(`재정 적자 ${CITY_FAILURE_RULES.CREDIT_PAUSE_DAYS}일`);
+  await expect(page.locator('#modalCard')).toContainText('파산');
+  await expect(page.locator('#modalCard')).not.toContainText('전력망이 붕괴');
 });

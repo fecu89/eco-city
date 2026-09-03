@@ -7,12 +7,15 @@ import {
 } from '../../../src/systems/CalendarSystem.js';
 import { createSimulationController } from '../../../src/systems/SimulationSystem.js';
 
-test('calendar starts at 2040-01-01 08:00 and uses leap-year rules', () => {
-  expect(formatCalendar(calendarAtElapsedDay(0))).toBe('2040-01-01 08:00');
-  expect(calendarAtElapsedDay(0.5)).toMatchObject({ hour: 8, minute: 30 });
-  expect(formatCalendar(calendarAtElapsedDay(0.5))).toBe('2040-01-01 08:30');
-  expect(formatCalendar(calendarAtElapsedDay(24 * 59 + 16))).toBe('2040-03-01 00:00');
-  expect(formatCalendar(calendarAtElapsedDay(24 * 365 + 16))).toBe('2041-01-01 00:00');
+// 1틱 = 1게임일로 정리되며 달력에서 시(hour)·분(minute)이 사라졌다. 하루 안의 소수점 진행은
+// 날짜를 바꾸지 않고, 윤년 규칙은 그대로 남는다(2040년은 366일).
+test('calendar starts at 2040-01-01 and uses leap-year rules', () => {
+  expect(formatCalendar(calendarAtElapsedDay(0))).toBe('2040-01-01');
+  expect(calendarAtElapsedDay(0.5)).toMatchObject({ year: 2040, month: 1, day: 1 });
+  expect(formatCalendar(calendarAtElapsedDay(0.5))).toBe('2040-01-01');
+  expect(formatCalendar(calendarAtElapsedDay(59))).toBe('2040-02-29');
+  expect(formatCalendar(calendarAtElapsedDay(60))).toBe('2040-03-01');
+  expect(formatCalendar(calendarAtElapsedDay(366))).toBe('2041-01-01');
   expect(formatCalendarDate(calendarAtElapsedDay(0.5))).toBe('2040-01-01');
 });
 

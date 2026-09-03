@@ -18,6 +18,13 @@ playwright-report
 blob-report
 playwright/.cache
 
+# 에셋 원본 아카이브 — 72MB. public/assets(배포분)와 selection.json만 있으면
+# `npm run assets:fetch`로 재현되므로 추적하지 않는다. assets-source/MANUAL_DOWNLOADS.md 참고.
+assets-source/archives/
+
+# 브레인스토밍 세션 작업 폴더(서버 pid·토큰 등 로컬 상태)
+.superpowers/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

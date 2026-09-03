@@ -52,12 +52,13 @@ export function hexDistance(a, b) {
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
 }
 
-export function axialToWorld({ q, r }, size) {
+// 렌더러는 이 함수를 프레임마다 칸 수만큼 부른다. out을 주면 그 객체에 채워 넣어
+// 프레임당 수십 개의 임시 객체 할당을 없앤다(주지 않으면 새 객체를 만들어 돌려준다).
+export function axialToWorld({ q, r }, size, out = { x: 0, z: 0 }) {
   if (!Number.isFinite(size) || size <= 0) throw new Error(`Invalid hex size: ${size}`);
-  return {
-    x: Math.sqrt(3) * size * (q + r / 2),
-    z: 1.5 * size * r,
-  };
+  out.x = Math.sqrt(3) * size * (q + r / 2);
+  out.z = 1.5 * size * r;
+  return out;
 }
 
 export function isOuterRing(index, coords, radius) {
