@@ -4,6 +4,8 @@ import { createDaySettler, createSimulationController } from '../../../src/syste
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
 import { applyOperationalRisk } from '../../../src/systems/CityFailureSystem.js';
+import { DEMAND_VARIATION, FACILITY_DEMAND_BY_LEVEL } from '../../../src/core/Constants.js';
+import { createEnvironment, demandVariationFactor } from '../../../src/systems/EnvironmentSystem.js';
 
 test('one settlement advances exactly one day and applies power income once', () => {
   const state = new GameState();
@@ -168,4 +170,29 @@ test('a city with no essential facilities is fully supplied, not blacked out', (
   expect(summary.essentialSupplyPercent).toBe(100);
   applyOperationalRisk(state, summary);
   expect(state.operationalRisk.essentialBlackoutDays).toBe(0);
+});
+
+test('연속한 두 날의 도시 수요는 그날의 수요 변동 계수를 그대로 따른다', () => {
+  const state = new GameState();
+  // 변동은 판의 씨앗에서 나온다. 씨앗을 고정해야 기대값을 계산할 수 있다.
+  state.environment = createEnvironment(20400134);
+  state.grid[0] = { type: 'thermal', level: 1, priority: 'normal' };
+  state.grid[1] = { type: 'residential', level: 2, priority: 'essential' };
+  state.grid[2] = { type: 'factory', level: 1, priority: 'normal' };
+  const settleDay = createDaySettler({ calculatePowerNetwork, settleEconomy });
+  const baseDemand = FACILITY_DEMAND_BY_LEVEL.residential[2] + FACILITY_DEMAND_BY_LEVEL.factory[1];
+  // 수요 변동은 HOLD_DAYS일 묶음 단위로만 바뀌므로, 묶음 경계를 넘는 두 날(마지막 날 → 다음 묶음 첫날)을 본다.
+  const boundary = DEMAND_VARIATION.HOLD_DAYS;
+  state.elapsedGameDays = boundary - 2;
+
+  const first = settleDay(state).summary.demand;
+  const second = settleDay(state).summary.demand;
+
+  expect(state.elapsedGameDays).toBe(boundary);
+  expect(first).toBeCloseTo(baseDemand * demandVariationFactor(state, boundary - 1), 1);
+  expect(second).toBeCloseTo(baseDemand * demandVariationFactor(state, boundary), 1);
+  expect(first).not.toBe(second);
+  expect(Math.abs(second - first)).toBeLessThanOrEqual(2 * DEMAND_VARIATION.AMPLITUDE * baseDemand);
+  // 화력 13E는 흔들린 수요를 여전히 덮으므로 공급률은 두 날 모두 만족이다.
+  expect(state.lastTickSummary.deliveredPower).toBeCloseTo(second, 5);
 });

@@ -3,14 +3,15 @@ import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { CITY_EVENTS } from '../core/EventDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
-import { STAGES, WATER_RULES } from '../core/Constants.js';
+import { CLIMATE_QUEST_RULES, FACILITY_GROUPS, POWER_RULES, STAGES, WATER_RULES } from '../core/Constants.js';
 import { roundCredits } from '../core/Money.js';
 import { isOperationalCell } from './ConstructionProjectSystem.js';
 
 const CLIMATE_QUEST_MIN = CAMPAIGN_QUEST_INDEXES.CLIMATE_START;
 const CLIMATE_QUEST_MAX = CAMPAIGN_QUEST_INDEXES.CLIMATE_END;
-const SUPPLY_TARGET = 90;
-const DELIVERY_EPSILON = 0.1;
+// 필수시설 공급률 목표(%)와 "실제 공급" 판정 하한(E). settings.json CLIMATE_QUEST_RULES / POWER_RULES.
+const SUPPLY_TARGET = CLIMATE_QUEST_RULES.SUPPLY_TARGET_PERCENT;
+const DELIVERY_EPSILON = POWER_RULES.DELIVERY_EPSILON_E;
 
 function campaignState(state) {
   state.climateCampaign ||= {
@@ -88,14 +89,14 @@ function generationTypeCount(state, summary) {
   const direct = summary?.generationDeliveredByType;
   if (direct && typeof direct === 'object') {
     return Object.entries(direct)
-      .filter(([type, delivered]) => ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(type)
+      .filter(([type, delivered]) => FACILITY_GROUPS.GENERATION.includes(type)
         && Number(delivered) >= DELIVERY_EPSILON)
       .length;
   }
   const types = new Set((summary?.routes || [])
     .filter((route) => Number(route.delivered) >= DELIVERY_EPSILON)
     .map((route) => state.grid?.[route.from]?.type)
-    .filter((type) => ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(type)));
+    .filter((type) => FACILITY_GROUPS.GENERATION.includes(type)));
   return types.size;
 }
 
@@ -104,7 +105,7 @@ function allFacilityRatiosAtLeast(state, summary, types, minimum, { requireEachT
   state.grid.forEach((cell, index) => {
     if (!isOperationalCell(cell) || !types.includes(cell.type)) return;
     const consumerRatio = Number(summary?.facilityPower?.[index]?.ratio);
-    const generationRatio = ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(cell.type)
+    const generationRatio = FACILITY_GROUPS.GENERATION.includes(cell.type)
       ? Number((summary?.routes || []).some((route) => (
         route.from === index && Number(route.delivered) >= DELIVERY_EPSILON
       )))
@@ -126,12 +127,12 @@ function dayQualifies(state, quest, summary) {
       return essentialReady && generationTypeCount(state, summary) >= quest.generationTypeTarget;
     case 'winter':
       return Number(summary?.netCredits) > 0
-        && allFacilityRatiosAtLeast(state, summary, ['residential'], 0.9);
+        && allFacilityRatiosAtLeast(state, summary, ['residential'], POWER_RULES.OUTAGE_RATIO);
     case 'water': {
       const waterLimit = Number(summary?.waterLimit);
       return Number.isFinite(waterLimit)
         && Number(summary?.dailyWater) <= waterLimit
-        && allFacilityRatiosAtLeast(state, summary, ['data', 'nuclear'], 0.9, { requireEachType: true });
+        && allFacilityRatiosAtLeast(state, summary, ['data', 'nuclear'], POWER_RULES.OUTAGE_RATIO, { requireEachType: true });
     }
     case 'cleanAir':
       return Number(summary?.dailyCarbon) <= quest.carbonTarget && essentialReady;

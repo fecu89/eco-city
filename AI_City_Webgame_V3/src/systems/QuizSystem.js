@@ -1,14 +1,15 @@
-import { QUIZ_BANK, RESEARCH_RULES } from '../core/Constants.js';
+import { QUIZ_BANK, QUIZ_RULES, RESEARCH_RULES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { RESEARCH_QUIZZES } from '../core/ResearchQuizDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { accelerateResearchFromQuiz } from './ResearchSystem.js';
 
+// 최종 개념 퀴즈 구성. 문항 id·통과선은 settings.json QUIZ_RULES.FINAL, 문항 수는 RESEARCH_RULES.QUIZ_QUESTION_COUNT.
 const QUIZ_CONFIG = Object.freeze({
   'climate-council': Object.freeze({
-    ids: ['power-balance', 'cooling', 'renewable-storage', 'spatial-design'],
+    ids: QUIZ_RULES.FINAL.QUESTION_IDS,
     total: RESEARCH_RULES.QUIZ_QUESTION_COUNT,
-    passThreshold: 3,
+    passThreshold: QUIZ_RULES.FINAL.PASS_THRESHOLD,
   }),
 });
 

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { GameState } from '../../../src/core/GameState.js';
 import {
   BOARD,
+  DEMAND_VARIATION,
   DIRECTION_RULES,
   FACILITY_DIRECTIONS,
   TIDAL_RULES,
@@ -10,7 +11,9 @@ import { createHexCoordinates, hexDistance } from '../../../src/systems/HexGridS
 import {
   createEnvironment,
   defaultRotationFor,
+  demandVariationFactor,
   directionFactor,
+  holdBlockIndex,
   directionOutputTable,
   isCoastalCell,
   optimalRotationFor,
@@ -187,4 +190,65 @@ test('해안 입지 안내는 조차와 출력 배율을 한 문장으로 알려
   expect(info.label).toBe(TIDAL_RULES.LABEL(info.range, info.factor));
   expect(info.label).toMatch(/^조차 \d+(\.\d)?m · 출력 \d+%$/);
   expect(tidalSiteInfo(state, 0)).toBeNull();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 일일 수요 변동 — 판의 씨앗과 게임일만으로 정해지는 결정론적 계열.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const variationSeries = (state, days = 30) => (
+  Array.from({ length: days }, (_, offset) => demandVariationFactor(state, offset + 1))
+);
+
+test('같은 씨앗의 수요 변동은 매번 같고, 진폭 안에서 날마다 달라진다', () => {
+  const state = stateWithSeed();
+  const twin = stateWithSeed();
+  const other = stateWithSeed(SEED + 7);
+  const series = variationSeries(state);
+
+  expect(series).toEqual(variationSeries(twin));
+  expect(series).not.toEqual(variationSeries(other));
+  series.forEach((factor, offset) => {
+    expect(factor, `day ${offset + 1}`).toBeGreaterThanOrEqual(1 - DEMAND_VARIATION.AMPLITUDE);
+    expect(factor, `day ${offset + 1}`).toBeLessThanOrEqual(1 + DEMAND_VARIATION.AMPLITUDE);
+  });
+  // 값은 HOLD_DAYS일 묶음 단위로만 바뀐다(플레이어가 대응할 틈). 묶음 수만큼은 서로 다른 값이어야 한다.
+  const blocks = new Set(series.map((_, offset) => holdBlockIndex(offset + 1, DEMAND_VARIATION.HOLD_DAYS))).size;
+  expect(blocks).toBeGreaterThan(1);
+  expect(new Set(series).size).toBe(blocks);
+  expect(Math.max(...series) - Math.min(...series)).toBeGreaterThan(0.02);
+});
+
+test('이웃한 두 날은 표본을 나눠 가져 하루 만에 최대폭으로 뒤집히지 않는다', () => {
+  const state = stateWithSeed();
+  // 평활 구간이 S일이라 연속한 두 날은 표본 하나만 갈린다 → 하루 변화폭은 2A/S 이하다.
+  const maximumStep = (2 * DEMAND_VARIATION.AMPLITUDE) / DEMAND_VARIATION.SMOOTHING_DAYS;
+  for (let day = 2; day <= 60; day += 1) {
+    const step = Math.abs(demandVariationFactor(state, day) - demandVariationFactor(state, day - 1));
+    expect(step, `day ${day}`).toBeLessThanOrEqual(maximumStep);
+  }
+});
+
+test('수요 변동 문구는 부호를 그대로 드러내고 평년은 ±0%로 밝힌다', () => {
+  expect(DEMAND_VARIATION.CAUSE_LABEL(1.04)).toBe('오늘 수요 변동 +4%');
+  expect(DEMAND_VARIATION.CAUSE_LABEL(0.97)).toBe('오늘 수요 변동 -3%');
+  expect(DEMAND_VARIATION.CAUSE_LABEL(1)).toBe('오늘 수요 변동 ±0%');
+  // 반올림으로 0%가 되는 날도 "평년 수준"으로 읽히도록 ±를 붙인다.
+  expect(DEMAND_VARIATION.CAUSE_LABEL(1.004)).toBe('오늘 수요 변동 ±0%');
+  expect(DEMAND_VARIATION.CAUSE_LABEL(undefined)).toBe('오늘 수요 변동 ±0%');
+});
+
+test('수요 변동은 날짜를 넘겨받지 않거나 환경이 없어도 진폭 안의 수를 돌려준다', () => {
+  const state = stateWithSeed();
+  state.elapsedGameDays = 9;
+
+  expect(demandVariationFactor(state)).toBe(demandVariationFactor(state, 9));
+  // 0일 이전은 0일로 접는다 — 예보가 음수 날짜를 물어도 같은 값이 나온다.
+  expect(demandVariationFactor(state, -5)).toBe(demandVariationFactor(state, 0));
+  [null, undefined, {}, { environment: {} }, { environment: { seed: 'x' } }].forEach((broken) => {
+    const factor = demandVariationFactor(broken, 5);
+    expect(Number.isFinite(factor), JSON.stringify(broken)).toBe(true);
+    expect(factor).toBeGreaterThanOrEqual(1 - DEMAND_VARIATION.AMPLITUDE);
+    expect(factor).toBeLessThanOrEqual(1 + DEMAND_VARIATION.AMPLITUDE);
+  });
 });

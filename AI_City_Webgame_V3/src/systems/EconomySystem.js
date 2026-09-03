@@ -1,6 +1,8 @@
 import {
+  BOARD,
   ECONOMY_RULES,
   FACILITIES,
+  FACILITY_GROUPS,
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
@@ -18,8 +20,8 @@ export const calculateLabor = calculateWorkforce;
 
 function topologyFor(grid, coords) {
   if (coords) return coords;
-  if (grid.length === 19) return createHexCoordinates(2);
-  if (grid.length === 37) return createHexCoordinates(3);
+  if (grid.length === BOARD.INITIAL_CELLS) return createHexCoordinates(BOARD.INITIAL_RADIUS);
+  if (grid.length === BOARD.EXPANDED_CELLS) return createHexCoordinates(BOARD.EXPANDED_RADIUS);
   return [];
 }
 
@@ -42,7 +44,7 @@ export function settleEconomy({
   grid.forEach((cell, index) => {
     if (!cell) return;
     counts[cell.type] = (counts[cell.type] || 0) + 1;
-    if (!['factory', 'thermal'].includes(cell.type)) return;
+    if (!FACILITY_GROUPS.HEAVY_POLLUTERS.includes(cell.type)) return;
     neighborIndices(index, boardCoords).forEach((neighbor) => {
       if (grid[neighbor]?.type !== 'residential') return;
       pollutedHomes.add(neighbor);

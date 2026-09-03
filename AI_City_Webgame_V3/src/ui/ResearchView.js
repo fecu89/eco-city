@@ -26,7 +26,7 @@ function realDurationLabel(days) {
 }
 
 function jobStatus(job) {
-  if (job.status === 'underpowered') return '⚠ 전력 부족 · 연구 일시정지 · 90% 필요';
+  if (job.status === 'underpowered') return `⚠ 전력 부족 · 연구 일시정지 · ${Math.round(RESEARCH_RULES.POWER_THRESHOLD * 100)}% 필요`;
   if (job.status === 'upgrade_paused') return '강화 공사 중 · 연구 일시정지';
   if (job.dataCenterIndex == null) return '담당 시설 없음 · 재배정 필요';
   return `데이터센터 #${job.dataCenterIndex}`;
@@ -43,7 +43,7 @@ function activeJobMarkup(job, dataCenterIndex) {
       <div class="research-actions">
         ${assignedHere ? `<button class="btn primary" data-research-accelerate="${job.id}">퀴즈로 가속</button>` : ''}
         ${job.dataCenterIndex == null ? `<button class="btn secondary" data-research-assign="${job.id}">이 시설에 배정</button>` : ''}
-        ${assignedHere ? `<button class="btn secondary" data-research-cancel="${job.id}">연구 취소 · 50% 환급</button>` : ''}
+        ${assignedHere ? `<button class="btn secondary" data-research-cancel="${job.id}">연구 취소 · ${Math.round(RESEARCH_RULES.CANCEL_REFUND_RATIO * 100)}% 환급</button>` : ''}
       </div>
     </article>`;
 }
@@ -103,7 +103,7 @@ export function researchPanelMarkup(dataCenterIndex) {
   const allResearchCompleted = availability.every((item) => item.completed);
   return `
     <section class="research-panel" aria-label="재생에너지 연구" data-center-index="${dataCenterIndex}">
-      <div class="research-head"><div><span>RESEARCH GRID</span><h3>데이터센터 #${dataCenterIndex} 연구</h3></div><b>진행 중 추가 수요 +2E</b></div>
+      <div class="research-head"><div><span>RESEARCH GRID</span><h3>데이터센터 #${dataCenterIndex} 연구</h3></div><b>진행 중 추가 수요 +${RESEARCH_RULES.EXTRA_DEMAND}E</b></div>
       ${gameState.researchMenuUnlocked ? '' : `<div class="research-menu-lock"><strong>연구 메뉴 잠김</strong><span>${researchMenuQuestLabel()} 완료 후 사용할 수 있습니다.</span></div>`}
       ${centerJob ? activeJobMarkup(centerJob, dataCenterIndex) : '<div class="research-center-idle"><strong>이 데이터센터는 비어 있습니다.</strong><p>새 연구를 시작하거나 미배정 연구를 연결할 수 있습니다.</p></div>'}
       ${unassignedJobs.length ? `<div class="research-unassigned"><strong>재배정 대기</strong>${unassignedJobs.map((job) => activeJobMarkup(job, dataCenterIndex)).join('')}</div>` : ''}

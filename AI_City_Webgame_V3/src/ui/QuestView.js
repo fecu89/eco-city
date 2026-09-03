@@ -1,7 +1,7 @@
 import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
-import { EMERGENCY_SUPPORT, RESEARCH_RULES, STRESS_TEST_RULES } from '../core/Constants.js';
+import { CLIMATE_QUEST_RULES, EMERGENCY_SUPPORT, POWER_RULES, REPORT_RULES, RESEARCH_RULES, STRESS_TEST_RULES } from '../core/Constants.js';
 import {
   canRequestEmergencySupport,
   claimCurrentQuest,
@@ -31,7 +31,7 @@ import {
   isClimateQuestActive,
   retryClimateQuest,
 } from '../systems/ClimateQuestSystem.js';
-import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { CAMPAIGN_QUEST_INDEXES, CLIMATE_QUEST_COUNT } from '../core/CampaignProgression.js';
 
 let els;
 let onChanged = () => {};
@@ -129,21 +129,21 @@ function liveClimateConditions(evaluation) {
   const quest = evaluation.quest;
   const summary = gameState.lastTickSummary || {};
   const lines = [`최고 연속 달성 ${evaluation.bestConsecutiveDays || evaluation.consecutiveDays || 0} / ${quest.targetDays}일`];
-  const essential = `필수시설 전력 ${oneDecimal(summary.essentialSupplyPercent)}% / 90%`;
+  const essential = `필수시설 전력 ${oneDecimal(summary.essentialSupplyPercent)}% / ${CLIMATE_QUEST_RULES.SUPPLY_TARGET_PERCENT}%`;
   if (['essential', 'battery', 'diversity', 'cleanAir', 'tidal'].includes(quest.objective)) lines.push(essential);
   if (quest.objective === 'battery') {
     lines.push(`배터리 실제 방전 ${oneDecimal(evaluation.batteryEnergy)} / ${quest.batteryTarget}E`);
     lines.push(`또는 장마 최저 예비력 ${oneDecimal(evaluation.batteryReserveMinimum)} / ${quest.batteryReserveTarget}E`);
   }
   if (quest.objective === 'diversity') {
-    const types = Object.values(summary.generationDeliveredByType || {}).filter((delivered) => Number(delivered) >= 0.1).length;
+    const types = Object.values(summary.generationDeliveredByType || {}).filter((delivered) => Number(delivered) >= POWER_RULES.DELIVERY_EPSILON_E).length;
     lines.push(`실제 공급 발전원 ${types} / ${quest.generationTypeTarget}종`);
   }
   if (quest.objective === 'winter') {
     const residentialRatios = Object.entries(summary.facilityPower || {})
       .filter(([index]) => gameState.grid[Number(index)]?.type === 'residential')
       .map(([, power]) => Number(power.ratio) * 100);
-    lines.push(`주거 최저 전력 ${oneDecimal(residentialRatios.length ? Math.min(...residentialRatios) : NaN)}% / 90%`);
+    lines.push(`주거 최저 전력 ${oneDecimal(residentialRatios.length ? Math.min(...residentialRatios) : NaN)}% / ${Math.round(POWER_RULES.OUTAGE_RATIO * 100)}%`);
     lines.push(`도시 순수익 ${formatCredits(summary.netCredits)}/일 / 0 초과`);
   }
   if (quest.objective === 'water') {
@@ -187,6 +187,14 @@ function renderEmergencySupport() {
   });
 }
 
+function renderQuestProgress(fraction) {
+  const percent = Math.max(0, Math.min(100, fraction * 100));
+  eachNode(els.bar, (node) => { node.style.width = `${percent}%`; });
+  if (!els.strip) return;
+  els.strip.style.setProperty('--quest-progress', `${percent}%`);
+  els.strip.setAttribute('aria-label', `현재 퀘스트 열기 · 진행률 ${Math.round(percent)}%`);
+}
+
 export function renderQuest() {
   if (!els) return;
   resetQuestPanelMode();
@@ -197,13 +205,13 @@ export function renderQuest() {
   const climatePosition = gameState.questIndex - CAMPAIGN_QUEST_INDEXES.CLIMATE_START + 1;
   eachNode(els.level, (node) => {
     node.textContent = isClimateQuestActive(gameState)
-      ? `기후 대응 ${climatePosition} / 8`
+      ? `기후 대응 ${climatePosition} / ${CLIMATE_QUEST_COUNT}`
       : `LEVEL ${gameState.questIndex} / ${QUEST_COUNT}`;
   });
   eachNode(els.title, (node) => { node.textContent = quest.title; });
   eachNode(els.goal, (node) => { node.textContent = quest.goal; });
   eachNode(els.reward, (node) => { node.textContent = rewardText(quest); });
-  eachNode(els.bar, (node) => { node.style.width = `${questProgressFraction(gameState) * 100}%`; });
+  renderQuestProgress(questProgressFraction(gameState));
   eachNode(els.claim, (node) => {
     const campaign = isClimateQuestActive(gameState) ? gameState.climateCampaign : null;
     const canBrief = campaign?.status === 'briefing';
@@ -257,7 +265,7 @@ function renderStressTestPanel() {
   eachNode(els.title, (node) => { node.textContent = '대한민국 복합기후 시험'; });
   eachNode(els.goal, (node) => { node.textContent = statusText; });
   eachNode(els.reward, (node) => { node.textContent = '통과 후 도시 운영 프로필과 최종 보고서'; });
-  eachNode(els.bar, (node) => { node.style.width = `${stressTestProgressFraction(gameState) * 100}%`; });
+  renderQuestProgress(stressTestProgressFraction(gameState));
   eachNode(els.claim, (node) => {
     node.disabled = stress.status === 'running';
     node.textContent = stress.status === 'ready'
@@ -291,7 +299,9 @@ function renderQuestQuizModal() {
       <div id="questQuizExplain"></div>
     </div>
     <div class="modal-actions"><button class="btn primary" id="questQuizNext" disabled>${gameState.quizIndex === gameState.quizPool.length - 1 ? '결과 보기' : '다음'}</button></div>
-  `, { id: 'quiz', pausesSimulation: true });
+  // 연구 가속 퀴즈는 도시 시간을 멈추지 않는다 — 퀴즈를 푸는 동안에도 연구가 진행돼야 한다.
+  // 최종 보너스 퀴즈만 예전처럼 멈춘다.
+  `, { id: 'quiz', pausesSimulation: !research });
   $modal('[data-quiz-close]').addEventListener('click', () => {
     researchQuizReturnIndex = null;
     closeModal();
@@ -332,7 +342,7 @@ function renderQuestQuizResultModal(result) {
       <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>단축</span><strong>${reducedDays}일</strong></div></div>
       <div class="callout"><strong>선택한 연구에만 반영되었습니다.</strong><p>다른 데이터센터의 연구 진행도는 바뀌지 않습니다.</p></div>
       <div class="modal-actions"><button class="btn primary" id="questQuizFinish">연구 화면으로</button></div>
-    `, { id: 'research-quiz-result', pausesSimulation: true });
+    `, { id: 'research-quiz-result', pausesSimulation: false });
     $modal('#questQuizFinish').addEventListener('click', () => {
       const dataCenterIndex = researchQuizReturnIndex;
       researchQuizReturnIndex = null;
@@ -343,7 +353,7 @@ function renderQuestQuizResultModal(result) {
     return;
   }
   if (gameState.stressTest?.status === 'passed') {
-    const bonus = result.correct * 2.5;
+    const bonus = result.correct * REPORT_RULES.QUIZ_POINTS_PER_CORRECT;
     setModal(`
       <div class="modal-head"><div><span class="eyebrow">OPTIONAL BONUS</span><h2>개념 퀴즈 보너스</h2></div></div>
       <div class="summary-grid"><div class="summary-card"><span>정답</span><strong>${result.correct}/${result.total}</strong></div><div class="summary-card"><span>보너스</span><strong>+${bonus}점</strong></div></div>

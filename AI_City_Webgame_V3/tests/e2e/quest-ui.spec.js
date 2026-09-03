@@ -224,9 +224,10 @@ test.describe('quest economy HUD', () => {
     await expect(alert).toContainText('탄소 전환선');
     await expect(alert).toContainText('저탄소 전력 40% 이상, CO₂ 12 이하와 흑자를 2일 유지하세요.');
     await expect(alert).toContainText('보상 8.00 💰 · 핵발전 해금');
-    await expect(alert.locator('[data-toast-action="quest"]')).toHaveText('새 퀘스트 열기');
+    // 보상 토스트는 정보만 담고 버튼이 없다 — 퀘스트 패널이 이미 열려 있어 두 번 확인할 일이 없다.
+    await expect(alert.locator('[data-toast-action]')).toHaveCount(0);
+    await expect(page.locator('.toast.quest-alert')).toHaveCount(1);
     await expect(page.locator('[data-hud-target="quest"]').first()).toHaveAttribute('data-notification', 'new');
-    await alert.locator('[data-toast-action="quest"]').click();
     await expect(page.locator('#questPanel')).toHaveClass(/hud-panel-active/);
     await expect(page.locator('body')).not.toContainText('숨은 운영비');
   });

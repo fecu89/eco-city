@@ -14,6 +14,8 @@ export {
   randomSeed,
   createEnvironment,
   normalizeEnvironment,
+  demandVariationFactor,
+  holdBlockIndex,
   isCoastalCell,
   defaultRotationFor,
   normalizeRotation,

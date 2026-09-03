@@ -280,3 +280,34 @@ test('picking a facility shows a placement hint until the first build is confirm
   await page.locator('#facilityDock [data-facility="residential"]').click();
   await expect(hint).toHaveCount(0);
 });
+
+// 건설 탭을 다시 누르면 미리보기(무장 상태·대기 중인 계획)를 해제하고 독을 다시 보여준다.
+test('clicking the build tab again cancels the armed preview and any pending plan', async ({ gamePage: page }) => {
+  await openBuild(page);
+  const panel = page.locator('#buildPanel');
+  const card = page.locator('#facilityDock [data-facility="residential"]');
+  const trigger = page.locator('.hud-rail [data-hud-target="build"]');
+  const canvas = page.locator('.city-scene-3d-canvas');
+  const box = await canvas.boundingBox();
+
+  await card.click();
+  await expect(panel).toHaveClass(/build-panel--collapsed/);
+  await trigger.click();
+  await expect(panel).not.toHaveClass(/build-panel--collapsed/);
+  await expect(panel).toHaveClass(/hud-panel-active/);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(150);
+  expect(await page.evaluate(() => window.__getCityRendererStats().ghostVisible)).toBe(false);
+  await page.evaluate(() => window.__clickCell(0));
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+
+  await card.click();
+  await page.evaluate(() => window.__clickCell(0));
+  await expect(page.locator('#buildConfirm')).toBeVisible();
+  await trigger.click();
+  await expect(page.locator('#buildConfirm')).toBeHidden();
+  expect(await page.evaluate(() => window.__GAME_STATE__.constructionPlan)).toEqual([]);
+  await expect(panel).not.toHaveClass(/build-panel--collapsed/);
+  await expect(panel).toHaveClass(/hud-panel-active/);
+  await expect(card).toBeVisible();
+});

@@ -58,8 +58,8 @@ function syncForecastMetrics(assessment) {
   setForecastMetric('credit', `${signed(projected.netCredits, 2)}/일`, `Δ ${signed(projected.netCredits - current.netCredits, 2)}`);
   setForecastMetric(
     'power',
-    `${round1(projected.deliveredPower)}/${round1(projected.demand)}E`,
-    `공급 Δ ${signed(projected.deliveredPower - current.deliveredPower)}E`,
+    `${round1(projected.generationAvailable ?? projected.deliveredPower)}/${round1(projected.demand)}E`,
+    `발전 Δ ${signed((projected.generationAvailable ?? projected.deliveredPower) - (current.generationAvailable ?? current.deliveredPower))}E`,
   );
   setForecastMetric('carbon', `CO₂ ${round1(projected.dailyCarbon)}/일`, `Δ ${signed(projected.dailyCarbon - current.dailyCarbon)}`);
   setForecastMetric('water', `${round1(projected.dailyWater)}/일`, `Δ ${signed(projected.dailyWater - current.dailyWater)}`);
@@ -359,6 +359,12 @@ export function initGridView(gridElement, sizeChipElement, clickHandler, confirm
   // 취소(X)도 같은 규칙이다 — 미리보기를 접었는데 고스트가 계속 마우스를 따라다니면
   // 여전히 건축 모드인 것처럼 보인다. 다시 지으려면 독에서 시설을 다시 고른다.
   eventBus.on(Events.BUILD_PLAN_CLEARED, () => {
+    facilityArmed = false;
+    if (gameState.isEditable) renderGrid();
+  });
+  // 건설 탭을 다시 누르면 미리보기를 접는다 — 고스트가 계속 따라다니면 모달 위에서도 건축 모드로 보인다.
+  eventBus.on(Events.BUILD_PREVIEW_CANCEL_REQUESTED, () => {
+    clearPlan();
     facilityArmed = false;
     if (gameState.isEditable) renderGrid();
   });

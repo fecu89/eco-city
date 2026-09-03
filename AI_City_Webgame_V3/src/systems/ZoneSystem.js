@@ -1,9 +1,10 @@
-import { BOARD, ECONOMY_RULES, FACILITIES } from '../core/Constants.js';
+import { BOARD, ECONOMY_RULES, FACILITIES, FACILITY_GROUPS } from '../core/Constants.js';
 import {
   ENERGY_SITE_LABELS,
   ENERGY_SITE_OUTPUT_MULTIPLIER,
   EXPANSION_SIDES,
   EXPANSION_UPKEEP,
+  ZONE_TRAIT_MODIFIERS,
 } from '../core/ZoneDefinitions.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { roundCredits } from '../core/Money.js';
@@ -92,16 +93,19 @@ export function zoneModifierForCell(state, index, facilityType) {
   const trait = cellZoneTrait(state, index);
   const energySite = energySiteBenefit(state, index, facilityType);
   if (energySite) return { supply: energySite.supply };
+  // 지역 특성 배율은 settings.json ZONES.TRAIT_MODIFIERS(ZoneDefinitions.ZONE_TRAIT_MODIFIERS)에 있다.
   if (trait === 'residential') {
-    if (facilityType === 'residential') return { income: 1.15 };
-    if (['factory', 'thermal'].includes(facilityType)) {
-      return { buildCostFlat: FACILITIES[facilityType].cost * 0.2 };
+    const modifiers = ZONE_TRAIT_MODIFIERS.residential;
+    if (facilityType === 'residential') return { income: modifiers.RESIDENTIAL_INCOME };
+    if (FACILITY_GROUPS.HEAVY_POLLUTERS.includes(facilityType)) {
+      return { buildCostFlat: FACILITIES[facilityType].cost * modifiers.HEAVY_BUILD_COST_RATIO };
     }
   }
   if (trait === 'industrial') {
-    if (facilityType === 'factory') return { buildCostFlat: -FACILITIES.factory.cost * 0.15 };
+    const modifiers = ZONE_TRAIT_MODIFIERS.industrial;
+    if (facilityType === 'factory') return { buildCostFlat: FACILITIES.factory.cost * modifiers.FACTORY_BUILD_COST_RATIO };
     if (facilityType === 'residential') {
-      return { healthCostFlat: ECONOMY_RULES.POLLUTION_HEALTH_COST * 0.25 };
+      return { healthCostFlat: ECONOMY_RULES.POLLUTION_HEALTH_COST * modifiers.RESIDENTIAL_HEALTH_COST_RATIO };
     }
   }
   return {};

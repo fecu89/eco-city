@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
 import {
   getSolarMultiplier,
-  getWindMultiplier,
+  getDailySolarMultiplier,
   getDemandMultiplier,
-  getThreeDayForecast,
 } from '../../../src/systems/ClimateSystem.js';
 
 test('solar output follows deterministic game hours', () => {
@@ -20,14 +19,10 @@ test('solar output follows deterministic game hours', () => {
   expect(getSolarMultiplier(36)).toBe(1);
 });
 
-// 예보는 시(hour)가 아니라 게임일 단위이며, 태양광은 하루 평균(11/24)을 쓴다.
-test('wind and three-day forecast are deterministic', () => {
-  expect([0, 1, 2, 3, 4].map(getWindMultiplier)).toEqual([0.6, 0.9, 1.1, 0.75, 0.6]);
-  expect(getThreeDayForecast(18, 2)).toEqual([
-    { dayIndex: 19, solar: 11 / 24, wind: 0.75 },
-    { dayIndex: 20, solar: 11 / 24, wind: 0.6 },
-    { dayIndex: 21, solar: 11 / 24, wind: 0.9 },
-  ]);
+// 정산은 시(hour)가 아니라 게임일 단위이며, 태양광은 하루 평균(11/24)을 쓴다.
+// 풍력의 4일 고정 패턴은 날씨 풍속으로 대체됐다(weather.spec.js).
+test('daily solar keeps the 11/24 day-night average', () => {
+  expect(getDailySolarMultiplier()).toBeCloseTo(11 / 24, 8);
 });
 
 test('green softens residential heatwave demand without changing factories', () => {

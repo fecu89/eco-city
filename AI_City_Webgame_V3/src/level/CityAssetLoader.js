@@ -1,7 +1,7 @@
 import { assetLoader } from '../assets/AssetLoader.js';
 import { FACILITY_ASSET_IDS } from '../assets/assetRegistry.js';
 import { prepareAssetGeometry } from '../assets/geometryUtils.js';
-import { CITY_ASSET_FOOTPRINT, CITY_ASSETS } from '../core/Constants.js';
+import { CITY_ASSET_FOOTPRINT, CITY_ASSETS, VISUAL } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createFacilityFallbackGeometry, disposeFacilityFallbacks } from './FacilityGeometryFactory.js';
 import * as THREE from 'three';
@@ -42,10 +42,13 @@ export function configurePaletteMaterial(material, assetId) {
   material.map.generateMipmaps = false;
   material.map.needsUpdate = true;
   material.userData.paletteSampling = 'nearest-no-mipmaps';
-  if (/^(residential|commercial|industrial)\./.test(assetId) && material.isMeshStandardMaterial) {
+  // 검정 보정을 받는 에셋 계열(id 접두사)·발광색·세기는 settings.json VISUAL.ASSET.PALETTE_BLACK_LIFT.
+  const blackLift = VISUAL.ASSET.PALETTE_BLACK_LIFT;
+  const idText = String(assetId);
+  if (blackLift.assetPrefixes.some((prefix) => idText.startsWith(`${prefix}.`)) && material.isMeshStandardMaterial) {
     // Kenney 팔레트 상단의 순검정 음영이 작은 아이소메트릭 건물에서 구멍처럼 보이지 않게 한다.
-    material.emissive.setHex(0x243443);
-    material.emissiveIntensity = 0.42;
+    material.emissive.setHex(blackLift.emissive);
+    material.emissiveIntensity = blackLift.intensity;
     material.userData.paletteBlackLift = true;
   }
   return material;

@@ -1,4 +1,5 @@
 import { eventBus, Events } from '../core/EventBus.js';
+import { QUEST_PANEL_LAYOUT } from '../core/Constants.js';
 
 const VALID_PANELS = new Set(['build', 'quest', 'status', 'settings']);
 
@@ -104,7 +105,7 @@ export function getWorldHudState() {
 
 export function initWorldHud(elements) {
   els = elements;
-  mobileQuery = window.matchMedia('(max-width: 760px)');
+  mobileQuery = window.matchMedia(QUEST_PANEL_LAYOUT.MOBILE_QUERY);
 
   els.controls.addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-hud-target]');

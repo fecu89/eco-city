@@ -9,8 +9,9 @@ const _targetDelta = new THREE.Vector3();
 const _defaultPosition = new THREE.Vector3();
 const _defaultTarget = new THREE.Vector3();
 
+// 보드 월드 폭(지름) + 여백(육각 크기의 BOARD_SPAN_PADDING_HEX배).
 function boardWorldSpan(radius) {
-  return Math.sqrt(3) * BOARD.HEX_SIZE * radius * 2 + BOARD.HEX_SIZE * 2;
+  return Math.sqrt(3) * BOARD.HEX_SIZE * radius * 2 + BOARD.HEX_SIZE * CITY_CAMERA.BOARD_SPAN_PADDING_HEX;
 }
 
 export function createCameraController({ camera, domElement, getBoardRadius, onInteraction = () => {} }) {
@@ -45,7 +46,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
     const extent = boardWorldSpan(boardRadius) / 2 + CITY_CAMERA.PAN_MARGIN;
     _clampedTarget.copy(controls.target);
     _clampedTarget.x = THREE.MathUtils.clamp(_clampedTarget.x, -extent, extent);
-    _clampedTarget.y = THREE.MathUtils.clamp(_clampedTarget.y, 0, 1.25);
+    _clampedTarget.y = THREE.MathUtils.clamp(_clampedTarget.y, 0, CITY_CAMERA.TARGET_Y_MAX);
     _clampedTarget.z = THREE.MathUtils.clamp(_clampedTarget.z, -extent, extent);
     _targetDelta.subVectors(_clampedTarget, controls.target);
     if (_targetDelta.lengthSq() === 0) return;
@@ -143,7 +144,7 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
 
   // 기본 시점(리셋 직후 포즈)에서 벗어났는지 — 허용 오차는 현재 거리에 비례한다.
   function isAtDefault() {
-    const tolerance = Math.max(0.01, camera.position.distanceTo(controls.target) * CITY_CAMERA.DEFAULT_POSE_TOLERANCE);
+    const tolerance = Math.max(CITY_CAMERA.DEFAULT_POSE_TOLERANCE_MIN, camera.position.distanceTo(controls.target) * CITY_CAMERA.DEFAULT_POSE_TOLERANCE);
     return camera.position.distanceTo(_defaultPosition) <= tolerance
       && controls.target.distanceTo(_defaultTarget) <= tolerance;
   }
@@ -154,8 +155,9 @@ export function createCameraController({ camera, domElement, getBoardRadius, onI
       portrait = nextPortrait;
       applyDistanceBounds(boardRadius);
     }
-    const nextFit = aspect < 1 ? Math.min(1.32, 1 + (1 - aspect) * 1.08) : 1;
-    if (Math.abs(nextFit - aspectFit) < 0.001) return;
+    // 세로 화면일수록 카메라를 멀리 둔다(상한 PORTRAIT_FIT_MAX). 변화가 FIT_EPSILON보다 작으면 무시한다.
+    const nextFit = aspect < 1 ? Math.min(CITY_CAMERA.PORTRAIT_FIT_MAX, 1 + (1 - aspect) * CITY_CAMERA.PORTRAIT_FIT_GAIN) : 1;
+    if (Math.abs(nextFit - aspectFit) < CITY_CAMERA.FIT_EPSILON) return;
     const ratio = nextFit / aspectFit;
     camera.position.sub(controls.target).multiplyScalar(ratio).add(controls.target);
     // 화면 비율 맞춤은 사용자가 움직인 게 아니므로 기본 시점도 같이 옮긴다.

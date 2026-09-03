@@ -1,4 +1,4 @@
-import { BOARD, FACILITIES, GAME, STAGES, STORAGE_LEVELS, TIME } from './Constants.js';
+import { BOARD, FACILITIES, FACILITY_GROUPS, GAME, RESEARCH_EFFECTS, STAGES, STORAGE_LEVELS, TIME } from './Constants.js';
 import { CAMPAIGN_QUEST_INDEXES } from './CampaignProgression.js';
 import { roundCredits } from './Money.js';
 import { normalizeConstructionProject } from './ConstructionProject.js';
@@ -118,7 +118,7 @@ export class GameState {
     this.research = {
       jobs: {},
       completedIds: new Set(),
-      techLevels: { solar: 1, wind: 1, battery: 1, tidal: 0, green: 1 },
+      techLevels: { ...GAME.INITIAL_TECH_LEVELS },
       quizCreditQuestionIds: {},
     };
     this.carbonCrisisDays = 0;
@@ -321,13 +321,9 @@ export class GameState {
       this.research = {
         jobs: Object.fromEntries(Object.entries(data.research?.jobs || {}).map(([id, job]) => [id, { ...job }])),
         completedIds: new Set(data.research?.completedIds || []),
-        techLevels: {
-          solar: data.research?.techLevels?.solar ?? 1,
-          wind: data.research?.techLevels?.wind ?? 1,
-          battery: data.research?.techLevels?.battery ?? 1,
-          tidal: data.research?.techLevels?.tidal ?? 0,
-          green: data.research?.techLevels?.green ?? 1,
-        },
+        techLevels: Object.fromEntries(Object.entries(GAME.INITIAL_TECH_LEVELS).map(([type, initial]) => (
+          [type, data.research?.techLevels?.[type] ?? initial]
+        ))),
         quizCreditQuestionIds: structuredClone(data.research?.quizCreditQuestionIds || {}),
       };
       this.carbonCrisisDays = Math.max(0, Number(data.carbonCrisisDays) || 0);
@@ -358,7 +354,8 @@ export function normalizeCell(cell) {
   let batteryStoredLowCarbon = Math.max(0, Number(cell.batteryStoredLowCarbon) || 0);
   let batteryStoredFossil = Math.max(0, Number(cell.batteryStoredFossil) || 0);
   if (cell.type === 'battery') {
-    const capacity = (STORAGE_LEVELS[level]?.capacity || 0) * 1.3;
+    // 저장량 상한은 battery2 연구가 늘려 줄 수 있는 최대 용량(RESEARCH_EFFECTS.BATTERY_CAPACITY)까지 허용한다.
+    const capacity = (STORAGE_LEVELS[level]?.capacity || 0) * RESEARCH_EFFECTS.BATTERY_CAPACITY;
     const total = batteryStoredLowCarbon + batteryStoredFossil;
     if (total > capacity && total > 0) {
       const scale = capacity / total;
@@ -372,7 +369,7 @@ export function normalizeCell(cell) {
     type: cell.type,
     level,
     rotation: normalizeRotation(cell.rotation, cell.type),
-    priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
+    priority: cell.priority || (FACILITY_GROUPS.ESSENTIAL_DEFAULT.includes(cell.type) ? 'essential' : 'normal'),
     project: normalizedProject.valid && !normalizedProject.complete ? normalizedProject.project : null,
     ...(cell.type === 'battery' ? { batteryPolicy: cell.batteryPolicy || 'auto' } : {}),
     batteryStoredLowCarbon,

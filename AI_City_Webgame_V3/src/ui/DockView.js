@@ -1,4 +1,4 @@
-import { BOARD_TAP_COPY, ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, UI_FEEDBACK, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { BOARD_TAP_COPY, ECONOMY_RULES, FACILITIES, FACILITY_BUILD_ORDER, FACILITY_GROUPS, UI_FEEDBACK, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { facilityBuildAvailability, facilityUnlockMessage, selectFacility } from '../systems/BoardSystem.js';
 import { effectiveFacilityStats } from '../systems/CityModifierSystem.js';
@@ -31,8 +31,11 @@ export function initDockView(el, sharedDetailEl = null, sharedPanelEl = null) {
   // 접힌 독 상태에서 건설 버튼을 다시 누르면 패널을 닫는 대신 독을 다시 펼친다 —
   // 그래야 다른 시설로 바꾸려는 사람이 "버튼을 눌렀는데 아무 일도 없다"고 느끼지 않는다.
   eventBus.on(Events.HUD_PANEL_CLOSE_REQUESTED, (request) => {
-    if (request?.name !== 'build' || !collapsedForPlacement) return;
+    if (request?.name !== 'build') return;
+    if (!collapsedForPlacement && gameState.constructionPlan.length === 0) return;
     request.preventClose();
+    // 미리보기(무장 상태·대기 중인 계획)를 해제한 뒤 독을 다시 보여준다.
+    eventBus.emit(Events.BUILD_PREVIEW_CANCEL_REQUESTED, {});
     expandDock();
   });
   eventBus.on(Events.GAME_RESET, () => {
@@ -66,7 +69,7 @@ export function facilityPresentation(key) {
   const reference = effectiveFacilityStats({
     type: key,
     level: 1,
-    priority: ['residential', 'cooling'].includes(key) ? 'essential' : 'normal',
+    priority: FACILITY_GROUPS.ESSENTIAL_DEFAULT.includes(key) ? 'essential' : 'normal',
   });
   const labor = WORKFORCE_LEVELS[key];
   const baseResidentialTax = reference.income * ECONOMY_RULES.BASE_RESIDENTIAL_TAX_RATIO;

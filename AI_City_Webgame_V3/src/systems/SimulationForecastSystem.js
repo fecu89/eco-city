@@ -1,4 +1,5 @@
 import { GameState } from '../core/GameState.js';
+import { FACILITY_GROUPS, FORECAST_RULES } from '../core/Constants.js';
 import { eventBus } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
 import { createBuildProject, createUpgradeProject } from './ConstructionProjectSystem.js';
@@ -25,7 +26,7 @@ function activeProjects(state) {
 function forecastWarnings(result) {
   const warnings = [];
   const { summary } = result;
-  if (summary.deliveredPower + 0.001 < summary.demand) warnings.push('power_shortfall');
+  if (summary.deliveredPower + FORECAST_RULES.POWER_EPSILON_E < summary.demand) warnings.push('power_shortfall');
   if (summary.netCredits < 0) warnings.push('negative_income');
   if (summary.used > summary.capacity) warnings.push('workforce_shortage');
   if (summary.demand > 0 && summary.batteryStored <= 0) warnings.push('battery_empty');
@@ -37,7 +38,9 @@ function severityForDay(day) {
   const warnings = day.warnings.length;
   const powerGap = Math.max(0, day.summary.demand - day.summary.deliveredPower);
   const creditGap = Math.max(0, -day.summary.netCredits);
-  return warnings * 1000 + powerGap * 10 + creditGap;
+  // 경고 수 > 전력 부족량 > 적자 순으로 가장 나쁜 날을 고른다. 가중치는 settings.json FORECAST_RULES.SEVERITY_WEIGHTS.
+  const weights = FORECAST_RULES.SEVERITY_WEIGHTS;
+  return warnings * weights.WARNING + powerGap * weights.POWER_GAP + creditGap * weights.CREDIT_GAP;
 }
 
 function placePlannedProject(state, planned) {
@@ -52,7 +55,7 @@ function placePlannedProject(state, planned) {
     level: 1,
     // 예보는 계획에서 고른 방향 그대로 지어진 도시를 돌려봐야 한다.
     rotation: normalizeRotation(planned.rotation, type),
-    priority: ['residential', 'cooling'].includes(type) ? 'essential' : 'normal',
+    priority: FACILITY_GROUPS.ESSENTIAL_DEFAULT.includes(type) ? 'essential' : 'normal',
     ...(type === 'battery' ? {
       batteryPolicy: 'auto',
       batteryStoredLowCarbon: 0,

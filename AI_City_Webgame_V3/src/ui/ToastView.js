@@ -1,13 +1,19 @@
 import anime from 'animejs';
 import { eventBus, Events } from '../core/EventBus.js';
-import { UI_FEEDBACK } from '../core/Constants.js';
+import { UI_FEEDBACK, VISUAL } from '../core/Constants.js';
 import { prefersReducedMotion } from './motionPreference.js';
 
-const MAX_VISIBLE_TOASTS = 3;
+// 동시 표시 상한과 등장·퇴장 애니메이션 수치는 settings.json VISUAL.TOAST에 있다.
+const TOAST = VISUAL.TOAST;
+const MAX_VISIBLE_TOASTS = TOAST.MAX_VISIBLE;
 
 let stackEl = null;
 
 export function initToastView(el) {
+  eventBus.on(Events.TOAST_DISMISS, ({ kind }) => {
+    if (!stackEl || !kind) return;
+    [...stackEl.querySelectorAll(`.toast.${kind}`)].forEach((toast) => playToast(toast, false));
+  });
   stackEl = el;
   eventBus.on(Events.TOAST_SHOW, (options) => showToast(options));
   eventBus.on(Events.GAME_RESET, () => {
@@ -38,18 +44,18 @@ function priorityAnimation(div, entering) {
   return priority
     ? {
       targets: div,
-      scale: entering ? [0.96, 1] : [1, 0.96],
+      scale: entering ? [TOAST.PRIORITY_SCALE, 1] : [1, TOAST.PRIORITY_SCALE],
       opacity: entering ? [0, 1] : [1, 0],
-      duration: entering ? 300 : 240,
-      easing: entering ? 'easeOutCubic' : 'easeInCubic',
+      duration: entering ? TOAST.ENTER_MS : TOAST.EXIT_MS,
+      easing: entering ? TOAST.ENTER_EASING : TOAST.EXIT_EASING,
       complete: entering ? undefined : () => div.remove(),
     }
     : {
       targets: div,
-      translateX: entering ? [30, 0] : [0, 40],
+      translateX: entering ? [TOAST.SLIDE_IN_PX, 0] : [0, TOAST.SLIDE_OUT_PX],
       opacity: entering ? [0, 1] : [1, 0],
-      duration: entering ? 300 : 240,
-      easing: entering ? 'easeOutCubic' : 'easeInCubic',
+      duration: entering ? TOAST.ENTER_MS : TOAST.EXIT_MS,
+      easing: entering ? TOAST.ENTER_EASING : TOAST.EXIT_EASING,
       complete: entering ? undefined : () => div.remove(),
     };
 }

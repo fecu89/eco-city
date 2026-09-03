@@ -240,9 +240,14 @@ function runStress(state) {
   return state.stressTest.result;
 }
 
+// 핵발전은 Lv.2다. 소비 시설의 레벨별 수요 표(FACILITY_DEMAND_BY_LEVEL)로 주거지 Lv.2가
+// 2.48→4E를 쓰게 되면서 이 도시의 수요는 22→26E대로 올랐고, 하루치 수요 변동
+// (DEMAND_VARIATION)까지 얹히면 Lv.1 핵발전은 급전률이 98%까지 붙어 냉각수가 날마다
+// 흔들렸다 — 건조 위기의 물 한도가 "시험 시작일 사용량"이라 그 흔들림이 그대로 위반이 된다.
+// Lv.2로 올리면 발전 여유(28.12E)와 냉각 감축량(2×2=4)이 함께 커져 물이 평평해진다.
 const REFERENCE_CITY = Object.freeze([
   [19, 'tidal'], [1, 'battery', 1, { batteryStoredLowCarbon: 20 }],
-  [5, 'nuclear'], [25, 'solar'], [29, 'wind'],
+  [5, 'nuclear', 2], [25, 'solar'], [29, 'wind'],
   [0, 'data'], [6, 'cooling'], [4, 'factory'],
   [7, 'residential'], [36, 'residential'], [20, 'residential', 2], [8, 'residential', 2],
   [18, 'green'], [21, 'green'], [9, 'green', 2],
@@ -271,6 +276,8 @@ test('the 41-day reference city passes without green or residential level three'
 
   expect(state.grid.filter((cell) => cell?.type === 'green').map(({ level }) => level).sort()).toEqual([1, 1, 2]);
   expect(state.grid.filter((cell) => cell?.type === 'residential').map(({ level }) => level).sort()).toEqual([1, 1, 2, 2]);
+  // 늘어난 수요를 받치는 것은 Lv.2 핵발전이다 — 이 도시의 유일한 Lv.2 발전원이다.
+  expect(state.grid.filter((cell) => cell?.type === 'nuclear').map(({ level }) => level)).toEqual([2]);
   expect(result, JSON.stringify(result)).toMatchObject({ passed: true, days: 41 });
   // 건조 위기 5일은 데이터센터·핵발전 물을 15% 밀어올린다. 두 시설에 붙은 순환냉각이
   // 그만큼을 되돌려 주기 때문에 기준선을 그대로 지킨다.

@@ -1,0 +1,2806 @@
+{
+  "STAGES": {
+    "EXECUTION": 1,
+    "DIAGNOSIS": 4,
+    "REDESIGN": 5,
+    "REPORT": 6
+  },
+  "GAME": {
+    "INITIAL_CREDITS": 10,
+    "AUTOSAVE_KEY": "ai-city-save-v1",
+    "AUTOSAVE_DEBOUNCE_MS": 600,
+    "SIMULATION_SAVE_THROTTLE_MS": 10000,
+    "EVENT_SEED": 20400101,
+    "INITIAL_TECH_LEVELS": {
+      "solar": 1,
+      "wind": 1,
+      "battery": 1,
+      "tidal": 0,
+      "green": 1
+    },
+    "ONBOARDING_VERSION": 3
+  },
+  "BOARD": {
+    "INITIAL_RADIUS": 2,
+    "EXPANDED_RADIUS": 3,
+    "INITIAL_CELLS": 19,
+    "EXPANDED_CELLS": 37,
+    "HEX_SIZE": 0.56,
+    "MAX_CELLS": 37
+  },
+  "DIRECTION_RULES": {
+    "STEP_DEGREES": 45,
+    "DIRECTIONAL_TYPES": [
+      "solar",
+      "wind"
+    ],
+    "SOLAR_OPTIMAL": "S",
+    "SOLAR_FACTORS_BY_DEVIATION": [
+      1,
+      0.92,
+      0.72,
+      0.5,
+      0.38
+    ],
+    "WIND_FACTORS_BY_DEVIATION": [
+      1,
+      0.9,
+      0.7,
+      0.5,
+      0.35
+    ],
+    "DEFAULT_ROTATION": {
+      "solar": 4,
+      "wind": 0
+    },
+    "WIND_LOCAL_SPREAD": 2
+  },
+  "TIDAL_RULES": {
+    "RANGE_MIN_M": 2,
+    "RANGE_MAX_M": 8,
+    "REFERENCE_RANGE_M": 5,
+    "MIN_FACTOR": 0.5,
+    "MAX_FACTOR": 1.5
+  },
+  "BOARD_KEYBOARD": {
+    "MOVE_VECTORS": {
+      "ArrowRight": {
+        "x": 1,
+        "y": 0
+      },
+      "ArrowLeft": {
+        "x": -1,
+        "y": 0
+      },
+      "ArrowUp": {
+        "x": 0,
+        "y": -1
+      },
+      "ArrowDown": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    "AXIAL_FALLBACK": {
+      "ArrowRight": [
+        {
+          "q": 1,
+          "r": 0
+        },
+        {
+          "q": 1,
+          "r": -1
+        }
+      ],
+      "ArrowLeft": [
+        {
+          "q": -1,
+          "r": 0
+        },
+        {
+          "q": -1,
+          "r": 1
+        }
+      ],
+      "ArrowUp": [
+        {
+          "q": 0,
+          "r": -1
+        },
+        {
+          "q": 1,
+          "r": -1
+        }
+      ],
+      "ArrowDown": [
+        {
+          "q": 0,
+          "r": 1
+        },
+        {
+          "q": -1,
+          "r": 1
+        }
+      ]
+    },
+    "HOME_KEY": "Home",
+    "CLEAR_KEY": "Escape",
+    "ACTIVATE_KEYS": [
+      "Enter",
+      " ",
+      "Spacebar"
+    ],
+    "ROTATE_KEY": "r",
+    "HOME_INDEX": 0,
+    "MIN_DIRECTION_DOT": 0.2
+  },
+  "CALENDAR": {
+    "START_YEAR": 2040,
+    "START_MONTH": 1,
+    "START_DAY": 1,
+    "MS_PER_GAME_DAY": 86400000,
+    "HOURS_PER_DAY": 24
+  },
+  "TIME": {
+    "BASE_DAY_MS": 1000,
+    "ALLOWED_SCALES": [
+      0,
+      1,
+      2,
+      4
+    ],
+    "DEFAULT_SCALE": 1,
+    "FAST_SCALE": 4
+  },
+  "SCORING": {
+    "SYNERGY": {
+      "FACTORY_NEXT_TO_POWER_PER_LEVEL": 12,
+      "DATA_NEXT_TO_COOLING_PER_LEVEL": 10,
+      "RESIDENTIAL_NEXT_TO_GREEN_PER_LEVEL": 4,
+      "BATTERY_HUB_PER_LEVEL": 3,
+      "NUCLEAR_NEXT_TO_COOLING": 2
+    },
+    "CONFLICT_DEV_PENALTY": {
+      "HEAVY_NEXT_TO_RESIDENTIAL": 3,
+      "NUCLEAR_NEXT_TO_RESIDENTIAL": 4,
+      "DATA_NEXT_TO_RESIDENTIAL": 2
+    },
+    "RENEWABLE_PENALTY_RATIO": {
+      "LINKED": 0.05,
+      "UNLINKED": 0.25
+    },
+    "SUSTAINABILITY": {
+      "BASE": 100,
+      "CARBON_WEIGHT": 3.6,
+      "FREE_WATER": 10,
+      "WATER_WEIGHT": 2.5,
+      "OVERLOAD_WEIGHT": 6,
+      "CONFLICT_WEIGHT": 4
+    },
+    "RELIABILITY": {
+      "BASE": 68,
+      "BALANCE_WEIGHT": 3,
+      "LINKED_RENEWABLE_WEIGHT": 6,
+      "HEAT_CLUSTER_WEIGHT": 5
+    }
+  },
+  "UPGRADE_COST_RATIOS": {
+    "FROM_LEVEL_1": 1,
+    "FROM_LEVEL_2_PLUS": 1.45
+  },
+  "DEMOLITION_REFUND_RATIO": 0.5,
+  "CONSTRUCTION": {
+    "BUILD_DAYS": {
+      "green": 3,
+      "residential": 5,
+      "solar": 6,
+      "factory": 8,
+      "wind": 8,
+      "cooling": 8,
+      "data": 10,
+      "battery": 10,
+      "thermal": 12,
+      "tidal": 15,
+      "nuclear": 18
+    },
+    "UPGRADE_DAYS": {
+      "1": 8,
+      "2": 15
+    },
+    "UPGRADE_RATIOS": {
+      "1": 0.7,
+      "2": 0.5
+    },
+    "REFUND_RATIOS": {
+      "EARLY": 0.8,
+      "MID": 0.65,
+      "LATE": 0.5
+    },
+    "STAGE_THRESHOLDS": {
+      "SHELL": 0.7,
+      "SKELETON": 0.3
+    },
+    "REFUND_BOUNDARIES": {
+      "EARLY_BELOW": 0.25,
+      "MID_BELOW": 0.75
+    },
+    "UPGRADE_PROFILE": {
+      "residential": {
+        "dev": 0.8,
+        "supply": 0.8,
+        "demand": 0.8,
+        "income": 0.8,
+        "carbon": 0.8,
+        "water": 0.8,
+        "researchSpeed": 0.8,
+        "workforce": 0.8,
+        "functionality": 0.8
+      },
+      "data": {
+        "demand": 0.7,
+        "income": 0.6,
+        "carbon": 0.7,
+        "water": 0.7,
+        "researchSpeed": 0,
+        "functionality": 0.7
+      },
+      "battery": {
+        "batteryThroughput": 0.5
+      }
+    }
+  },
+  "CAMPAIGN_PACING": {
+    "humanMinutes": {
+      "min": 15,
+      "target": 25,
+      "max": 30
+    },
+    "phases": [
+      {
+        "id": "tutorial",
+        "startMinute": 0,
+        "endMinute": 7
+      },
+      {
+        "id": "expansion",
+        "startMinute": 7,
+        "endMinute": 14
+      },
+      {
+        "id": "operations",
+        "startMinute": 14,
+        "endMinute": 22
+      },
+      {
+        "id": "stress-test",
+        "startMinute": 22,
+        "endMinute": 27
+      },
+      {
+        "id": "report",
+        "startMinute": 27,
+        "endMinute": 30
+      }
+    ],
+    "representativeWindows": [
+      {
+        "startMinute": 9,
+        "endMinute": 11,
+        "decisions": [
+          "generation-or-storage",
+          "research-branch",
+          "upgrade-or-expand"
+        ]
+      },
+      {
+        "startMinute": 14,
+        "endMinute": 16,
+        "decisions": [
+          "facility-priority",
+          "battery-reserve",
+          "research-continue-or-pause"
+        ]
+      },
+      {
+        "startMinute": 20,
+        "endMinute": 22,
+        "decisions": [
+          "event-response",
+          "facility-priority",
+          "stress-preparation"
+        ]
+      }
+    ]
+  },
+  "EVENT_FORECAST_DAYS": 24,
+  "EVENT_GAP_DAYS": 3,
+  "AUDIO": {
+    "BGM_URL": "/assets/eco-city.mp3",
+    "BGM_GAIN": 0.16,
+    "SFX_GAIN": 0.03,
+    "SFX_RAMP_FLOOR": 0.0001,
+    "SFX": {
+      "place": {
+        "freq": 540,
+        "duration": 0.055
+      },
+      "upgrade": {
+        "freq": 820,
+        "duration": 0.08
+      },
+      "demolish": {
+        "freq": 300,
+        "duration": 0.06
+      },
+      "correct": {
+        "freq": 720,
+        "duration": 0.07
+      },
+      "wrong": {
+        "freq": 220,
+        "duration": 0.09
+      },
+      "click": {
+        "freq": 540,
+        "duration": 0.04
+      }
+    }
+  },
+  "QUEST_REQUIREMENTS": {
+    "OPERATING_DAYS": 2,
+    "FIRST_RESIDENTIAL_COUNT": 2,
+    "FIRST_GREEN_COUNT": 1,
+    "WATER_CYCLE_POWER_RATIO": 0.9,
+    "TRANSITION_LOW_CARBON_PERCENT": 40,
+    "TRANSITION_CARBON_MAX": 12,
+    "FACTORY_LINK_MIN_RATIO": 0.5,
+    "MODERNIZATION_LEVEL": 2,
+    "MODERNIZATION_PROGRESS_WEIGHTS": {
+      "DATA_CENTER": 0.5,
+      "SMART_GRID": 0.5
+    }
+  },
+  "FACILITY_BUILD_ORDER": [
+    "residential",
+    "green",
+    "factory",
+    "thermal",
+    "data",
+    "nuclear",
+    "cooling",
+    "solar",
+    "battery",
+    "wind",
+    "tidal"
+  ],
+  "FACILITY_LIMITS_BY_QUEST": {
+    "1": {
+      "residential": 2
+    },
+    "2": {
+      "residential": 3,
+      "factory": 1,
+      "thermal": 1
+    },
+    "3": {
+      "residential": 4,
+      "factory": 2,
+      "green": 1
+    },
+    "4": {
+      "residential": 5,
+      "thermal": 2,
+      "data": 1
+    },
+    "5": {
+      "nuclear": 1
+    },
+    "6": {
+      "residential": 6,
+      "factory": 3,
+      "data": 2,
+      "cooling": 2,
+      "green": 2
+    },
+    "7": {
+      "residential": 7,
+      "solar": 2,
+      "wind": 2,
+      "battery": 2
+    },
+    "8": {
+      "data": 2,
+      "solar": 3,
+      "wind": 2
+    },
+    "9": {
+      "data": 3,
+      "wind": 3,
+      "green": 3
+    },
+    "10": {
+      "residential": 8,
+      "tidal": 1,
+      "battery": 3
+    },
+    "13": {
+      "residential": 8,
+      "factory": 4,
+      "data": 3,
+      "cooling": 3,
+      "wind": 2,
+      "green": 3
+    },
+    "14": {
+      "nuclear": 2,
+      "solar": 4,
+      "battery": 3,
+      "wind": 3
+    },
+    "15": {
+      "residential": 9,
+      "green": 5,
+      "tidal": 1
+    },
+    "16": {
+      "factory": 5,
+      "data": 4,
+      "cooling": 4,
+      "solar": 5,
+      "wind": 4,
+      "tidal": 2
+    },
+    "17": {
+      "residential": 10,
+      "battery": 4,
+      "green": 6
+    },
+    "18": {
+      "cooling": 5,
+      "solar": 6,
+      "wind": 5,
+      "green": 7,
+      "tidal": 3
+    },
+    "19": {}
+  },
+  "RESEARCH_RULES": {
+    "DATA_CENTER_SPEED": [
+      0,
+      1,
+      1.25,
+      1.5
+    ],
+    "POWER_THRESHOLD": 0.9,
+    "EXTRA_DEMAND": 2,
+    "CANCEL_REFUND_RATIO": 0.5,
+    "GAME_DAYS_PER_REAL_MINUTE": 60,
+    "QUIZ_QUESTION_COUNT": 4,
+    "DURATION_DAYS": {
+      "STANDARD": 120,
+      "ADVANCED": 150,
+      "CAPSTONE": 180
+    },
+    "DATA_CENTER_SURPLUS_BONUS": {
+      "MIN_LEVEL": 3,
+      "MIN_SURPLUS_E": 3,
+      "SPEED_MULTIPLIER": 1.25
+    }
+  },
+  "DAILY_CARBON_TARGETS": {
+    "FOUNDATION": 12,
+    "PREPARATION": 10,
+    "CLIMATE": 8
+  },
+  "CARBON_CRISIS": {
+    "SAFE_DAILY": 10,
+    "GAME_OVER_DAYS": 168,
+    "RECOVERY_PER_SAFE_DAY": 2,
+    "WARNING_DAYS": [
+      24,
+      72,
+      144
+    ],
+    "ACTIVE_AFTER_QUEST": 5,
+    "TIERS": {
+      "extreme": {
+        "healthMultiplier": 1.5,
+        "residentialIncomeMultiplier": 0.9,
+        "waterMultiplier": 1.05,
+        "reportPenalty": 5
+      },
+      "severe": {
+        "healthMultiplier": 1.5,
+        "residentialIncomeMultiplier": 0.9,
+        "waterMultiplier": 1.05,
+        "reportPenalty": 5
+      },
+      "danger": {
+        "healthMultiplier": 1.5,
+        "residentialIncomeMultiplier": 0.9,
+        "waterMultiplier": 1.05,
+        "reportPenalty": 0
+      },
+      "watch": {
+        "healthMultiplier": 1.25,
+        "residentialIncomeMultiplier": 1,
+        "waterMultiplier": 1,
+        "reportPenalty": 0
+      },
+      "normal": {
+        "healthMultiplier": 1,
+        "residentialIncomeMultiplier": 1,
+        "waterMultiplier": 1,
+        "reportPenalty": 0
+      }
+    }
+  },
+  "CITY_FAILURE_RULES": {
+    "ACTIVE_AFTER_QUEST_ID": "power-on",
+    "ACTIVE_AFTER_QUEST_INDEX": 2,
+    "CREDIT_WARNING_DAYS": 6,
+    "CREDIT_PAUSE_DAYS": 12,
+    "CREDIT_GAME_OVER_DAYS": 24,
+    "ESSENTIAL_WARNING_DAYS": 3,
+    "ESSENTIAL_PAUSE_DAYS": 6,
+    "ESSENTIAL_GAME_OVER_DAYS": 12,
+    "ESSENTIAL_BLACKOUT_PERCENT": 5
+  },
+  "EMERGENCY_SUPPORT": {
+    "CREDIT_THRESHOLD": 1,
+    "GRANT": 4,
+    "ECONOMY_SCORE_PENALTY": 2
+  },
+  "POWER_RULES": {
+    "LOSS_PER_EXTRA_TILE": 0.06,
+    "MIN_EFFICIENCY": 0.55,
+    "HUB_EFFICIENCY": 0.95,
+    "BATTERY_OPERATION_MIN_RATIO": 0.9,
+    "CONSUMER_TYPE_ORDER": {
+      "residential": 0,
+      "cooling": 1,
+      "data": 2,
+      "factory": 3
+    },
+    "DELIVERY_EPSILON_E": 0.1,
+    "OUTAGE_RATIO": 0.9,
+    "PRIORITY_ORDER": {
+      "essential": 0,
+      "normal": 1,
+      "saving": 2
+    }
+  },
+  "GRID_RESERVE_RULES": {
+    "BATTERY_SUBSTITUTE_QUEST_ID": "extreme-heat"
+  },
+  "WATER_RULES": {
+    "DEFAULT_BASELINE": 10
+  },
+  "STRESS_TEST_RULES": {
+    "PHASE_DAYS": {
+      "BASELINE": 3,
+      "HEAT_DOME": 6,
+      "MONSOON_FRONT": 5,
+      "COASTAL_SUPERSTORM": 6,
+      "WINTER_DISASTER": 6,
+      "STAGNANT_AIR": 5,
+      "DRY_EMERGENCY": 5,
+      "RECOVERY": 5
+    },
+    "CONSTRUCTION_COST_MULTIPLIER": 1.2,
+    "PASS_ESSENTIAL_SUPPLY_PERCENT": 82,
+    "MINIMUM_ESSENTIAL_SUPPLY_PERCENT": 50,
+    "BANKRUPTCY_FAILURE_DAYS": 4,
+    "HEALTHY_ESSENTIAL_SUPPLY_PERCENT": 90,
+    "SAFE_CARBON_RATE": 8,
+    "HIGH_CARBON_RATE": 10,
+    "MIN_SAFE_CARBON_DAYS": 35,
+    "MAX_HIGH_CARBON_DAYS": 3,
+    "MAX_AVERAGE_CARBON": 8,
+    "MAX_WATER_VIOLATION_DAYS": 3,
+    "RECOVERY_DEADLINE_DAYS": 3,
+    "MIN_TIDAL_DELIVERY": 8,
+    "DEFAULT_WATER_LIMIT": 10
+  },
+  "STORAGE_LEVELS": {
+    "1": {
+      "capacity": 20,
+      "throughput": 8
+    },
+    "2": {
+      "capacity": 35,
+      "throughput": 12
+    },
+    "3": {
+      "capacity": 50,
+      "throughput": 16
+    }
+  },
+  "COOLING_RULES": {
+    "TARGET_WATER_REDUCTION_PER_LEVEL": {
+      "data": 4,
+      "nuclear": 2
+    },
+    "LEVEL_TWO_EFFECT_MULTIPLIER": 1.25,
+    "EXTENDED_RANGE_LEVEL": 3,
+    "EXTENDED_RANGE_DISTANCE": 2,
+    "EXTENDED_RANGE_MULTIPLIER": 0.5,
+    "BONUS_LEVEL": 2
+  },
+  "FACILITY_ECONOMY": {
+    "residential": {
+      "income": 0.5,
+      "upkeep": 0
+    },
+    "factory": {
+      "income": 1,
+      "upkeep": 0
+    },
+    "data": {
+      "income": 2,
+      "upkeep": 0
+    },
+    "thermal": {
+      "income": 0,
+      "upkeep": 0.5
+    },
+    "nuclear": {
+      "income": 0,
+      "upkeep": 1
+    },
+    "solar": {
+      "income": 0,
+      "upkeep": 0.1
+    },
+    "wind": {
+      "income": 0,
+      "upkeep": 0.1
+    },
+    "battery": {
+      "income": 0,
+      "upkeep": 0.2
+    },
+    "cooling": {
+      "income": 0,
+      "upkeep": 0.2
+    },
+    "green": {
+      "income": 0,
+      "upkeep": 0.1
+    },
+    "tidal": {
+      "income": 0,
+      "upkeep": 0.3
+    }
+  },
+  "WORKFORCE_RULES": {
+    "REBALANCE_GRACE_DAYS": 24
+  },
+  "WORKFORCE_LEVELS": {
+    "residential": [
+      0,
+      6,
+      10,
+      15
+    ],
+    "factory": [
+      0,
+      4,
+      6,
+      8
+    ],
+    "thermal": [
+      0,
+      3,
+      4,
+      5
+    ],
+    "data": [
+      0,
+      4,
+      6,
+      8
+    ],
+    "nuclear": [
+      0,
+      6,
+      8,
+      10
+    ],
+    "solar": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "wind": [
+      0,
+      2,
+      3,
+      4
+    ],
+    "battery": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "cooling": [
+      0,
+      2,
+      3,
+      4
+    ],
+    "green": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "tidal": [
+      0,
+      3,
+      4,
+      5
+    ]
+  },
+  "ECONOMY_RULES": {
+    "STOP_POWER_RATIO": 0.25,
+    "BASE_RESIDENTIAL_TAX_RATIO": 0.25,
+    "OVERCROWDING_FREE_COUNT": 3,
+    "OVERCROWDING_COST_RATE": 0.1,
+    "POLLUTION_HEALTH_COST": 0.4,
+    "POLLUTION_TAX_MULTIPLIER": 0.5,
+    "CARBON_SAFE_RATE": 10,
+    "CLIMATE_RECOVERY_RATE": 0.25,
+    "UPKEEP_LEVEL_MULTIPLIERS": [
+      0,
+      1,
+      1.4,
+      1.8
+    ],
+    "GENERATION_IDLE_EMISSION_RATIO": 0.5
+  },
+  "RESEARCH_TUNING": {
+    "LOW_WIND_SUPPLY_BASE": 0.35,
+    "LOW_WIND_SUPPLY_RESEARCHED": 0.5
+  },
+  "LEVEL_MULTIPLIERS": {
+    "output": [
+      0,
+      1,
+      1.48,
+      1.92
+    ],
+    "demand": [
+      0,
+      1,
+      1.24,
+      1.45
+    ],
+    "impact": [
+      0,
+      1,
+      1.16,
+      1.3
+    ],
+    "negative": [
+      0,
+      1,
+      1.35,
+      1.65
+    ]
+  },
+  "FACILITY_DEMAND_BY_LEVEL": {
+    "residential": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "factory": [
+      0,
+      4,
+      6,
+      8
+    ],
+    "data": [
+      0,
+      8,
+      12,
+      16
+    ],
+    "cooling": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "battery": [
+      0,
+      1,
+      1.5,
+      2
+    ]
+  },
+  "FACILITY_WATER_BY_LEVEL": {
+    "residential": [
+      0,
+      1,
+      1.6,
+      2.4
+    ]
+  },
+  "WEATHER_RULES": {
+    "HOLD_DAYS": 5,
+    "BASE_KINDS": [
+      "clear",
+      "cloudy",
+      "precipitation"
+    ],
+    "INITIAL_KIND": "clear",
+    "TRANSITIONS": {
+      "clear": {
+        "clear": 0.6,
+        "cloudy": 0.3,
+        "precipitation": 0.1
+      },
+      "cloudy": {
+        "clear": 0.35,
+        "cloudy": 0.4,
+        "precipitation": 0.25
+      },
+      "precipitation": {
+        "clear": 0.25,
+        "cloudy": 0.45,
+        "precipitation": 0.3
+      }
+    },
+    "SNOW_MONTHS": [
+      12,
+      1,
+      2
+    ],
+    "SOLAR_FACTOR_RANGE": {
+      "clear": [
+        1,
+        1.2
+      ],
+      "cloudy": [
+        0.1,
+        0.9
+      ],
+      "precipitation": [
+        0,
+        0
+      ]
+    },
+    "WIND": {
+      "SPEED_MIN_MS": 4.5,
+      "SPEED_MAX_MS": 16,
+      "SMOOTHING_DAYS": 2,
+      "CUT_IN_MS": 3,
+      "RATED_MS": 12,
+      "MAX_FACTOR": 1.2,
+      "CUT_OUT_MS": 15
+    },
+    "EVENT_WEATHER": {
+      "heatwave": {
+        "kind": "clear"
+      },
+      "monsoon": {
+        "kind": "rain"
+      },
+      "typhoon": {
+        "kind": "rain"
+      },
+      "coldWave": {
+        "kind": "snow"
+      },
+      "drought": {
+        "kind": "clear"
+      },
+      "stagnantAir": {
+        "kind": "cloudy",
+        "windSpeedMs": 2
+      },
+      "dryWildfire": {
+        "kind": "clear"
+      },
+      "stormSurge": {
+        "kind": "rain"
+      },
+      "heatDome": {
+        "kind": "clear"
+      },
+      "monsoonFront": {
+        "kind": "rain"
+      },
+      "coastalSuperstorm": {
+        "kind": "rain"
+      },
+      "winterDisaster": {
+        "kind": "snow"
+      },
+      "dryEmergency": {
+        "kind": "clear"
+      }
+    }
+  },
+  "DEMAND_VARIATION": {
+    "AMPLITUDE": 0.08,
+    "HOLD_DAYS": 5,
+    "SMOOTHING_DAYS": 3
+  },
+  "FACILITIES": {
+    "residential": {
+      "cost": 2,
+      "dev": 5,
+      "demand": 2,
+      "supply": 0,
+      "carbon": 0,
+      "water": 1,
+      "unlockStage": "EXECUTION",
+      "maxLevel": 3
+    },
+    "factory": {
+      "cost": 4,
+      "dev": 2,
+      "demand": 4,
+      "supply": 0,
+      "carbon": 2,
+      "water": 1,
+      "unlockStage": "EXECUTION",
+      "maxLevel": 3
+    },
+    "data": {
+      "cost": 6,
+      "dev": 10,
+      "demand": 8,
+      "supply": 0,
+      "carbon": 0,
+      "water": 5,
+      "unlockStage": "EXECUTION",
+      "maxLevel": 3
+    },
+    "thermal": {
+      "cost": 5,
+      "dev": 3,
+      "demand": 0,
+      "supply": 13,
+      "carbon": 8,
+      "water": 2,
+      "unlockStage": "EXECUTION",
+      "maxLevel": 3
+    },
+    "nuclear": {
+      "cost": 8,
+      "dev": 3,
+      "demand": 0,
+      "supply": 19,
+      "carbon": 1,
+      "water": 5,
+      "unlockStage": "EXECUTION",
+      "maxLevel": 3
+    },
+    "solar": {
+      "cost": 5,
+      "dev": 3,
+      "demand": 0,
+      "supply": 7,
+      "carbon": 0,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3
+    },
+    "wind": {
+      "cost": 5,
+      "dev": 3,
+      "demand": 0,
+      "supply": 8,
+      "carbon": 0,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3
+    },
+    "battery": {
+      "cost": 4,
+      "dev": 2,
+      "demand": 1,
+      "supply": 0,
+      "carbon": 0,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3
+    },
+    "cooling": {
+      "cost": 4,
+      "dev": 1,
+      "demand": 1,
+      "supply": 0,
+      "carbon": 0,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3
+    },
+    "green": {
+      "cost": 2,
+      "dev": 1,
+      "demand": 0,
+      "supply": 0,
+      "carbon": -1,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3
+    },
+    "tidal": {
+      "cost": 7,
+      "dev": 3,
+      "demand": 0,
+      "supply": 10,
+      "carbon": 0,
+      "water": 0,
+      "unlockStage": "REDESIGN",
+      "maxLevel": 3,
+      "placement": "coastal"
+    }
+  },
+  "REPORT_TIERS": [
+    {
+      "min": 85
+    },
+    {
+      "min": 70
+    },
+    {
+      "min": 0
+    }
+  ],
+  "REPORT_RULES": {
+    "AXIS_WEIGHTS": {
+      "powerStability": 30,
+      "environment": 20,
+      "economy": 20,
+      "resourceUse": 15,
+      "operatingResponse": 15
+    },
+    "QUIZ_POINTS_PER_CORRECT": 2.5,
+    "QUIZ_MAX_BONUS": 10,
+    "PROFILE": {
+      "renewable": {
+        "lowCarbon": 75,
+        "renewable": 60,
+        "batteryEnergy": 10,
+        "batteryShare": 10
+      },
+      "stable": {
+        "outageRate": 2,
+        "reserveMargin": 15,
+        "nuclearShare": 35
+      },
+      "smart": {
+        "transmissionEfficiency": 92,
+        "decisions": 3,
+        "peakRatio": 1.2
+      },
+      "industrial": {
+        "netIncome": 4,
+        "factoryIncomeShare": 35
+      }
+    },
+    "AXIS_MIX": {
+      "powerStability": {
+        "averageEssentialSupply": 0.5,
+        "outageSafety": 0.3,
+        "minimumEssentialSupply": 0.2
+      },
+      "environment": {
+        "lowCarbonPercent": 0.65,
+        "carbonSafety": 0.35
+      },
+      "economy": {
+        "incomeHealth": 0.7,
+        "creditRecovery": 0.3
+      },
+      "resourceUse": {
+        "transmissionEfficiency": 0.6,
+        "waterSafety": 0.25,
+        "socialSafety": 0.15
+      },
+      "operatingResponse": {
+        "decisions": 0.5,
+        "recovery": 0.3,
+        "reserve": 0.2
+      }
+    },
+    "NORMALIZE": {
+      "INCOME_OFFSET": 2,
+      "INCOME_RANGE": 7,
+      "CREDIT_RECOVERY_FULL": 20,
+      "SOCIAL_COST_FULL_PER_DAY": 2,
+      "DECISION_FULL_COUNT": 5,
+      "RECOVERY_MAX_DAYS": 5,
+      "RECOVERY_RANGE_DAYS": 4,
+      "RESERVE_FULL_E": 10,
+      "FALLBACK_RECOVERY_DAYS": 4
+    }
+  },
+  "VISUAL": {
+    "WORLD_DAY_LIGHTING": {
+      "SUN_INTENSITY": 1.22,
+      "HEMISPHERE_INTENSITY": 1.08,
+      "RIM_INTENSITY": 0.3
+    },
+    "HEX_TILE_VISUALS": {
+      "cityCoverage": 1.006,
+      "landCoverage": 1.006,
+      "shoreCoverage": 1.012,
+      "waterCoverage": 1.03
+    },
+    "ISLAND_LAYER_ELEVATIONS": {
+      "land": -0.19,
+      "shore": -0.12,
+      "shoreWaterSupport": -0.22,
+      "water": -0.12,
+      "ocean": -0.16,
+      "ship": -0.015
+    },
+    "CHART_MOTION": {
+      "ACTIVE_INTERVAL_FRACTION": 0.9,
+      "EASING": "linear"
+    },
+    "GRID_EXPANSION_SETTLE_MS": 4200,
+    "CITY_CAMERA": {
+      "FOV": 42,
+      "NEAR": 0.1,
+      "FAR": 100,
+      "DISTANCE_PER_GRID": 1.55,
+      "POSITION_RATIO": [
+        0.62,
+        0.92,
+        0.78
+      ],
+      "MIN_DISTANCE_PER_GRID": 0.72,
+      "MAX_DISTANCE_PER_GRID": 2.8,
+      "MIN_POLAR_ANGLE": 0.32,
+      "DAMPING_FACTOR": 0.075,
+      "PAN_MARGIN": 0.75,
+      "DRAG_THRESHOLD_PX": 7,
+      "TAP_THRESHOLD_TOUCH_PX": 14,
+      "MIN_DISTANCE_PER_GRID_PORTRAIT": 0.95,
+      "DEFAULT_POSE_TOLERANCE": 0.02,
+      "DOUBLE_TAP_MS": 350,
+      "DOUBLE_TAP_RADIUS_PX": 24,
+      "GROUND_PLANE_SIZE": 18,
+      "GROUND_PLANE_OFFSET": [
+        2.25,
+        2.8
+      ],
+      "BOARD_SPAN_PADDING_HEX": 2,
+      "TARGET_Y_MAX": 1.25,
+      "PORTRAIT_FIT_MAX": 1.32,
+      "PORTRAIT_FIT_GAIN": 1.08,
+      "FIT_EPSILON": 0.001,
+      "DEFAULT_POSE_TOLERANCE_MIN": 0.01
+    },
+    "CITY_MOTION": {
+      "PLACE_MS": 480,
+      "UPGRADE_MS": 520,
+      "DEMOLISH_MS": 320,
+      "SELECT_PULSE_MS": 1400
+    },
+    "LOADING_SCREEN": {
+      "MAX_WAIT_MS": 3500,
+      "DONE_DELAY_MS": 300
+    },
+    "CITY_WORLD_OVERLAY": {
+      "CONSTRUCTION_HUD_MIN_PROGRESS_DELTA": 0.005,
+      "OX_WIDGET_MARGIN": {
+        "x": 60,
+        "top": 70,
+        "bottom": 20
+      },
+      "CONSTRUCTION_HUD_MARGIN": {
+        "x": 56,
+        "top": 34,
+        "bottom": 12
+      },
+      "CONSTRUCTION_HUD_HEIGHT": 1.02,
+      "OX_WIDGET_HEIGHT": 1.02
+    },
+    "CITY_AMBIENT": {
+      "RESIDENT_AGENTS_PER_CELL": 2,
+      "PERSON_ORBIT_RADIUS": 0.35,
+      "PERSON_ANGLE_PER_CELL": 0.61,
+      "PERSON_SCALE": [
+        0.045,
+        0.16,
+        0.045
+      ],
+      "CAR_ORBIT_RADIUS": 0.39,
+      "CAR_ANGLE_PER_CELL": 0.37,
+      "CAR_SCALE": [
+        0.12,
+        0.045,
+        0.065
+      ],
+      "BIRD_BASE_HEIGHT": 0.88,
+      "BIRD_SCALE": [
+        0.09,
+        0.018,
+        0.035
+      ],
+      "PERSON_HEIGHT": 0.19,
+      "CAR_HEIGHT": 0.16,
+      "BIRD_POOL_SIZE": 3,
+      "BIRD_MIN_COUNT": 2,
+      "BIRD_VISIT_MS": 2000,
+      "BIRD_DELAY_MIN_MS": 10000,
+      "BIRD_DELAY_MAX_MS": 30000,
+      "BIRD_PATH": {
+        "startX": -0.7,
+        "spanX": 1.4,
+        "laneSpacing": 0.18,
+        "weave": 0.08,
+        "arcHeight": 0.28,
+        "stackHeight": 0.04
+      }
+    },
+    "GREEN_VISUAL_LAYOUTS": {
+      "1": [
+        {
+          "kind": "tree",
+          "x": -0.18,
+          "z": -0.08,
+          "radius": 0.105,
+          "height": 0.22,
+          "rotation": 0.2
+        },
+        {
+          "kind": "tree",
+          "x": 0.16,
+          "z": 0.1,
+          "radius": 0.09,
+          "height": 0.18,
+          "rotation": -0.35
+        }
+      ],
+      "2": [
+        {
+          "kind": "tree",
+          "x": -0.2,
+          "z": -0.09,
+          "radius": 0.105,
+          "height": 0.23,
+          "rotation": 0.25
+        },
+        {
+          "kind": "tree",
+          "x": 0.17,
+          "z": -0.08,
+          "radius": 0.095,
+          "height": 0.2,
+          "rotation": -0.2
+        },
+        {
+          "kind": "tree",
+          "x": 0.02,
+          "z": 0.19,
+          "radius": 0.085,
+          "height": 0.18,
+          "rotation": 0.55
+        },
+        {
+          "kind": "bush",
+          "x": -0.2,
+          "z": 0.17,
+          "radius": 0.09,
+          "height": 0.09,
+          "rotation": 0.1
+        }
+      ],
+      "3": [
+        {
+          "kind": "tree",
+          "x": -0.21,
+          "z": -0.11,
+          "radius": 0.105,
+          "height": 0.24,
+          "rotation": 0.25
+        },
+        {
+          "kind": "tree",
+          "x": 0.2,
+          "z": -0.1,
+          "radius": 0.1,
+          "height": 0.22,
+          "rotation": -0.2
+        },
+        {
+          "kind": "tree",
+          "x": -0.05,
+          "z": 0.21,
+          "radius": 0.095,
+          "height": 0.21,
+          "rotation": 0.55
+        },
+        {
+          "kind": "tree",
+          "x": 0.05,
+          "z": -0.02,
+          "radius": 0.08,
+          "height": 0.18,
+          "rotation": -0.6
+        },
+        {
+          "kind": "bush",
+          "x": -0.23,
+          "z": 0.18,
+          "radius": 0.1,
+          "height": 0.095,
+          "rotation": 0.1
+        },
+        {
+          "kind": "bush",
+          "x": 0.23,
+          "z": 0.15,
+          "radius": 0.085,
+          "height": 0.08,
+          "rotation": -0.45
+        }
+      ]
+    },
+    "CITY_AMBIENT_MOTION": {
+      "MIN_DELAY_MS": 2500,
+      "MAX_DELAY_MS": 5000,
+      "FRAME_INTERVAL_MS": 100,
+      "MAX_ACTIVE_EFFECTS": 3,
+      "MIN_DURATION_MS": 600,
+      "MAX_DURATION_MS": 1600,
+      "MAX_SMOKE_INSTANCES": 18,
+      "SMOKE_TYPES": [
+        "factory",
+        "thermal",
+        "nuclear"
+      ],
+      "STATUS_LIGHTS_PER_EFFECT": 2,
+      "SMOKE_OPACITY": 0.52,
+      "SMOKE": {
+        "factory": {
+          "particles": 3,
+          "durationMs": [
+            1800,
+            3000
+          ],
+          "stackOffset": [
+            0.13,
+            -0.08
+          ],
+          "heightPadding": 0.02,
+          "rise": 0.48,
+          "baseScale": 0.06,
+          "growth": 0.075,
+          "wander": 0.045
+        },
+        "thermal": {
+          "particles": 6,
+          "durationMs": [
+            2400,
+            4000
+          ],
+          "stackOffset": [
+            0,
+            0
+          ],
+          "heightPadding": 0.04,
+          "rise": 0.72,
+          "baseScale": 0.075,
+          "growth": 0.12,
+          "wander": 0.065
+        },
+        "nuclear": {
+          "particles": 3,
+          "durationMs": [
+            1800,
+            3000
+          ],
+          "stackOffset": [
+            0,
+            0
+          ],
+          "heightPadding": 0.03,
+          "rise": 0.56,
+          "baseScale": 0.075,
+          "growth": 0.09,
+          "wander": 0.05
+        }
+      },
+      "STATUS_BASE_HEIGHT": 0.38,
+      "STATUS_ORBIT_RADIUS": 0.25,
+      "STATUS_SCALE": [
+        0.035,
+        0.025,
+        0.02
+      ],
+      "WIND_TURNS_PER_EFFECT": 1.25,
+      "STATUS_PULSE": {
+        "base": 0.82,
+        "amplitude": 0.18
+      }
+    },
+    "UI_FEEDBACK": {
+      "TOAST_MS": 2800,
+      "QUEST_ALERT_MS": 7000,
+      "QUEST_CELEBRATION_MS": 3200,
+      "QUEST_BURST_PARTICLES": 12,
+      "TAP_FLASH_MS": 220,
+      "TAP_VIBRATE_MS": 10,
+      "PLACEMENT_HINT_MS": 2600
+    },
+    "CITY_ASSETS": {
+      "residential": {
+        "height": 0.68
+      },
+      "factory": {
+        "height": 0.66
+      },
+      "data": {
+        "height": 0.82
+      },
+      "thermal": {
+        "height": 0.78
+      },
+      "nuclear": {
+        "height": 0.72
+      },
+      "solar": {
+        "height": 0.55
+      },
+      "wind": {
+        "height": 0.62
+      },
+      "battery": {
+        "height": 0.58
+      },
+      "cooling": {
+        "height": 0.6
+      },
+      "green": {
+        "height": 0.5
+      },
+      "tidal": {
+        "height": 0.58
+      }
+    },
+    "CITY_ASSET_FOOTPRINT": 0.68,
+    "CITY_BUILDING_ORIENTATION": {
+      "steps": 6,
+      "offsets": {
+        "residential": 0,
+        "factory": 2,
+        "data": 4,
+        "nuclear": 1,
+        "green": 3
+      }
+    },
+    "MOBILE_MAX_WIDTH_PX": 760,
+    "SCENE": {
+      "TILE_COLORS": {
+        "base": "#0d1f31",
+        "selected": "#123047",
+        "unknown": "#152233",
+        "problem": "#3a1520",
+        "ok": "#16352c",
+        "previewGood": "#18402f",
+        "previewBad": "#3a1a20",
+        "newLand": "#1a3a30",
+        "inactive": "#101b24",
+        "zoneSolar": "#3f4930",
+        "zoneResidential": "#244455",
+        "zoneWind": "#244b4d",
+        "zoneIndustrial": "#463b35"
+      },
+      "MARKER_COLORS": {
+        "tap": "#ffffff",
+        "selected": "#54e4ff",
+        "good": "#71f5b4",
+        "warn": "#ffd166",
+        "problem": "#ff6b7a",
+        "unknown": "#6e8199"
+      },
+      "PIXEL_RATIO_CAP": {
+        "coarse": 1.25,
+        "fine": 1.5
+      },
+      "FACILITY_PALETTE_BLACK_LIFT": {
+        "emissive": "#101820",
+        "intensity": 0.18
+      },
+      "TILE_GEOMETRY": {
+        "thickness": 0.12,
+        "segments": 6
+      },
+      "TILE_Y": 0.06,
+      "FACILITY_Y": 0.13,
+      "DEMOLISH_DROP": 0.22,
+      "SHELL_SCALE": 0.82,
+      "CELL_SCREEN_PROJECTION_Y": 0.04,
+      "EASE_OUT_BACK_OVERSHOOT": 1.35,
+      "IDLE_FALLBACK_MS": 32,
+      "SCAFFOLD_PER_CELL": 6,
+      "GREEN_DETAIL_CONE_SEGMENTS": 5,
+      "SMOKE_SPHERE_SEGMENTS": [
+        6,
+        4
+      ],
+      "GREEN_ROTATION_SEED": {
+        "perCell": 0.73,
+        "perLevel": 0.31
+      },
+      "GREEN_HSL_OFFSET": {
+        "tree": [
+          0.012,
+          0.04,
+          0.04
+        ],
+        "bush": [
+          -0.015,
+          0.04,
+          -0.07
+        ]
+      },
+      "ROTOR": {
+        "blades": 3,
+        "innerRadius": 0.055,
+        "outerRadius": 0.29,
+        "innerHalfWidth": 0.036,
+        "outerHalfWidth": 0.015,
+        "height": 0.78,
+        "zOffset": 0.015,
+        "phasePerCell": 0.23,
+        "colorBlend": 0.35
+      },
+      "CORNER_MARKER": {
+        "outer": 0.38,
+        "inner": 0.23,
+        "thickness": 0.032
+      },
+      "RING": {
+        "y": 0.135,
+        "pulseAmplitude": 0.035
+      },
+      "CONSTRUCTION_SITE": {
+        "foundationY": 0.14,
+        "foundationWidth": 0.58,
+        "foundationDepth": 0.5,
+        "foundationHeight": {
+          "build": 0.065,
+          "upgrade": 0.035
+        },
+        "foundationColor": {
+          "build": "#66727a",
+          "upgrade": "#557b8c"
+        },
+        "stageHeight": {
+          "foundation": 0.13,
+          "skeleton": 0.55,
+          "shell": 0.78
+        },
+        "postOffset": 0.38,
+        "postY": 0.17,
+        "postSize": 0.025,
+        "postColor": "#ffbd59",
+        "beamLength": 0.41,
+        "beamSize": 0.025,
+        "beamColor": "#ffd27a"
+      },
+      "LIGHTS": {
+        "hemisphereSky": "#c8dcff",
+        "hemisphereGround": "#101722",
+        "sunPosition": [
+          4,
+          8,
+          5
+        ],
+        "rimColor": "#54e4ff",
+        "rimPosition": [
+          -6,
+          4,
+          -4
+        ]
+      },
+      "MATERIALS": {
+        "tile": {
+          "color": "#ffffff",
+          "roughness": 0.85,
+          "metalness": 0.05
+        },
+        "facility": {
+          "color": "#ffffff",
+          "roughness": 0.62,
+          "metalness": 0.08
+        },
+        "greenDetail": {
+          "color": "#ffffff",
+          "roughness": 0.9,
+          "metalness": 0
+        },
+        "ghost": {
+          "color": "#71f5b4",
+          "emissive": "#71f5b4",
+          "emissiveIntensity": 0.32,
+          "roughness": 0.52,
+          "metalness": 0.04,
+          "opacity": 0.42
+        },
+        "planGhost": {
+          "color": "#ffffff",
+          "emissive": "#173e35",
+          "emissiveIntensity": 0.35,
+          "roughness": 0.54,
+          "metalness": 0.04,
+          "opacity": 0.46
+        },
+        "stateRing": {
+          "color": "#ffffff",
+          "opacity": 0.88
+        },
+        "constructionFoundation": {
+          "color": "#607080",
+          "roughness": 0.92,
+          "metalness": 0.02
+        },
+        "constructionScaffold": {
+          "color": "#ffbd59",
+          "emissive": "#4a2d08",
+          "emissiveIntensity": 0.18,
+          "roughness": 0.58,
+          "metalness": 0.28
+        },
+        "rotor": {
+          "color": "#d8f7ff",
+          "opacity": 0.86
+        },
+        "ambientAgent": {
+          "color": "#ffffff",
+          "opacity": 0.92
+        },
+        "smoke": {
+          "color": "#ffffff"
+        },
+        "statusLight": {
+          "color": "#ffffff",
+          "opacity": 0.88
+        }
+      }
+    },
+    "ISLAND": {
+      "WATER_RADIUS": 8,
+      "ROTATION_STEPS": 6,
+      "COAST_INDEXES": {
+        "dock": [
+          3,
+          15
+        ],
+        "grassHill": [
+          5,
+          9,
+          18,
+          22
+        ],
+        "stoneHill": [
+          7,
+          20
+        ],
+        "forest": [
+          0,
+          12
+        ]
+      },
+      "WATER_INDEXES": {
+        "rocks": [
+          1,
+          7,
+          13,
+          19,
+          25
+        ],
+        "island": [
+          4,
+          15,
+          26
+        ],
+        "ship": [
+          8,
+          26
+        ]
+      },
+      "PROP_FALLBACK_ROUGHNESS": 0.9,
+      "FALLBACK_TILE": {
+        "thickness": 0.12,
+        "segments": 6,
+        "roughness": 0.94
+      },
+      "DECOR_VARIATION": {
+        "rotationPerIndex": 1.91,
+        "scaleBase": 0.9,
+        "scaleAlternate": 0.08
+      },
+      "OCEAN_PLANE": {
+        "size": 28,
+        "roughness": 0.72,
+        "metalness": 0.04
+      },
+      "SHIP": {
+        "height": 0.14,
+        "footprint": 0.42
+      },
+      "FALLBACK_COLORS": {
+        "land": "#6fa861",
+        "shore": "#b89b69",
+        "water": "#3d9bc7",
+        "dock": "#c68c66",
+        "grassHill": "#5f9b58",
+        "stoneHill": "#71808a",
+        "forest": "#4f8b49",
+        "rocks": "#4b9dc2",
+        "island": "#caa66c",
+        "ship": "#ad6847"
+      },
+      "THEME": {
+        "dark": {
+          "envMapIntensity": 0.35,
+          "oceanColor": "#2f86b7"
+        },
+        "light": {
+          "envMapIntensity": 0.55,
+          "oceanColor": "#65b9d6"
+        }
+      }
+    },
+    "TOAST": {
+      "MAX_VISIBLE": 3,
+      "ENTER_MS": 300,
+      "EXIT_MS": 240,
+      "PRIORITY_SCALE": 0.96,
+      "SLIDE_IN_PX": 30,
+      "SLIDE_OUT_PX": 40,
+      "ENTER_EASING": "easeOutCubic",
+      "EXIT_EASING": "easeInCubic"
+    },
+    "MODAL": {
+      "ENTER_SCALE": 0.96,
+      "ENTER_MS": 220,
+      "ENTER_EASING": "easeOutCubic"
+    },
+    "REPORT_RANK_ANIMATION": {
+      "SCALE_FROM": 0.4,
+      "ROTATE_FROM_DEG": -15,
+      "DURATION_MS": 500,
+      "EASING": "easeOutElastic(1, .6)"
+    },
+    "CHART_STYLE": {
+      "BORDER_WIDTH": 2,
+      "POINT_RADIUS": 2,
+      "BACKGROUND_COLOR": "rgba(84,228,255,.10)",
+      "BORDER_COLOR": "rgba(84,228,255,.85)",
+      "POINT_COLOR": "rgba(113,245,180,1)",
+      "GRID_COLOR": "rgba(255,255,255,.08)",
+      "ANGLE_LINE_COLOR": "rgba(255,255,255,.08)",
+      "LABEL_COLOR": "#a8bdd0",
+      "LABEL_FONT_SIZE": 11
+    },
+    "ASSET": {
+      "PALETTE_BLACK_LIFT": {
+        "assetPrefixes": [
+          "residential",
+          "commercial",
+          "industrial"
+        ],
+        "emissive": "#243443",
+        "intensity": 0.42
+      }
+    },
+    "FALLBACK_PRIMITIVES": {
+      "CYLINDER_SEGMENTS": 10,
+      "CONE_SEGMENTS": 4,
+      "CONE_ROUND_SEGMENTS": 8,
+      "SPHERE_SEGMENTS": [
+        10,
+        7
+      ],
+      "TAPER_TOP_RADIUS": 0.34,
+      "TAPER_SEGMENTS": 12
+    }
+  },
+  "CLIMATE_EVENTS": {
+    "heatwave": {
+      "durationDays": 8,
+      "facilityModifiers": {
+        "residential": {
+          "demand": 1.25
+        },
+        "data": {
+          "water": 1.2
+        },
+        "solar": {
+          "supply": 1.1
+        }
+      }
+    },
+    "monsoon": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "solar": {
+          "supply": 0.4
+        },
+        "wind": {
+          "supply": 1.15
+        }
+      }
+    },
+    "typhoon": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "wind": {
+          "supply": 0.2
+        },
+        "solar": {
+          "supply": 0.55
+        },
+        "tidal": {
+          "supply": 1
+        }
+      }
+    },
+    "coldWave": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "residential": {
+          "demand": 1.35
+        },
+        "solar": {
+          "supply": 0.55
+        },
+        "wind": {
+          "supply": 0.7
+        }
+      }
+    },
+    "drought": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "data": {
+          "water": 1.15
+        },
+        "nuclear": {
+          "water": 1.15
+        },
+        "cooling": {
+          "effectiveness": 1.25
+        }
+      },
+      "cityModifiers": {
+        "waterLimitRatio": 1
+      }
+    },
+    "stagnantAir": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "wind": {
+          "supply": 0.25
+        },
+        "solar": {
+          "supply": 0.85
+        },
+        "thermal": {
+          "carbon": 1.25
+        },
+        "factory": {
+          "carbon": 1.15
+        }
+      }
+    },
+    "dryWildfire": {
+      "durationDays": 5,
+      "facilityModifiers": {},
+      "cityModifiers": {
+        "carbonFlat": 2
+      },
+      "greenAbsorptionByLevel": [
+        1,
+        0.5,
+        0.75,
+        1
+      ]
+    },
+    "stormSurge": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "solar": {
+          "supply": 0.5
+        },
+        "wind": {
+          "supply": 0.4
+        },
+        "tidal": {
+          "supply": 1
+        }
+      }
+    }
+  },
+  "FINAL_CLIMATE_PHASES": {
+    "baseline": {
+      "durationDays": 3,
+      "facilityModifiers": {}
+    },
+    "heatDome": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "residential": {
+          "demand": 1.35
+        },
+        "data": {
+          "water": 1.3
+        },
+        "nuclear": {
+          "water": 1.15
+        },
+        "solar": {
+          "supply": 1.1
+        }
+      }
+    },
+    "monsoonFront": {
+      "durationDays": 5,
+      "facilityModifiers": {
+        "solar": {
+          "supply": 0.35
+        },
+        "wind": {
+          "supply": 1.1
+        }
+      }
+    },
+    "coastalSuperstorm": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "wind": {
+          "supply": 0.1
+        },
+        "solar": {
+          "supply": 0.4
+        },
+        "tidal": {
+          "supply": 1
+        }
+      }
+    },
+    "winterDisaster": {
+      "durationDays": 6,
+      "facilityModifiers": {
+        "residential": {
+          "demand": 1.45
+        },
+        "solar": {
+          "supply": 0.4
+        },
+        "wind": {
+          "supply": 0.6
+        }
+      }
+    },
+    "stagnantAir": {
+      "durationDays": 5,
+      "facilityModifiers": {
+        "wind": {
+          "supply": 0.2
+        },
+        "solar": {
+          "supply": 0.75
+        },
+        "thermal": {
+          "carbon": 1.35
+        },
+        "factory": {
+          "carbon": 1.2
+        }
+      }
+    },
+    "dryEmergency": {
+      "durationDays": 5,
+      "facilityModifiers": {
+        "data": {
+          "water": 1.15
+        },
+        "nuclear": {
+          "water": 1.15
+        },
+        "cooling": {
+          "effectiveness": 1.25
+        }
+      },
+      "cityModifiers": {
+        "carbonFlat": 2,
+        "waterLimitRatio": 1
+      },
+      "greenAbsorptionByLevel": [
+        1,
+        0.5,
+        0.75,
+        1
+      ]
+    },
+    "recovery": {
+      "durationDays": 5,
+      "facilityModifiers": {}
+    }
+  },
+  "QUESTS": {
+    "first-citizens": {
+      "reward": {
+        "credits": 4,
+        "unlockFacilities": [
+          "factory",
+          "thermal"
+        ]
+      }
+    },
+    "power-on": {
+      "reward": {
+        "credits": 5,
+        "unlockFacilities": [
+          "green"
+        ]
+      }
+    },
+    "jobs-and-tax": {
+      "reward": {
+        "credits": 6,
+        "unlockFacilities": [
+          "data"
+        ]
+      }
+    },
+    "research-seed": {
+      "reward": {
+        "credits": 8,
+        "unlockFacilities": [
+          "nuclear"
+        ]
+      }
+    },
+    "growth-cost": {
+      "reward": {
+        "credits": 8,
+        "unlockFacilities": [
+          "cooling"
+        ]
+      }
+    },
+    "water-cycle": {
+      "reward": {
+        "credits": 14
+      }
+    },
+    "solar-research-foundation": {
+      "reward": {
+        "credits": 10,
+        "unlockFacilities": [
+          "battery"
+        ],
+        "upgradePermitLevel": 2
+      }
+    },
+    "data-center-modernization": {
+      "reward": {
+        "credits": 12,
+        "unlockFacilities": [
+          "wind"
+        ]
+      }
+    },
+    "wind-pilot-grid": {
+      "reward": {
+        "credits": 12,
+        "unlockResearch": [
+          "tidal1"
+        ]
+      }
+    },
+    "tidal-coast-pilot": {
+      "reward": {
+        "credits": 15,
+        "upgradePermitFacilities": [
+          "thermal",
+          "nuclear",
+          "wind"
+        ]
+      }
+    },
+    "extreme-heat": {
+      "targetDays": 4,
+      "reward": {
+        "credits": 8,
+        "unlockResearch": [
+          "green2"
+        ],
+        "upgradePermitFacilities": [
+          "solar",
+          "tidal"
+        ]
+      }
+    },
+    "monsoon-response": {
+      "targetDays": 4,
+      "batteryTarget": 4,
+      "batteryReserveTarget": 8,
+      "reward": {
+        "credits": 8,
+        "unlockResearch": [
+          "green3"
+        ],
+        "upgradePermitLevel": 3
+      }
+    },
+    "typhoon-safe-operation": {
+      "targetDays": 4,
+      "generationTypeTarget": 2,
+      "reward": {
+        "credits": 10
+      }
+    },
+    "cold-wave-resilience": {
+      "targetDays": 4,
+      "reward": {
+        "credits": 10
+      }
+    },
+    "drought-emergency": {
+      "targetDays": 4,
+      "reward": {
+        "credits": 10
+      }
+    },
+    "stagnant-air": {
+      "targetDays": 4,
+      "carbonTarget": 8,
+      "reward": {
+        "credits": 12
+      }
+    },
+    "dry-wildfire": {
+      "targetDays": 4,
+      "carbonTarget": 8,
+      "reward": {
+        "credits": 12
+      }
+    },
+    "storm-surge": {
+      "targetDays": 4,
+      "tidalEnergyTarget": 8,
+      "entry": {
+        "research": "tidal1",
+        "facility": "tidal"
+      },
+      "reward": {
+        "credits": 14,
+        "stressTest": true
+      }
+    },
+    "national-climate-test": {
+      "reward": {
+        "credits": 0
+      }
+    }
+  },
+  "RESEARCH": {
+    "solar2": {
+      "durationDays": 120,
+      "cost": 10,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "facility:solar"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "solar",
+          2
+        ],
+        "effect": "solar_efficiency"
+      }
+    },
+    "wind2": {
+      "durationDays": 120,
+      "cost": 10,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "facility:wind"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "wind",
+          2
+        ],
+        "effect": "wind_forecast"
+      }
+    },
+    "battery2": {
+      "durationDays": 150,
+      "cost": 15,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "facility:battery"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "battery",
+          2
+        ],
+        "effect": "battery_chemistry"
+      }
+    },
+    "smartGrid": {
+      "durationDays": 150,
+      "cost": 15,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "facility:data"
+        ]
+      },
+      "outcome": {
+        "effect": "smart_grid"
+      }
+    },
+    "tidal1": {
+      "durationDays": 150,
+      "cost": 18,
+      "prerequisites": {
+        "mode": "any",
+        "items": [
+          "research:solar2",
+          "research:wind2"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "tidal",
+          1
+        ],
+        "unlockFacility": "tidal"
+      },
+      "unlockAfterQuestId": "wind-pilot-grid"
+    },
+    "green2": {
+      "durationDays": 90,
+      "cost": 10,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "facility:green"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "green",
+          2
+        ],
+        "effect": "green_canopy"
+      },
+      "unlockAfterQuestId": "extreme-heat"
+    },
+    "green3": {
+      "durationDays": 150,
+      "cost": 16,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "tech:green:2"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "green",
+          3
+        ],
+        "effect": "green_corridor"
+      },
+      "unlockAfterQuestId": "monsoon-response"
+    },
+    "solar3": {
+      "durationDays": 180,
+      "cost": 20,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "research:solar2"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "solar",
+          3
+        ]
+      }
+    },
+    "wind3": {
+      "durationDays": 180,
+      "cost": 20,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "research:wind2"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "wind",
+          3
+        ]
+      }
+    },
+    "battery3": {
+      "durationDays": 180,
+      "cost": 22,
+      "prerequisites": {
+        "mode": "all",
+        "items": [
+          "research:battery2"
+        ]
+      },
+      "outcome": {
+        "tech": [
+          "battery",
+          3
+        ],
+        "effect": "battery_emergency"
+      }
+    }
+  },
+  "ZONES": {
+    "EXPANSION_UPKEEP": {
+      "0": 0,
+      "1": 1,
+      "2": 2.5
+    },
+    "ENERGY_SITE_OUTPUT_MULTIPLIER": 1.2,
+    "EXPANSION_SIDES": {
+      "east": {
+        "facility": "solar",
+        "traits": [
+          "solar",
+          "residential"
+        ]
+      },
+      "west": {
+        "facility": "wind",
+        "traits": [
+          "wind",
+          "industrial"
+        ]
+      }
+    },
+    "TRAIT_MODIFIERS": {
+      "residential": {
+        "RESIDENTIAL_INCOME": 1.15,
+        "HEAVY_BUILD_COST_RATIO": 0.2
+      },
+      "industrial": {
+        "FACTORY_BUILD_COST_RATIO": -0.15,
+        "RESIDENTIAL_HEALTH_COST_RATIO": 0.25
+      }
+    }
+  },
+  "CAMPAIGN": {
+    "QUEST_INDEXES": {
+      "EXECUTION_STAGE_LAST_QUEST": 5,
+      "BASELINE_CAPTURE_QUEST": 4,
+      "FOUNDATION_END": 6,
+      "PREPARATION_START": 7,
+      "SECOND_EXPANSION_QUEST": 8,
+      "PREPARATION_END": 10,
+      "CLIMATE_START": 11,
+      "CLIMATE_END": 18,
+      "FINAL_TEST": 19
+    },
+    "LEVEL_THREE_UNLOCK_QUEST_BY_FACILITY": {
+      "thermal": 10,
+      "nuclear": 10,
+      "wind": 10,
+      "solar": 11,
+      "tidal": 11,
+      "residential": 12,
+      "factory": 12,
+      "data": 12,
+      "battery": 12,
+      "cooling": 12,
+      "green": 12
+    },
+    "LEVEL_THREE_UNLOCK_DEFAULT_QUEST": 12
+  },
+  "OPERATION_PROFILES": {
+    "BATTERY_POLICIES": {
+      "auto": {
+        "reserveRatio": 0,
+        "essentialOnlyBelowReserve": false
+      },
+      "reserve30": {
+        "reserveRatio": 0.3,
+        "essentialOnlyBelowReserve": false
+      },
+      "reserve50": {
+        "reserveRatio": 0.5,
+        "essentialOnlyBelowReserve": false
+      },
+      "essential": {
+        "reserveRatio": 0.5,
+        "essentialOnlyBelowReserve": true
+      }
+    }
+  },
+  "EVENT_DECK": {
+    "OPENING": [
+      "heatwave",
+      "monsoon",
+      "typhoon"
+    ]
+  },
+  "FACILITY_GROUPS": {
+    "GENERATION": [
+      "thermal",
+      "nuclear",
+      "solar",
+      "wind",
+      "tidal"
+    ],
+    "LOW_CARBON": [
+      "nuclear",
+      "solar",
+      "wind",
+      "tidal"
+    ],
+    "RENEWABLE": [
+      "solar",
+      "wind",
+      "tidal"
+    ],
+    "VARIABLE_RENEWABLE": [
+      "solar",
+      "wind"
+    ],
+    "ESSENTIAL_DEFAULT": [
+      "residential",
+      "cooling"
+    ],
+    "BATTERY_CONSUMERS": [
+      "residential",
+      "factory",
+      "data",
+      "cooling"
+    ],
+    "TECH_GATED": [
+      "solar",
+      "wind",
+      "battery",
+      "green"
+    ],
+    "OUTPUT_LINKED_CARBON": [
+      "factory",
+      "data"
+    ],
+    "HEAVY_POLLUTERS": [
+      "factory",
+      "thermal"
+    ]
+  },
+  "PARTNER_RULES": {
+    "factory": {
+      "good": [
+        "thermal",
+        "nuclear",
+        "solar",
+        "wind",
+        "tidal"
+      ],
+      "bad": [
+        "residential"
+      ]
+    },
+    "thermal": {
+      "good": [
+        "factory"
+      ],
+      "bad": [
+        "residential",
+        "green"
+      ]
+    },
+    "nuclear": {
+      "good": [
+        "cooling",
+        "factory"
+      ],
+      "bad": [
+        "residential"
+      ]
+    },
+    "data": {
+      "good": [
+        "cooling"
+      ],
+      "bad": [
+        "residential"
+      ]
+    },
+    "residential": {
+      "good": [
+        "green"
+      ],
+      "bad": [
+        "factory",
+        "thermal",
+        "nuclear",
+        "data"
+      ]
+    },
+    "solar": {
+      "good": [
+        "battery"
+      ],
+      "bad": []
+    },
+    "wind": {
+      "good": [
+        "battery"
+      ],
+      "bad": []
+    },
+    "battery": {
+      "good": [
+        "residential",
+        "factory",
+        "data",
+        "cooling"
+      ],
+      "bad": []
+    },
+    "cooling": {
+      "good": [
+        "data",
+        "nuclear"
+      ],
+      "bad": []
+    },
+    "green": {
+      "good": [
+        "residential"
+      ],
+      "bad": [
+        "thermal",
+        "factory"
+      ]
+    }
+  },
+  "SPATIAL_RULES": [
+    {
+      "id": "factory_power",
+      "self": [
+        "factory"
+      ],
+      "neighbors": [
+        "thermal",
+        "nuclear",
+        "solar",
+        "wind",
+        "tidal"
+      ],
+      "mode": "either"
+    },
+    {
+      "id": "data_cooling",
+      "self": [
+        "data"
+      ],
+      "neighbors": [
+        "cooling"
+      ],
+      "mode": "either"
+    },
+    {
+      "id": "residential_green",
+      "self": [
+        "residential"
+      ],
+      "neighbors": [
+        "green"
+      ],
+      "mode": "positive"
+    },
+    {
+      "id": "nuclear_cooling",
+      "self": [
+        "nuclear"
+      ],
+      "neighbors": [
+        "cooling"
+      ],
+      "mode": "positive"
+    },
+    {
+      "id": "cooling_demand",
+      "self": [
+        "cooling"
+      ],
+      "neighbors": [
+        "data",
+        "nuclear"
+      ],
+      "mode": "positive"
+    },
+    {
+      "id": "heavy_residential",
+      "self": [
+        "factory",
+        "thermal"
+      ],
+      "neighbors": [
+        "residential"
+      ],
+      "mode": "warning"
+    },
+    {
+      "id": "nuclear_residential",
+      "self": [
+        "nuclear"
+      ],
+      "neighbors": [
+        "residential"
+      ],
+      "mode": "warning"
+    },
+    {
+      "id": "data_residential",
+      "self": [
+        "data"
+      ],
+      "neighbors": [
+        "residential"
+      ],
+      "mode": "warning"
+    },
+    {
+      "id": "heavy_green",
+      "self": [
+        "thermal",
+        "factory"
+      ],
+      "neighbors": [
+        "green"
+      ],
+      "mode": "warning"
+    },
+    {
+      "id": "residential_polluters",
+      "self": [
+        "residential"
+      ],
+      "neighbors": [
+        "factory",
+        "thermal",
+        "nuclear",
+        "data"
+      ],
+      "mode": "warning"
+    },
+    {
+      "id": "green_polluters",
+      "self": [
+        "green"
+      ],
+      "neighbors": [
+        "thermal",
+        "factory"
+      ],
+      "mode": "warning"
+    }
+  ],
+  "GREEN_RULES": {
+    "CLUSTER_MIN_CELLS": 3,
+    "ADJACENT_INCOME_BY_LEVEL": [
+      1,
+      1.05,
+      1.07,
+      1.09
+    ],
+    "DISTANCE2_MIN_LEVEL": 3,
+    "DISTANCE2_INCOME": 1.045,
+    "FACTORY_HEALTH_MULTIPLIER": 0.75
+  },
+  "HEATWAVE_RULES": {
+    "DEMAND_MULTIPLIER": 1.25,
+    "AFFECTED_TYPES": [
+      "residential",
+      "data",
+      "cooling"
+    ],
+    "ADJACENT_GREEN_DEMAND_MULTIPLIER": 1.1,
+    "GREEN_RELIEF": {
+      "ADJACENT_DEMAND_BY_LEVEL": [
+        1.2,
+        1.2,
+        1.15,
+        1.15
+      ],
+      "DISTANCE2_DEMAND": 1.2
+    }
+  },
+  "SOLAR_RULES": {
+    "NIGHT_END_HOUR": 5,
+    "NIGHT_START_HOUR": 19,
+    "DUSK_END_HOUR": 7,
+    "DUSK_START_HOUR": 17,
+    "DUSK_MULTIPLIER": 0.5,
+    "DAILY_AVERAGE_LIT_HOURS": 11
+  },
+  "CLIMATE_QUEST_RULES": {
+    "SUPPLY_TARGET_PERCENT": 90
+  },
+  "EVENT_RULES": {
+    "DROUGHT_INSERT_AFTER_COMPLETED": 2,
+    "OUTAGE_PERCENT": 90,
+    "DIAGNOSIS_WEIGHTS": {
+      "OUTAGE_DAY": 100,
+      "WATER_VIOLATION_DAY": 20,
+      "NEGATIVE_INCOME": 10,
+      "CARBON_VIOLATION": 10
+    }
+  },
+  "FORECAST_RULES": {
+    "POWER_EPSILON_E": 0.001,
+    "SEVERITY_WEIGHTS": {
+      "WARNING": 1000,
+      "POWER_GAP": 10,
+      "CREDIT_GAP": 1
+    }
+  },
+  "RESEARCH_EFFECTS": {
+    "SOLAR_SUPPLY": 1.2,
+    "WIND_SUPPLY": 1.15,
+    "BATTERY_CAPACITY": 1.3,
+    "SMART_GRID_LOSS_PER_EXTRA_TILE": 0.04
+  },
+  "QUIZ_RULES": {
+    "FINAL": {
+      "QUESTION_IDS": [
+        "power-balance",
+        "cooling",
+        "renewable-storage",
+        "spatial-design"
+      ],
+      "PASS_THRESHOLD": 3
+    }
+  },
+  "HUD_RULES": {
+    "BATTERY_WARN_E": 5,
+    "BATTERY_DANGER_E": 0
+  },
+  "CHART_RULES": {
+    "AXIS_SCALES": {
+      "CARBON": 4,
+      "WATER": 4,
+      "SYNERGY_LINK": 20
+    }
+  },
+  "MODAL_PRIORITY": {
+    "NORMAL": 0,
+    "IMPORTANT": 1,
+    "CRITICAL": 2
+  }
+}

@@ -5,30 +5,25 @@ import {
   COAST_PROP_ROTATION_OFFSETS,
   HEX_TILE_VISUALS,
   ISLAND_LAYER_ELEVATIONS,
+  VISUAL,
 } from '../core/Constants.js';
 import { axialToWorld, createHexCoordinates, hexDistance } from '../systems/HexGridSystem.js';
 import { configurePaletteMaterial } from '../level/CityAssetLoader.js';
 
+// 섬 환경 연출 수치(물 반지름·장식 배치 인덱스·폴백 지형/색·바다 평면·테마별 바다색)는 settings.json VISUAL.ISLAND에 있다.
+const ISLAND = VISUAL.ISLAND;
 const MATRIX_HELPER = new THREE.Object3D();
 const ORIGIN = Object.freeze({ q: 0, r: 0 });
 const MAX_ISLAND_RADIUS = BOARD.EXPANDED_RADIUS;
 const SHORE_RADIUS = MAX_ISLAND_RADIUS + 1;
-const WATER_RADIUS = 8;
+const WATER_RADIUS = ISLAND.WATER_RADIUS;
 const HEX_LONG_DIAMETER = BOARD.HEX_SIZE * 2;
-const HEX_ROTATION_STEP = Math.PI / 3;
+// 한 바퀴를 ROTATION_STEPS(육각형이라 6)로 나눈 회전 단위 — Math.PI 파생값이라 여기서 계산한다.
+const HEX_ROTATION_STEP = (Math.PI * 2) / ISLAND.ROTATION_STEPS;
 
-const COAST_INDEXES = Object.freeze({
-  dock: Object.freeze([3, 15]),
-  grassHill: Object.freeze([5, 9, 18, 22]),
-  stoneHill: Object.freeze([7, 20]),
-  forest: Object.freeze([0, 12]),
-});
+const COAST_INDEXES = ISLAND.COAST_INDEXES;
 
-const WATER_INDEXES = Object.freeze({
-  rocks: Object.freeze([1, 7, 13, 19, 25]),
-  island: Object.freeze([4, 15, 26]),
-  ship: Object.freeze([8, 26]),
-});
+const WATER_INDEXES = ISLAND.WATER_INDEXES;
 
 function coordinateKey({ q, r }) {
   return `${q},${r}`;
@@ -64,7 +59,7 @@ export function snapHexRotation(angle) {
 
 function firstMaterial(primitive, fallbackColor, assetId) {
   const source = Array.isArray(primitive?.material) ? primitive.material[0] : primitive?.material;
-  const material = source?.clone() || new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: 0.9 });
+  const material = source?.clone() || new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: ISLAND.PROP_FALLBACK_ROUGHNESS });
   return configurePaletteMaterial(material, assetId);
 }
 
@@ -179,10 +174,10 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
         geometry: own(new THREE.CylinderGeometry(
           BOARD.HEX_SIZE * coverage,
           BOARD.HEX_SIZE * coverage,
-          0.12,
-          6,
+          ISLAND.FALLBACK_TILE.thickness,
+          ISLAND.FALLBACK_TILE.segments,
         )),
-        material: own(new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: 0.94 })),
+        material: own(new THREE.MeshStandardMaterial({ color: fallbackColor, roughness: ISLAND.FALLBACK_TILE.roughness })),
       };
     }
   }
@@ -206,7 +201,7 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
       const { x, z } = axialToWorld(coordinate, BOARD.HEX_SIZE);
       const rotation = radial
         ? snapHexRotation(Math.atan2(z, x) + Math.PI / 2)
-        : (index % 6) * HEX_ROTATION_STEP;
+        : (index % ISLAND.ROTATION_STEPS) * HEX_ROTATION_STEP;
       setInstance(mesh, index, coordinate, yForIndex ? yForIndex(index) : y, rotation);
     });
     mesh.instanceMatrix.needsUpdate = true;
@@ -223,7 +218,15 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
       const mesh = new THREE.InstancedMesh(geometry, material, coordinates.length);
       mesh.name = name;
       mesh.frustumCulled = false;
-      coordinates.forEach((coordinate, index) => setInstance(mesh, index, coordinate, y, index * 1.91, 0.9 + (index % 2) * 0.08));
+      const variation = ISLAND.DECOR_VARIATION;
+      coordinates.forEach((coordinate, index) => setInstance(
+        mesh,
+        index,
+        coordinate,
+        y,
+        index * variation.rotationPerIndex,
+        variation.scaleBase + (index % 2) * variation.scaleAlternate,
+      ));
       mesh.instanceMatrix.needsUpdate = true;
       root.add(mesh);
     } catch (error) {
@@ -248,7 +251,7 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
           const { x, z } = axialToWorld(coordinate, BOARD.HEX_SIZE);
           const baseRotation = layer.radial
             ? snapHexRotation(Math.atan2(z, x) + Math.PI / 2)
-            : (index % 6) * HEX_ROTATION_STEP;
+            : (index % ISLAND.ROTATION_STEPS) * HEX_ROTATION_STEP;
           const rotation = baseRotation + (layer.rotationOffset || 0);
           if (layer.rotationStatKey) stats.coastalPropRotations[layer.rotationStatKey].push(rotation);
           const placedGeometry = geometry.clone();
@@ -274,11 +277,12 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
   }
 
   function addOceanPlane() {
-    const geometry = own(new THREE.PlaneGeometry(28, 28));
+    const geometry = own(new THREE.PlaneGeometry(ISLAND.OCEAN_PLANE.size, ISLAND.OCEAN_PLANE.size));
+    // 처음 색은 다크 테마의 바다색이다. 테마가 바뀌면 setTheme이 다시 칠한다.
     const material = own(new THREE.MeshStandardMaterial({
-      color: 0x2f86b7,
-      roughness: 0.72,
-      metalness: 0.04,
+      color: ISLAND.THEME.dark.oceanColor,
+      roughness: ISLAND.OCEAN_PLANE.roughness,
+      metalness: ISLAND.OCEAN_PLANE.metalness,
     }));
     const ocean = new THREE.Mesh(geometry, material);
     ocean.name = 'island-ocean-plane';
@@ -293,13 +297,13 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
     state = 'loading';
     addOceanPlane();
     loadPromise = Promise.all([
-      addTerrainLayer({ id: 'terrain.hexGrass', name: 'island-land', coordinates: landCoordinates, fallbackColor: 0x6fa861, y: ISLAND_LAYER_ELEVATIONS.land, coverage: HEX_TILE_VISUALS.landCoverage }),
-      addTerrainLayer({ id: 'terrain.hexDirt', name: 'island-shore', coordinates: baseShoreCoordinates, fallbackColor: 0xb89b69, y: ISLAND_LAYER_ELEVATIONS.shore, coverage: HEX_TILE_VISUALS.shoreCoverage }),
+      addTerrainLayer({ id: 'terrain.hexGrass', name: 'island-land', coordinates: landCoordinates, fallbackColor: ISLAND.FALLBACK_COLORS.land, y: ISLAND_LAYER_ELEVATIONS.land, coverage: HEX_TILE_VISUALS.landCoverage }),
+      addTerrainLayer({ id: 'terrain.hexDirt', name: 'island-shore', coordinates: baseShoreCoordinates, fallbackColor: ISLAND.FALLBACK_COLORS.shore, y: ISLAND_LAYER_ELEVATIONS.shore, coverage: HEX_TILE_VISUALS.shoreCoverage }),
       addTerrainLayer({
         id: 'terrain.hexWater',
         name: 'island-water-ring',
         coordinates: renderedWaterCoordinates,
-        fallbackColor: 0x3d9bc7,
+        fallbackColor: ISLAND.FALLBACK_COLORS.water,
         y: ISLAND_LAYER_ELEVATIONS.water,
         yForIndex: (index) => (
           index < shoreCoordinates.length
@@ -312,18 +316,18 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
         {
           id: 'environment.coast.dock',
           coordinates: coastCoordinates.dock,
-          fallbackColor: 0xc68c66,
+          fallbackColor: ISLAND.FALLBACK_COLORS.dock,
           radial: true,
           rotationOffset: COAST_PROP_ROTATION_OFFSETS.dock,
           rotationStatKey: 'dock',
         },
-        { id: 'environment.coast.grassHill', coordinates: coastCoordinates.grassHill, fallbackColor: 0x5f9b58 },
-        { id: 'environment.coast.stoneHill', coordinates: coastCoordinates.stoneHill, fallbackColor: 0x71808a },
-        { id: 'environment.coast.forest', coordinates: coastCoordinates.forest, fallbackColor: 0x4f8b49 },
+        { id: 'environment.coast.grassHill', coordinates: coastCoordinates.grassHill, fallbackColor: ISLAND.FALLBACK_COLORS.grassHill },
+        { id: 'environment.coast.stoneHill', coordinates: coastCoordinates.stoneHill, fallbackColor: ISLAND.FALLBACK_COLORS.stoneHill },
+        { id: 'environment.coast.forest', coordinates: coastCoordinates.forest, fallbackColor: ISLAND.FALLBACK_COLORS.forest },
       ]),
-      addTerrainLayer({ id: 'environment.water.rocks', name: 'nearshore-rocks', coordinates: detailedWaterCoordinates.waterRocks, fallbackColor: 0x4b9dc2, y: ISLAND_LAYER_ELEVATIONS.water, coverage: HEX_TILE_VISUALS.waterCoverage }),
-      addTerrainLayer({ id: 'environment.water.island', name: 'nearshore-islands', coordinates: detailedWaterCoordinates.waterIsland, fallbackColor: 0xcaa66c, y: ISLAND_LAYER_ELEVATIONS.water, coverage: HEX_TILE_VISUALS.waterCoverage }),
-      addDecoration({ id: 'environment.water.ship', name: 'nearshore-ships', coordinates: detailedWaterCoordinates.ship, targetHeight: 0.14, targetFootprint: 0.42, fallbackColor: 0xad6847, y: ISLAND_LAYER_ELEVATIONS.ship }),
+      addTerrainLayer({ id: 'environment.water.rocks', name: 'nearshore-rocks', coordinates: detailedWaterCoordinates.waterRocks, fallbackColor: ISLAND.FALLBACK_COLORS.rocks, y: ISLAND_LAYER_ELEVATIONS.water, coverage: HEX_TILE_VISUALS.waterCoverage }),
+      addTerrainLayer({ id: 'environment.water.island', name: 'nearshore-islands', coordinates: detailedWaterCoordinates.waterIsland, fallbackColor: ISLAND.FALLBACK_COLORS.island, y: ISLAND_LAYER_ELEVATIONS.water, coverage: HEX_TILE_VISUALS.waterCoverage }),
+      addDecoration({ id: 'environment.water.ship', name: 'nearshore-ships', coordinates: detailedWaterCoordinates.ship, targetHeight: ISLAND.SHIP.height, targetFootprint: ISLAND.SHIP.footprint, fallbackColor: ISLAND.FALLBACK_COLORS.ship, y: ISLAND_LAYER_ELEVATIONS.ship }),
     ]).then(() => {
       stats.treeInstances = coastCoordinates.forest.length;
       stats.treeLayers = coastCoordinates.forest.length ? 1 : 0;
@@ -340,12 +344,13 @@ export function createCityEnvironment3D({ scene, assetLoader }) {
   }
 
   function setTheme(theme) {
+    const themeVisual = theme === 'light' ? ISLAND.THEME.light : ISLAND.THEME.dark;
     root.traverse((object) => {
       if (!object.isMesh) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       materials.forEach((material) => {
-        if ('envMapIntensity' in material) material.envMapIntensity = theme === 'light' ? 0.55 : 0.35;
-        if (object.name === 'island-ocean-plane') material.color?.setHex(theme === 'light' ? 0x65b9d6 : 0x2f86b7);
+        if ('envMapIntensity' in material) material.envMapIntensity = themeVisual.envMapIntensity;
+        if (object.name === 'island-ocean-plane') material.color?.setHex(themeVisual.oceanColor);
       });
     });
   }

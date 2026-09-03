@@ -1,15 +1,15 @@
-import { POWER_RULES, STORAGE_LEVELS } from '../core/Constants.js';
-import { getDailySolarMultiplier, getDemandMultiplier, getWindMultiplier } from './ClimateSystem.js';
+import { BOARD, FACILITY_GROUPS, POWER_RULES, STORAGE_LEVELS } from '../core/Constants.js';
+import { getDailySolarMultiplier, getDemandMultiplier } from './ClimateSystem.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
 import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
-const LOW_CARBON = new Set(['nuclear', 'solar', 'wind', 'tidal']);
-const PRIORITY = { essential: 0, normal: 1, saving: 2 };
+const LOW_CARBON = new Set(FACILITY_GROUPS.LOW_CARBON);
+const PRIORITY = POWER_RULES.PRIORITY_ORDER;
 
-const inferCoordinates = (grid) => createHexCoordinates(grid.length === 37 ? 3 : 2);
+const inferCoordinates = (grid) => createHexCoordinates(grid.length === BOARD.EXPANDED_CELLS ? BOARD.EXPANDED_RADIUS : BOARD.INITIAL_RADIUS);
 const distance = (a, b, coordinates) => hexDistance(coordinates[a], coordinates[b]);
 
 function sourceDispatchOrder(a, b) {
@@ -52,9 +52,10 @@ function levelValue(cell, field, modifier = null) {
   return effectiveFacilityStats(cell, modifier)[field] || 0;
 }
 
-export function generationAvailabilityMultiplier(type, { dayIndex = 0, tickIndex = dayIndex } = {}) {
+// 태양광의 낮/밤 평균만 여기서 곱한다. 날씨(태양광 맑음·흐림·강수, 풍력 풍속)는
+// CityModifierSystem이 modifierContext의 daily.supply로 실어 온다.
+export function generationAvailabilityMultiplier(type) {
   if (type === 'solar') return getDailySolarMultiplier();
-  if (type === 'wind') return getWindMultiplier(tickIndex);
   return 1;
 }
 
@@ -86,8 +87,8 @@ export function calculatePowerNetwork({
 
   grid.forEach((cell, index) => {
     if (!cell) return;
-    if (['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(cell.type)) {
-      const multiplier = generationAvailabilityMultiplier(cell.type, { dayIndex, tickIndex });
+    if (FACILITY_GROUPS.GENERATION.includes(cell.type)) {
+      const multiplier = generationAvailabilityMultiplier(cell.type);
       sourceDefinitions.push({
         index,
         type: cell.type,
@@ -131,7 +132,7 @@ export function calculatePowerNetwork({
       index,
       type: cell.type,
       demand,
-      priority: cell.priority || (['residential', 'cooling'].includes(cell.type) ? 'essential' : 'normal'),
+      priority: cell.priority || (FACILITY_GROUPS.ESSENTIAL_DEFAULT.includes(cell.type) ? 'essential' : 'normal'),
     });
   });
   const generationAvailable = sourceDefinitions.reduce((sum, source) => sum + source.available, 0);

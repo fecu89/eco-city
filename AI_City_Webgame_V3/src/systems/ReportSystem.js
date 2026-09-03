@@ -1,4 +1,4 @@
-import { REPORT_RULES, REPORT_TIERS } from '../core/Constants.js';
+import { REPORT_RULES, REPORT_TIERS, RESEARCH_RULES } from '../core/Constants.js';
 import { STRESS_PHASES } from '../core/EventDefinitions.js';
 import { gameState } from '../core/GameState.js';
 import { calcMetrics, getBoardCoordinates } from './BoardSystem.js';
@@ -59,7 +59,7 @@ function fallbackStress(operations, state) {
     carbonRiskDays: state.carbonCrisisDays || 0,
     waterViolationDays: 0,
     batteryEnergyUsed: operations.batteryEnergyUsed,
-    recoveryDays: 4,
+    recoveryDays: REPORT_RULES.NORMALIZE.FALLBACK_RECOVERY_DAYS,
     maxConsecutiveBankruptcyDays: 0,
     finalCredits: state.credits,
     passed: state.campaignComplete,
@@ -72,25 +72,32 @@ const STRESS_EXAM_DAYS = STRESS_PHASES.reduce((sum, phase) => sum + phase.durati
 
 function scoreAxes(operations, stress, state) {
   const stressDays = STRESS_EXAM_DAYS;
+  // 축 안의 혼합 비율(mix)과 정규화 기준(norm)은 settings.json REPORT_RULES.AXIS_MIX / NORMALIZE에 있다.
+  const mix = REPORT_RULES.AXIS_MIX;
+  const norm = REPORT_RULES.NORMALIZE;
   const outageSafety = clamp(100 - percent(stress.blackoutDays || 0, stressDays));
   const powerStability = clamp(
-    (stress.averageEssentialSupply || 0) * 0.5
-      + outageSafety * 0.3
-      + (stress.minimumEssentialSupply || 0) * 0.2,
+    (stress.averageEssentialSupply || 0) * mix.powerStability.averageEssentialSupply
+      + outageSafety * mix.powerStability.outageSafety
+      + (stress.minimumEssentialSupply || 0) * mix.powerStability.minimumEssentialSupply,
   );
   const carbonSafety = clamp(100 - percent(stress.carbonRiskDays || 0, stressDays));
-  const environment = clamp(operations.averageLowCarbonPercent * 0.65 + carbonSafety * 0.35);
-  const incomeHealth = clamp((operations.averageNetIncome + 2) / 7 * 100);
-  const creditRecovery = clamp((stress.finalCredits || 0) / 20 * 100);
-  const economy = incomeHealth * 0.7 + creditRecovery * 0.3;
+  const environment = clamp(operations.averageLowCarbonPercent * mix.environment.lowCarbonPercent + carbonSafety * mix.environment.carbonSafety);
+  const incomeHealth = clamp((operations.averageNetIncome + norm.INCOME_OFFSET) / norm.INCOME_RANGE * 100);
+  const creditRecovery = clamp((stress.finalCredits || 0) / norm.CREDIT_RECOVERY_FULL * 100);
+  const economy = incomeHealth * mix.economy.incomeHealth + creditRecovery * mix.economy.creditRecovery;
   const waterSafety = clamp(100 - percent(stress.waterViolationDays || 0, stressDays));
   const socialCostPerDay = (operations.overcrowdingCost + operations.healthCost) / Math.max(1, operations.days);
-  const socialSafety = clamp(100 - socialCostPerDay / 2 * 100);
-  const resourceUse = operations.averageTransmissionEfficiency * 0.6 + waterSafety * 0.25 + socialSafety * 0.15;
-  const decisionScore = clamp(operations.playerDecisionCount / 5 * 100);
-  const recoveryScore = clamp((5 - (stress.recoveryDays || 4)) / 4 * 100);
-  const reserveResponse = clamp((stress.batteryEnergyUsed || 0) / 10 * 100);
-  const operatingResponse = decisionScore * 0.5 + recoveryScore * 0.3 + reserveResponse * 0.2;
+  const socialSafety = clamp(100 - socialCostPerDay / norm.SOCIAL_COST_FULL_PER_DAY * 100);
+  const resourceUse = operations.averageTransmissionEfficiency * mix.resourceUse.transmissionEfficiency
+    + waterSafety * mix.resourceUse.waterSafety
+    + socialSafety * mix.resourceUse.socialSafety;
+  const decisionScore = clamp(operations.playerDecisionCount / norm.DECISION_FULL_COUNT * 100);
+  const recoveryScore = clamp((norm.RECOVERY_MAX_DAYS - (stress.recoveryDays || norm.FALLBACK_RECOVERY_DAYS)) / norm.RECOVERY_RANGE_DAYS * 100);
+  const reserveResponse = clamp((stress.batteryEnergyUsed || 0) / norm.RESERVE_FULL_E * 100);
+  const operatingResponse = decisionScore * mix.operatingResponse.decisions
+    + recoveryScore * mix.operatingResponse.recovery
+    + reserveResponse * mix.operatingResponse.reserve;
   const weights = REPORT_RULES.AXIS_WEIGHTS;
   return {
     powerStability: axis(powerStability, weights.powerStability),
@@ -175,7 +182,7 @@ export function computeReport() {
   const rawOperating = Object.values(axes).reduce((sum, item) => sum + item.score, 0);
   const operatingTotal = round1(clamp(rawOperating - penalties));
   const finalQuiz = gameState.quizResults?.['climate-council'];
-  const quizCorrect = clamp(Number(finalQuiz?.correct) || 0, 0, 4);
+  const quizCorrect = clamp(Number(finalQuiz?.correct) || 0, 0, RESEARCH_RULES.QUIZ_QUESTION_COUNT);
   const quizBonus = round1(Math.min(
     REPORT_RULES.QUIZ_MAX_BONUS,
     quizCorrect * REPORT_RULES.QUIZ_POINTS_PER_CORRECT,
@@ -210,11 +217,11 @@ export function computeReport() {
     penalties,
     tier,
     quizCorrect,
-    quizTotal: finalQuiz?.total || 4,
+    quizTotal: finalQuiz?.total || RESEARCH_RULES.QUIZ_QUESTION_COUNT,
     // v5 report consumers retain readable aliases while new UI uses the fields above.
     operationsScore: operatingTotal,
     knowledgeScore: quizBonus,
-    knowledgeAccuracy: finalQuiz ? Math.round(quizCorrect / 4 * 100) : 0,
+    knowledgeAccuracy: finalQuiz ? Math.round(quizCorrect / RESEARCH_RULES.QUIZ_QUESTION_COUNT * 100) : 0,
     total: totalWithBonus,
   };
 }

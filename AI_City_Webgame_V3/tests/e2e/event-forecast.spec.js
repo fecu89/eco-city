@@ -3,6 +3,8 @@ import { test, expect } from '../fixtures/game-test.js';
 test('24-day preparation keeps 4x play running and shows the strip only while the disaster is active', async ({ gamePage: page }) => {
   await page.evaluate(() => {
     window.__setTimeScale(4);
+    // 하루 수요 변동은 판의 씨앗에서 나온다. 폭염 배수를 정확히 재려면 씨앗을 고정해야 한다.
+    window.__setEnvironmentSeed(20400134);
     const state = window.__GAME_STATE__;
     state.progression.chapter = 3;
     state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
@@ -23,7 +25,10 @@ test('24-day preparation keeps 4x play running and shows the strip only while th
   });
   await expect(page.locator('#forecastStrip')).toContainText('폭염');
   const active = await page.evaluate(() => window.__GAME_STATE__.lastTickSummary);
-  expect(active.demand).toBeCloseTo(2.5);
+  const variation = await page.evaluate(() => JSON.parse(window.render_game_to_text()).demandVariation);
+  // 폭염은 주거 수요를 1.25배로 올린다. 그 위에 그날의 도시 수요 변동이 곱해진다.
+  expect(active.demand).toBeCloseTo(2.5 * variation, 1);
+  expect(active.demand).toBeGreaterThan(2);
   expect(active.cityEvent.active).toMatchObject({ id: 'heat-ui', type: 'heatwave' });
 
   await page.evaluate(() => {

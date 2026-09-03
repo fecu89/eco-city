@@ -10,6 +10,7 @@ test.describe('fullscreen world HUD', () => {
       state.lastSettlementDelta = 0.25;
       state.lastTickSummary = {
         dailyCarbon: 3.4,
+        generationAvailable: 9,
         deliveredPower: 6,
         demand: 5,
         batteryStored: 8.5,
@@ -23,16 +24,18 @@ test.describe('fullscreen world HUD', () => {
 
     await expect(page.locator('#credits')).toHaveText('12.50');
     await expect(page.locator('#simNet')).toHaveText('+0.25/일');
-    await expect(page.locator('#simPower')).toHaveText('+1');
+    await expect(page.locator('#simPower')).toHaveText('9/5');
+    await expect(page.locator('#simulationHud [data-metric="power"]')).toHaveAttribute('title', /공급 가능 9\.0 \/ 수요 5\.0 · 실제 공급 6\.0/);
     await expect(page.locator('#simBattery')).toHaveText('8.5');
     await expect(page.locator('#simCarbonRate')).toHaveText('3.4/일');
     await expect(page.locator('#simWater')).toHaveText('2.5/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 6 / 전체 인구 8');
     await expect(page.locator('#simulationHud [data-metric="labor"]')).toHaveCount(0);
     await expect(page.locator('#simCarbonRate')).toBeVisible();
-    await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(5);
+    // 날씨 칩이 일자 바로 뒤에 붙으면서 아이콘이 여섯이 되고 첫 지표가 됐다.
+    await expect(page.locator('#simulationHud .sim-metric-icon')).toHaveCount(6);
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
-      .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);
+      .resolves.toEqual(['weather', 'credit', 'power', 'battery', 'carbon', 'water']);
     // 등록되지 않은 lucide 이름은 예외 없이 콘솔 경고만 남기고 아이콘 자리를 비운다.
     expect(page.consoleMessages.filter((text) => text.includes('icon name was not found'))).toEqual([]);
   });
@@ -167,6 +170,7 @@ test.describe('fullscreen world HUD', () => {
       state.lastSettlementDelta = 12_500;
       state.lastTickSummary = {
         dailyCarbon: 1_250,
+        generationAvailable: 15_000,
         deliveredPower: 12_500,
         demand: 10_000,
         batteryStored: 12_500,
@@ -181,7 +185,7 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#credits')).toHaveText('1.25M');
     await expect(page.locator('#simulationHud [data-metric="credit"]')).toHaveAttribute('title', /1,250,000\.00/);
     await expect(page.locator('#simNet')).toHaveText('+12.5K/일');
-    await expect(page.locator('#simPower')).toHaveText('+2.5K');
+    await expect(page.locator('#simPower')).toHaveText('15K/10K');
     await expect(page.locator('#simBattery')).toHaveText('12.5K');
     await expect(page.locator('#simCarbonRate')).toHaveText('1.25K/일');
     await expect(page.locator('#simWater')).toHaveText('1.2M/일');
@@ -225,6 +229,162 @@ test.describe('fullscreen world HUD', () => {
     await expect(page.locator('#modalCard')).toContainText('집중 연구 +2E');
     await expect(page.locator('#modalCard')).toContainText('무풍·미세먼지');
     await expect(page.locator('#modalCard')).toContainText('풍력 출력이 급감');
+  });
+
+  test('전력 부족 원인은 오늘의 도시 수요 변동을 함께 밝힌다', async ({ gamePage: page }) => {
+    // 수요 변동은 판의 씨앗에서 결정론적으로 나온다. 씨앗과 게임일을 고정해 기대 문구를 잡는다.
+    const variation = await page.evaluate(() => {
+      window.__setTimeScale(0);
+      window.__setEnvironmentSeed(20400134);
+      const state = window.__GAME_STATE__;
+      state.elapsedGameDays = 12;
+      state.grid[0] = { type: 'residential', level: 2 };
+      state.lastTickSummary = {
+        dailyCarbon: 1,
+        dailyWater: 1,
+        deliveredPower: 3,
+        demand: 5,
+        batteryStored: 0,
+        lowCarbonPercent: 50,
+        capacity: 10,
+        used: 4,
+      };
+      window.__refreshGameForTest();
+      return JSON.parse(window.render_game_to_text()).demandVariation;
+    });
+
+    // render_game_to_text가 싣는 계수와 원인 창의 문구는 같은 날의 같은 값이어야 한다.
+    expect(variation).toBeGreaterThanOrEqual(0.92);
+    expect(variation).toBeLessThanOrEqual(1.08);
+    const percent = Math.round((variation - 1) * 100);
+    const label = `오늘 수요 변동 ${percent > 0 ? '+' : percent < 0 ? '' : '±'}${percent}%`;
+
+    await page.locator('#simulationHud [data-metric="power"]').click();
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(page.locator('#modalCard')).toContainText('전력 부족 원인');
+    await expect(page.locator('#modalCard')).toContainText('수요 변동');
+    await expect(page.locator('#modalCard')).toContainText(label);
+    // 칩 툴팁은 변동이 아니라 그날의 실제 수치를 그대로 유지한다.
+    await expect(page.locator('#simulationHud [data-metric="power"]'))
+      .toHaveAttribute('title', /수요 5\.0 · 실제 공급 3\.0/);
+  });
+
+  // 날씨는 씨앗과 경과일에서 결정론적으로 나온다. render_game_to_text가 싣는 값과 칩이 같은 날의 같은 값이어야 한다.
+  async function weatherOnFixedDay(page, setup = () => {}) {
+    return page.evaluate((setupSource) => {
+      window.__setTimeScale(0);
+      window.__setEnvironmentSeed(20400134);
+      const state = window.__GAME_STATE__;
+      state.elapsedGameDays = 12;
+      // eslint-disable-next-line no-new-func
+      new Function('state', setupSource)(state);
+      window.__refreshGameForTest();
+      return JSON.parse(window.render_game_to_text()).weather;
+    }, `(${setup.toString()})(state)`);
+  }
+
+  test('날씨 칩 본문은 render_game_to_text의 오늘 날씨(종류·풍속)와 같고 툴팁이 내일 예보를 잇는다', async ({ gamePage: page }) => {
+    const weather = await weatherOnFixedDay(page);
+    expect(['clear', 'cloudy', 'rain', 'snow']).toContain(weather.kind);
+    expect(weather.windSpeedMs).toBeGreaterThan(0);
+    expect(weather.forcedBy).toBeNull();
+    expect(['clear', 'cloudy', 'rain', 'snow']).toContain(weather.tomorrow.kind);
+
+    const chip = page.locator('#simulationHud [data-metric="weather"]');
+    await expect(page.locator('#simWeather')).toHaveText(`${weather.label} · ${weather.windSpeedMs} m/s`);
+    await expect(chip).not.toHaveClass(/is-forced/);
+    await expect(chip).toHaveAttribute('title', `오늘 ${weather.label} · 태양광 ${Math.round(weather.solarFactor * 100)}% · 풍속 ${weather.windSpeedMs} m/s · 풍력 ${Math.round(weather.windFactor * 100)}% / 내일 ${weather.tomorrow.label} · ${weather.tomorrow.windSpeedMs} m/s`);
+    await expect(chip).toHaveAttribute('aria-label', /^오늘 .+ \/ 내일 /);
+    // 아이콘은 종류를 따른다 — SVG로 치환된 뒤에도 data-lucide가 오늘 종류의 아이콘이어야 한다.
+    const iconByKind = { clear: 'sun', cloudy: 'cloud', rain: 'cloud-rain', snow: 'snowflake' };
+    await expect(chip.locator('svg[data-lucide]')).toHaveAttribute('data-lucide', iconByKind[weather.kind]);
+    expect(page.consoleMessages.filter((text) => text.includes('icon name was not found'))).toEqual([]);
+  });
+
+  test('날씨 칩을 누르면 오늘의 날씨 창이 태양광·풍속·조력·내일 예보를 밝힌다', async ({ gamePage: page }) => {
+    const weather = await weatherOnFixedDay(page);
+    await page.locator('#simulationHud [data-metric="weather"]').click();
+
+    await expect(page.locator('#modal')).toBeVisible();
+    const card = page.locator('#modalCard');
+    await expect(card).toHaveAttribute('data-modal-id', 'hud-weather');
+    await expect(card).toContainText('오늘의 날씨');
+    await expect(card.locator('.metric-cause-current')).toContainText(weather.label);
+    await expect(card).toContainText(`태양광 ${Math.round(weather.solarFactor * 100)}%`);
+    await expect(card).toContainText(`풍속 ${weather.windSpeedMs} m/s · 풍력 ${Math.round(weather.windFactor * 100)}%`);
+    await expect(card).toContainText('조력은 날씨와 무관');
+    await expect(card).toContainText(`내일 ${weather.tomorrow.label} · ${weather.tomorrow.windSpeedMs} m/s`);
+    // 날씨 창은 도시가 계속 흐르는 안내 창이다.
+    expect(await page.evaluate(() => window.__getModalState().pausesSimulation)).toBe(false);
+    await page.locator('#modalCard .btn.close-modal').click();
+    await expect(page.locator('#modal')).toBeHidden();
+  });
+
+  test('태양광이 있는 도시의 전력 부족 원인은 오늘 날씨의 태양광 배율을 함께 밝힌다', async ({ gamePage: page }) => {
+    const weather = await weatherOnFixedDay(page, (state) => {
+      state.grid[0] = { type: 'residential', level: 2 };
+      state.grid[1] = { type: 'solar', level: 1, rotation: 4 };
+      state.lastTickSummary = { dailyCarbon: 1, dailyWater: 1, deliveredPower: 3, demand: 5, batteryStored: 0, lowCarbonPercent: 50, capacity: 10, used: 4 };
+    });
+    const solarPercent = Math.round(weather.solarFactor * 100);
+
+    await page.locator('#simulationHud [data-metric="power"]').click();
+    await expect(page.locator('#modal')).toBeVisible();
+    const card = page.locator('#modalCard');
+    await expect(card).toContainText('전력 부족 원인');
+    await expect(card).toContainText(`오늘 날씨 ${weather.label} · 태양광 ${solarPercent}%`);
+    // 풍력이 없는 도시에는 풍력 줄이 붙지 않는다.
+    await expect(card).not.toContainText('풍력');
+  });
+
+  test('진행 중인 기후 이벤트가 날씨를 고정하면 칩·툴팁·날씨 창·전력 원인 창이 출처를 밝힌다', async ({ gamePage: page }) => {
+    // 무풍·미세먼지는 흐림에 풍속 2 m/s를 고정한다(WEATHER_RULES.EVENT_WEATHER.stagnantAir) — 풍력 0%.
+    const weather = await weatherOnFixedDay(page, (state) => {
+      state.grid[0] = { type: 'residential', level: 1 };
+      state.grid[2] = { type: 'wind', level: 1, rotation: 0 };
+      state.events.schedule = [{ id: 'still-now', type: 'stagnantAir', announceAt: 0, startAt: 12, endAt: 18 }];
+      state.events.activeId = 'still-now';
+      state.lastTickSummary = { dailyCarbon: 2, dailyWater: 2, deliveredPower: 4, demand: 7, batteryStored: 0, lowCarbonPercent: 60, capacity: 10, used: 7 };
+    });
+    expect(weather).toMatchObject({ kind: 'cloudy', label: '흐림', windSpeedMs: 2, windFactor: 0, forcedBy: '무풍·미세먼지' });
+    // 내일도 같은 이벤트 안이라 예보 역시 이벤트 날씨다.
+    expect(weather.tomorrow).toMatchObject({ kind: 'cloudy', windSpeedMs: 2 });
+
+    const chip = page.locator('#simulationHud [data-metric="weather"]');
+    await expect(page.locator('#simWeather')).toHaveText('흐림 · 2 m/s');
+    await expect(chip).toHaveClass(/is-forced/);
+    await expect(chip).toHaveAttribute('title', /풍속 2 m\/s · 풍력 0% \/ 무풍·미세먼지 영향 \/ 내일 흐림 · 2 m\/s/);
+    await expect(chip.locator('svg[data-lucide]')).toHaveAttribute('data-lucide', 'cloud');
+
+    await chip.click();
+    await expect(page.locator('#modalCard')).toContainText('흐림 · 무풍·미세먼지 영향');
+    await expect(page.locator('#modalCard')).toContainText('풍속 2 m/s · 풍력 0%');
+    await page.locator('#modalCard .btn.close-modal').click();
+    await expect(page.locator('#modal')).toBeHidden();
+
+    await page.locator('#simulationHud [data-metric="power"]').click();
+    await expect(page.locator('#modalCard')).toContainText('전력 부족 원인');
+    await expect(page.locator('#modalCard')).toContainText('풍속 2 m/s · 풍력 0%');
+    await expect(page.locator('#modalCard')).toContainText('무풍·미세먼지 영향');
+    // 이벤트 자체의 설명 줄도 그대로 남는다.
+    await expect(page.locator('#modalCard')).toContainText('풍력 출력이 급감');
+  });
+
+  test('태양광·풍력 시설 창은 방향 안내 아래에 오늘 날씨 줄을 보여 준다', async ({ gamePage: page }) => {
+    const weather = await weatherOnFixedDay(page, (state) => {
+      state.grid[1] = { type: 'solar', level: 1, rotation: 4 };
+      state.grid[2] = { type: 'wind', level: 1, rotation: 0 };
+    });
+    await page.evaluate(() => window.__clickCell(1));
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(page.locator('#facilityWeatherNote')).toContainText(`오늘 날씨 ${weather.label} · 태양광 ${Math.round(weather.solarFactor * 100)}%`);
+    await expect(page.locator('#facilitySiteNote')).toBeVisible();
+    await page.locator('.modal-card .close-modal').first().click();
+    await expect(page.locator('#modal')).toBeHidden();
+
+    await page.evaluate(() => window.__clickCell(2));
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(page.locator('#facilityWeatherNote')).toContainText(`풍속 ${weather.windSpeedMs} m/s · 풍력 ${Math.round(weather.windFactor * 100)}%`);
   });
 
   test('time navigation has one play-pause toggle and one 1x-4x speed toggle', async ({ gamePage: page }) => {
@@ -673,5 +833,52 @@ test.describe('fullscreen world HUD', () => {
 
   test('the mobile quest strip stays out of the desktop HUD', async ({ gamePage: page }) => {
     await expect(page.locator('#questStrip')).toBeHidden();
+  });
+
+  // 보상 수령 뒤에는 "완료 조건 달성" 토스트가 사라지고, 보상 토스트 하나만 남는다(버튼 없음).
+  test('claiming a ready quest replaces the ready alert with one plain reward toast', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      window.__setTimeScale(0);
+      const state = window.__GAME_STATE__;
+      state.grid[0] = { type: 'residential', level: 1, priority: 'essential', rotation: 0 };
+      state.grid[1] = { type: 'residential', level: 1, priority: 'essential', rotation: 0 };
+      window.__refreshGameForTest();
+    });
+    const readyAlert = page.locator('.toast.quest-alert:not(.quest-reward-alert)');
+    await expect(readyAlert).toHaveCount(1);
+    await expect(readyAlert.locator('[data-toast-action="quest"]')).toHaveText('보상 확인');
+
+    await page.locator('[data-hud-target="quest"]').first().click();
+    await page.locator('#questPanelClaimBtn').click();
+    await expect(readyAlert).toHaveCount(0);
+    const reward = page.locator('.toast.quest-reward-alert');
+    await expect(reward).toHaveCount(1);
+    await expect(reward).toContainText('2040, 첫 시민 완료');
+    await expect(reward.locator('[data-toast-action]')).toHaveCount(0);
+    await expect(page.locator('.toast.quest-alert')).toHaveCount(1);
+  });
+
+  // 강화가 지금 불가능하면 이유와 상관없이 같은 버튼("강화 조건 확인")이어야 한다.
+  test('the upgrade button never promises a level it cannot deliver right now', async ({ gamePage: page }) => {
+    await page.evaluate(() => {
+      const state = window.__GAME_STATE__;
+      state.questIndex = 8;
+      state.upgradePermitLevel = 2;
+      state.credits = 0.5;
+      state.grid[0] = { type: 'residential', level: 1, priority: 'essential', rotation: 0 };
+      window.__refreshGameForTest();
+      window.__clickCell(0);
+    });
+    const button = page.locator('#upgradeBtn');
+    await expect(button).toHaveText(/강화 조건 확인/);
+    await expect(button).toHaveAttribute('title', /크레딧/);
+    await page.keyboard.press('Escape');
+
+    await page.evaluate(() => {
+      window.__GAME_STATE__.credits = 30;
+      window.__refreshGameForTest();
+      window.__clickCell(0);
+    });
+    await expect(page.locator('#upgradeBtn')).toHaveText(/Lv\.2/);
   });
 });

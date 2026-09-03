@@ -7,6 +7,8 @@ import {
 } from '../../../src/systems/CityModifierSystem.js';
 import { calculatePowerNetwork } from '../../../src/systems/PowerNetworkSystem.js';
 import { settleEconomy } from '../../../src/systems/EconomySystem.js';
+import { FACILITY_DEMAND_BY_LEVEL } from '../../../src/core/Constants.js';
+import { demandVariationFactor } from '../../../src/systems/EnvironmentSystem.js';
 
 const factory = (level = 1) => ({ type: 'factory', level, priority: 'normal' });
 
@@ -17,7 +19,7 @@ test('level event zone and research modifiers compose once', () => {
     research: { carbon: 1.2 },
   });
 
-  expect(stats.demand).toBeCloseTo(4 * 1.24 * 1.4);
+  expect(stats.demand).toBeCloseTo(FACILITY_DEMAND_BY_LEVEL.factory[2] * 1.4);
   expect(stats.income).toBeCloseTo(1 * 1.48 * 1.35);
   expect(stats.carbon).toBeCloseTo(2 * 1.16 * 1.2);
   expect(stats.workforce).toBe(6);
@@ -43,7 +45,9 @@ test('operation context applies one facility modifier equally to power and econo
     credits: 10,
   });
 
-  expect(power.facilityPower[2].demand).toBeCloseTo(4 * 1.24 * 0.65);
+  // 문맥이 만든 수요에는 그날의 도시 수요 변동도 함께 곱해진다.
+  expect(power.facilityPower[2].demand)
+    .toBeCloseTo(FACILITY_DEMAND_BY_LEVEL.factory[2] * 0.65 * demandVariationFactor(state, state.elapsedGameDays), 1);
   expect(economy.facilityEconomy[2].income).toBeCloseTo(1 * 1.48 * 0.7);
   expect(economy.facilityEnvironment[2].carbon).toBeCloseTo(2 * 1.16 * 0.85);
 });

@@ -1,9 +1,11 @@
-import { COOLING_RULES, ECONOMY_RULES } from '../core/Constants.js';
+import { BOARD, COOLING_RULES, ECONOMY_RULES, FACILITY_GROUPS } from '../core/Constants.js';
 import { createHexCoordinates, hexDistance } from './HexGridSystem.js';
 import { effectiveFacilityStats, facilityModifierAt } from './CityModifierSystem.js';
 import { operationProfileForCell, operationalGrid } from './ConstructionProjectSystem.js';
 
 const round2 = (value) => Math.round(value * 100) / 100;
+// 순환냉각의 수혜 시설은 COOLING_RULES의 감축량 표에 행이 있는 시설이다.
+const COOLED_TYPES = Object.freeze(Object.keys(COOLING_RULES.TARGET_WATER_REDUCTION_PER_LEVEL));
 
 function safeLevel(cell) {
   return Math.max(1, Math.min(3, Math.trunc(Number(cell?.level) || 1)));
@@ -11,8 +13,8 @@ function safeLevel(cell) {
 
 function topologyFor(grid, coords) {
   if (coords) return coords;
-  if (grid.length === 19) return createHexCoordinates(2);
-  if (grid.length === 37) return createHexCoordinates(3);
+  if (grid.length === BOARD.INITIAL_CELLS) return createHexCoordinates(BOARD.INITIAL_RADIUS);
+  if (grid.length === BOARD.EXPANDED_CELLS) return createHexCoordinates(BOARD.EXPANDED_RADIUS);
   return [];
 }
 
@@ -27,7 +29,7 @@ function strongestCoolingSupport(grid, index, coords, facilityOperations) {
       && coolerLevel >= COOLING_RULES.EXTENDED_RANGE_LEVEL
     )) return strongest;
     const powerRatio = Math.max(0, Math.min(1, Number(facilityOperations[coolerIndex]?.powerRatio) || 0));
-    const levelBonus = coolerLevel >= 2 ? COOLING_RULES.LEVEL_TWO_EFFECT_MULTIPLIER : 1;
+    const levelBonus = coolerLevel >= COOLING_RULES.BONUS_LEVEL ? COOLING_RULES.LEVEL_TWO_EFFECT_MULTIPLIER : 1;
     const rangeMultiplier = tileDistance === COOLING_RULES.EXTENDED_RANGE_DISTANCE
       ? COOLING_RULES.EXTENDED_RANGE_MULTIPLIER
       : 1;
@@ -67,7 +69,7 @@ export function calculateEnvironmentalOperations({
     const generationRatio = Math.max(ECONOMY_RULES.GENERATION_IDLE_EMISSION_RATIO, operationRatio);
     const carbonFactor = stats.carbon < 0
       ? 1
-      : ['factory', 'data'].includes(cell.type)
+      : FACILITY_GROUPS.OUTPUT_LINKED_CARBON.includes(cell.type)
         ? operationRatio
         : stats.supply > 0
           ? generationRatio
@@ -77,7 +79,7 @@ export function calculateEnvironmentalOperations({
       ? powerRatio
       : stats.supply > 0 ? generationRatio : 1);
 
-    if (['data', 'nuclear'].includes(cell.type)) {
+    if (COOLED_TYPES.includes(cell.type)) {
       const coolingSupport = strongestCoolingSupport(
         grid,
         index,

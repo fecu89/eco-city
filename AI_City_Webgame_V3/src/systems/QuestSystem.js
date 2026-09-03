@@ -1,5 +1,5 @@
 import { questForState } from '../core/QuestDefinitions.js';
-import { EMERGENCY_SUPPORT, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
+import { EMERGENCY_SUPPORT, POWER_RULES, QUEST_REQUIREMENTS, STAGES } from '../core/Constants.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { createHexCoordinates, neighborIndices } from './HexGridSystem.js';
@@ -34,7 +34,7 @@ function branchResearchId(state) {
 }
 
 function hasModernizedDataCenter(state) {
-  return state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= 2);
+  return state.grid.some((cell) => isOperationalCell(cell) && cell.type === 'data' && cell.level >= QUEST_REQUIREMENTS.MODERNIZATION_LEVEL);
 }
 
 // 현재 도시 상태만으로 판정하는 퀘스트들. 조건이 다시 깨지면 준비 상태도 해제된다.
@@ -74,8 +74,8 @@ export function questProgressFraction(state) {
   if (countRule) return clampFraction(facilities(state, countRule.type).length / countRule.target);
   if (state.questIndex === CAMPAIGN_QUEST_INDEXES.PREPARATION_START) return researchQuestFraction(state);
   if (state.questIndex === CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST) {
-    return (hasModernizedDataCenter(state) ? 0.5 : 0)
-      + (state.research.completedIds.has('smartGrid') ? 0.5 : 0);
+    return (hasModernizedDataCenter(state) ? QUEST_REQUIREMENTS.MODERNIZATION_PROGRESS_WEIGHTS.DATA_CENTER : 0)
+      + (state.research.completedIds.has('smartGrid') ? QUEST_REQUIREMENTS.MODERNIZATION_PROGRESS_WEIGHTS.SMART_GRID : 0);
   }
   return clampFraction((state.questProgress.consecutiveDays || 0) / QUEST_REQUIREMENTS.OPERATING_DAYS);
 }
@@ -188,14 +188,14 @@ export function applySimulationQuestProgress(state, summary) {
       condition = Object.entries(summary.facilityEconomy || {}).some(([index, item]) => state.grid[index]?.type === 'factory'
         && isOperationalCell(state.grid[index])
         && hasAdjacent(state, Number(index), new Set(['thermal']))
-        && (summary.facilityPower?.[index]?.ratio ?? 0) >= 0.5
-        && item.operationRatio >= 0.5
+        && (summary.facilityPower?.[index]?.ratio ?? 0) >= QUEST_REQUIREMENTS.FACTORY_LINK_MIN_RATIO
+        && item.operationRatio >= QUEST_REQUIREMENTS.FACTORY_LINK_MIN_RATIO
         && item.income > 0);
       break;
     case 3:
       return evaluateCurrentQuest(state);
     case 4:
-      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => isOperationalCell(state.grid[index]) && state.grid[index].type === 'data' && item.ratio >= 0.9);
+      condition = Object.entries(summary.facilityPower || {}).some(([index, item]) => isOperationalCell(state.grid[index]) && state.grid[index].type === 'data' && item.ratio >= POWER_RULES.OUTAGE_RATIO);
       break;
     case 5:
       condition = facilities(state, 'nuclear').length > 0
@@ -238,7 +238,7 @@ export function applySimulationQuestProgress(state, summary) {
         && (summary.routes || []).some((route) => (
           isOperationalCell(state.grid[route.from])
           && state.grid[route.from].type === type
-          && Number(route.delivered) >= 0.1
+          && Number(route.delivered) >= POWER_RULES.DELIVERY_EPSILON_E
         ));
       }
       break;
@@ -248,7 +248,7 @@ export function applySimulationQuestProgress(state, summary) {
         && (summary.routes || []).some((route) => (
           isOperationalCell(state.grid[route.from])
           && state.grid[route.from].type === 'tidal'
-          && Number(route.delivered) >= 0.1
+          && Number(route.delivered) >= POWER_RULES.DELIVERY_EPSILON_E
         ));
       break;
     default:

@@ -1,35 +1,24 @@
-const WIND_PROFILE = [0.6, 0.9, 1.1, 0.75];
+import { CALENDAR, HEATWAVE_RULES, SOLAR_RULES } from '../core/Constants.js';
 
-const normalizeHour = (hour) => ((Number(hour) % 24) + 24) % 24;
+// 풍력은 예전의 4일 고정 패턴 대신 날씨(core/Weather.js)의 풍속을 따른다.
+const normalizeHour = (hour) => ((Number(hour) % CALENDAR.HOURS_PER_DAY) + CALENDAR.HOURS_PER_DAY) % CALENDAR.HOURS_PER_DAY;
 
+// 시간대별 태양광 배율: 밤 0, 새벽·저녁 DUSK_MULTIPLIER, 낮 1. 경계 시각은 settings.json SOLAR_RULES.
 export function getSolarMultiplier(hour) {
   const h = normalizeHour(hour);
-  if (h <= 5 || h >= 19) return 0;
-  if (h <= 7 || h >= 17) return 0.5;
+  if (h <= SOLAR_RULES.NIGHT_END_HOUR || h >= SOLAR_RULES.NIGHT_START_HOUR) return 0;
+  if (h <= SOLAR_RULES.DUSK_END_HOUR || h >= SOLAR_RULES.DUSK_START_HOUR) return SOLAR_RULES.DUSK_MULTIPLIER;
   return 1;
 }
 
+// 하루 평균 태양광 배율(유효 일조 시간 / 하루 시간).
 export function getDailySolarMultiplier() {
-  return 11 / 24;
+  return SOLAR_RULES.DAILY_AVERAGE_LIT_HOURS / CALENDAR.HOURS_PER_DAY;
 }
 
-export function getWindMultiplier(tickIndex) {
-  return WIND_PROFILE[((Math.trunc(tickIndex) % WIND_PROFILE.length) + WIND_PROFILE.length) % WIND_PROFILE.length];
-}
-
+// 폭염 수요 배수. 영향 시설과 배수는 settings.json HEATWAVE_RULES.
 export function getDemandMultiplier(type, { heatwave = false, adjacentGreen = false } = {}) {
-  if (!heatwave || !['residential', 'data', 'cooling'].includes(type)) return 1;
-  if (type === 'residential' && adjacentGreen) return 1.1;
-  return 1.25;
-}
-
-export function getThreeDayForecast(dayIndex, tickIndex) {
-  return [1, 2, 3].map((offset) => {
-    const nextDayIndex = Math.max(0, Math.trunc(Number(dayIndex) || 0) + offset);
-    return {
-      dayIndex: nextDayIndex,
-      solar: getDailySolarMultiplier(),
-      wind: getWindMultiplier(tickIndex + offset),
-    };
-  });
+  if (!heatwave || !HEATWAVE_RULES.AFFECTED_TYPES.includes(type)) return 1;
+  if (type === 'residential' && adjacentGreen) return HEATWAVE_RULES.ADJACENT_GREEN_DEMAND_MULTIPLIER;
+  return HEATWAVE_RULES.DEMAND_MULTIPLIER;
 }

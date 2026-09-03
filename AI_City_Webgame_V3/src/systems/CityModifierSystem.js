@@ -1,8 +1,15 @@
 import {
+  BOARD,
   ECONOMY_RULES,
   FACILITIES,
+  FACILITY_DEMAND_BY_LEVEL,
   FACILITY_ECONOMY,
+  FACILITY_WATER_BY_LEVEL,
+  GREEN_RULES,
+  HEATWAVE_RULES,
   LEVEL_MULTIPLIERS,
+  POWER_RULES,
+  RESEARCH_RULES,
   RESEARCH_TUNING,
   WORKFORCE_LEVELS,
 } from '../core/Constants.js';
@@ -14,13 +21,14 @@ import { carbonPressureForDays } from './CarbonCrisisSystem.js';
 import { researchEffects } from './ResearchEffectSystem.js';
 import { stressCityModifier, stressModifierForFacility } from './StressTestSystem.js';
 import { isOperationalCell, operationProfileForCell } from './ConstructionProjectSystem.js';
-import { directionFactor, tidalFactor } from './EnvironmentSystem.js';
+import { demandVariationFactor, directionFactor, tidalFactor } from './EnvironmentSystem.js';
+import { weatherAt } from './WeatherSystem.js';
 
 const MULTIPLICATIVE_FIELDS = Object.freeze([
   'supply', 'demand', 'income', 'upkeep', 'carbon', 'water', 'negative', 'researchSpeed', 'workforce',
 ]);
 const ADDITIVE_FIELDS = Object.freeze(['workforceFlat', 'healthCostFlat', 'buildCostFlat']);
-const FACILITY_PRIORITIES = new Set(['essential', 'normal', 'saving']);
+const FACILITY_PRIORITIES = new Set(Object.keys(POWER_RULES.PRIORITY_ORDER));
 
 export function identityModifier() {
   return {
@@ -58,15 +66,24 @@ function safeLevel(cell) {
   return Math.max(1, Math.min(3, Math.trunc(Number(cell?.level) || 1)));
 }
 
+// 소비 시설의 수요·물은 종류별 레벨 표가 있으면 일반 배율 대신 그 표를 쓴다(FACILITY_DEMAND_BY_LEVEL).
+// 표가 없는 시설은 예전 그대로 LEVEL_MULTIPLIERS를 곱한다.
+function levelTableValue(table, level) {
+  const value = Number(table?.[level]);
+  return Number.isFinite(value) ? value : null;
+}
+
 function baseFacilityStats(cell) {
   const facility = FACILITIES[cell.type];
   const economy = FACILITY_ECONOMY[cell.type];
   const level = safeLevel(cell);
   const carbon = facility.carbon || 0;
   const water = facility.water || 0;
+  const tableDemand = levelTableValue(FACILITY_DEMAND_BY_LEVEL[cell.type], level);
+  const tableWater = levelTableValue(FACILITY_WATER_BY_LEVEL[cell.type], level);
   return {
     dev: (facility.dev || 0) * LEVEL_MULTIPLIERS.output[level],
-    demand: (facility.demand || 0) * LEVEL_MULTIPLIERS.demand[level],
+    demand: tableDemand ?? (facility.demand || 0) * LEVEL_MULTIPLIERS.demand[level],
     supply: (facility.supply || 0) * LEVEL_MULTIPLIERS.output[level],
     income: (economy.income || 0) * LEVEL_MULTIPLIERS.output[level],
     upkeep: (economy.upkeep || 0) * ECONOMY_RULES.UPKEEP_LEVEL_MULTIPLIERS[level],
@@ -75,9 +92,9 @@ function baseFacilityStats(cell) {
       : carbon * LEVEL_MULTIPLIERS.impact[level],
     water: cell.type === 'cooling'
       ? 0
-      : water < 0
+      : tableWater ?? (water < 0
         ? water * LEVEL_MULTIPLIERS.negative[level]
-        : water * LEVEL_MULTIPLIERS.impact[level],
+        : water * LEVEL_MULTIPLIERS.impact[level]),
     workforce: WORKFORCE_LEVELS[cell.type]?.[level] ?? 0,
     researchSpeed: 1,
     healthCostFlat: 0,
@@ -87,13 +104,14 @@ function baseFacilityStats(cell) {
 
 function normalizeModifier(modifier = {}) {
   if (modifier.combined) return composeModifiers(modifier.combined);
-  if (modifier.event || modifier.zone || modifier.research || modifier.stress || modifier.site) {
+  if (modifier.event || modifier.zone || modifier.research || modifier.stress || modifier.site || modifier.daily) {
     return composeModifiers(
       modifier.event,
       modifier.zone,
       modifier.research,
       modifier.stress,
       modifier.site,
+      modifier.daily,
     );
   }
   return composeModifiers(modifier);
@@ -127,7 +145,7 @@ function modifierAt(source, index) {
 
 function coordinatesFor(state, coords) {
   if (coords) return coords;
-  return createHexCoordinates(state.grid.length === 37 ? 3 : 2);
+  return createHexCoordinates(state.grid.length === BOARD.EXPANDED_CELLS ? BOARD.EXPANDED_RADIUS : BOARD.INITIAL_RADIUS);
 }
 
 function hasAdjacentType(state, index, coords, type) {
@@ -151,23 +169,24 @@ function hasGreenCluster(state, coords) {
         queue.push(neighbor);
       });
     }
-    return visited.size >= 3;
+    return visited.size >= GREEN_RULES.CLUSTER_MIN_CELLS;
   });
 }
 
 function strongestResidentialGreenModifier(state, index, coords) {
+  // 인접(거리 1) 녹지는 레벨별로, 거리 2 녹지는 DISTANCE2_MIN_LEVEL 이상일 때만 주거 수입·폭염 수요를 완화한다.
   let income = 1;
-  let heatDemand = 1.25;
+  let heatDemand = HEATWAVE_RULES.DEMAND_MULTIPLIER;
   state.grid.forEach((cell, greenIndex) => {
     if (!isOperationalCell(cell) || cell.type !== 'green') return;
     const level = safeLevel(cell);
     const distance = hexDistance(coords[index], coords[greenIndex]);
     if (distance === 1) {
-      income = Math.max(income, [1, 1.05, 1.07, 1.09][level]);
-      heatDemand = Math.min(heatDemand, level >= 2 ? 1.15 : 1.2);
-    } else if (distance === 2 && level >= 3) {
-      income = Math.max(income, 1.045);
-      heatDemand = Math.min(heatDemand, 1.2);
+      income = Math.max(income, GREEN_RULES.ADJACENT_INCOME_BY_LEVEL[level]);
+      heatDemand = Math.min(heatDemand, HEATWAVE_RULES.GREEN_RELIEF.ADJACENT_DEMAND_BY_LEVEL[level]);
+    } else if (distance === 2 && level >= GREEN_RULES.DISTANCE2_MIN_LEVEL) {
+      income = Math.max(income, GREEN_RULES.DISTANCE2_INCOME);
+      heatDemand = Math.min(heatDemand, HEATWAVE_RULES.GREEN_RELIEF.DISTANCE2_DEMAND);
     }
   });
   return { income, heatDemand, supported: income > 1 };
@@ -212,18 +231,24 @@ export function buildCityModifierContext(state, {
   const carbonPressure = carbonPressureForDays(state.carbonCrisisDays);
   const effects = researchEffects(state);
   const greenCluster = hasGreenCluster(state, boardCoords);
+  // 오늘 하루의 도시 소비 전력 변동. 판의 씨앗과 게임일만으로 정해지므로 예보가 같은 날을
+  // 다시 정산해도 같은 값이 나온다(SimulationForecastSystem은 복제 상태로 settleDay를 돌린다).
+  const demandVariation = demandVariationFactor(state, state.elapsedGameDays);
+  // 오늘의 날씨. 태양광은 맑음·흐림·강수에, 풍력은 풍속에만 따른다(조력·화력·핵은 무관).
+  // 진행 중인 기후 이벤트·최종시험 단계가 있으면 WeatherSystem이 그에 맞춘 날씨를 돌려준다.
+  const weather = weatherAt(state, state.elapsedGameDays);
   const greenFactoryHealthMultiplierByIndex = {};
   state.grid.forEach((cell, index) => {
     if (!isOperationalCell(cell)) return;
     const greenSupport = cell.type === 'residential'
       ? strongestResidentialGreenModifier(state, index, boardCoords)
-      : { income: 1, heatDemand: 1.25, supported: false };
+      : { income: 1, heatDemand: HEATWAVE_RULES.DEMAND_MULTIPLIER, supported: false };
     const eventBase = eventModifiers
       ? modifierAt(eventModifiers, index)
       : activeEvent.byFacility?.(index) || identityModifier();
     const event = composeModifiers(eventBase, {
       demand: activeEvent.event?.type === 'heatwave' && cell.type === 'residential' && greenSupport.supported
-        ? greenSupport.heatDemand / 1.25
+        ? greenSupport.heatDemand / HEATWAVE_RULES.DEMAND_MULTIPLIER
         : 1,
       income: cell.type === 'residential' ? carbonPressure.residentialIncomeMultiplier : 1,
       water: carbonPressure.waterMultiplier,
@@ -232,7 +257,7 @@ export function buildCityModifierContext(state, {
       ? modifierAt(zoneModifiers, index)
       : zoneModifierForCell(state, index, cell.type);
     const adjacentGreen = hasAdjacentType(state, index, boardCoords, 'green');
-    if (cell.type === 'factory' && adjacentGreen) greenFactoryHealthMultiplierByIndex[index] = 0.75;
+    if (cell.type === 'factory' && adjacentGreen) greenFactoryHealthMultiplierByIndex[index] = GREEN_RULES.FACTORY_HEALTH_MULTIPLIER;
     const systemResearch = {
       supply: cell.type === 'solar'
         ? effects.solarSupply
@@ -240,8 +265,10 @@ export function buildCityModifierContext(state, {
           ? effects.windSupply * lowWindRelief(cell.type, eventBase, effects)
           : 1,
       income: cell.type === 'residential' ? greenSupport.income : 1,
-      researchSpeed: cell.type === 'data' && (Number(cell.level) || 1) >= 3 && lowCarbonSurplus(state) >= 3
-        ? 1.25
+      researchSpeed: cell.type === 'data'
+        && (Number(cell.level) || 1) >= RESEARCH_RULES.DATA_CENTER_SURPLUS_BONUS.MIN_LEVEL
+        && lowCarbonSurplus(state) >= RESEARCH_RULES.DATA_CENTER_SURPLUS_BONUS.MIN_SURPLUS_E
+        ? RESEARCH_RULES.DATA_CENTER_SURPLUS_BONUS.SPEED_MULTIPLIER
         : 1,
     };
     const research = composeModifiers(systemResearch, modifierAt(researchModifiers, index));
@@ -255,13 +282,20 @@ export function buildCityModifierContext(state, {
         ? tidalFactor(state, index)
         : directionFactor(state, cell.type, index, cell.rotation),
     };
+    // 그날의 수요 변동은 전력을 실제로 쓰는 시설(주거·공장·데이터센터·순환냉각·에너지저장
+    // 보조전력)에만 걸린다. 발전 시설과 녹지는 수요가 0이라 곱할 것이 없다.
+    const daily = {
+      demand: FACILITY_DEMAND_BY_LEVEL[cell.type] ? demandVariation : 1,
+      supply: cell.type === 'solar' ? weather.solarFactor : cell.type === 'wind' ? weather.windFactor : 1,
+    };
     byFacility[index] = {
       event,
       zone,
       research,
       stress,
       site,
-      combined: composeModifiers(event, zone, research, stress, site),
+      daily,
+      combined: composeModifiers(event, zone, research, stress, site, daily),
     };
   });
   return {
@@ -270,6 +304,8 @@ export function buildCityModifierContext(state, {
       coords,
       calendar,
       expansionUpkeep: expansionUpkeep(state),
+      demandVariation,
+      weather,
       healthCostFlat: 0,
       buildCostFlat: 0,
       waterLimit: activeEvent.city.waterLimit ?? stressCity.waterLimit ?? null,

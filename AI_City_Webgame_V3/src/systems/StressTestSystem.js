@@ -135,23 +135,23 @@ function recordDay(state, summary) {
 
 function diagnosis(result) {
   if (result.averageEssentialSupply < STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT) {
-    return { id: 'essential_average', label: '필수시설 평균 전력 공급이 82% 미만이었습니다.' };
+    return { id: 'essential_average', label: `필수시설 평균 전력 공급이 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% 미만이었습니다.` };
   }
   if (result.minimumEssentialSupply < STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT) {
-    return { id: 'essential_floor', label: '필수시설 공급률이 하루라도 50% 아래로 내려갔습니다.' };
+    return { id: 'essential_floor', label: `필수시설 공급률이 하루라도 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% 아래로 내려갔습니다.` };
   }
   if (result.maxConsecutiveBankruptcyDays >= STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS) {
-    return { id: 'bankruptcy', label: '연속 적자 상태가 4일 이상 이어졌습니다.' };
+    return { id: 'bankruptcy', label: `연속 적자 상태가 ${STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS}일 이상 이어졌습니다.` };
   }
   if (result.finalCredits < 0) return { id: 'credit_recovery', label: '시험 종료까지 크레딧을 0 이상으로 복구하지 못했습니다.' };
   if (result.waterViolationDays > STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS) {
     return { id: 'water', label: `물 제한 초과가 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일을 넘었습니다.` };
   }
   if (result.recoveryAchievedAtDay > STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS) {
-    return { id: 'recovery', label: '최종 복구 3일 안에 전력과 수익을 정상화하지 못했습니다.' };
+    return { id: 'recovery', label: `최종 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 안에 전력과 수익을 정상화하지 못했습니다.` };
   }
   if (result.tidalEnergyDelivered < STRESS_TEST_RULES.MIN_TIDAL_DELIVERY) {
-    return { id: 'tidal', label: '해안 초강풍 구간의 조력 공급이 8E 미만이었습니다.' };
+    return { id: 'tidal', label: `해안 초강풍 구간의 조력 공급이 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E 미만이었습니다.` };
   }
   if (result.averageCarbon > STRESS_TEST_RULES.MAX_AVERAGE_CARBON
     || result.daysAtOrBelowEight < STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS
@@ -186,7 +186,9 @@ export function finishStressTest(state) {
     finalCredits: round2(state.credits),
     carbonExtreme: state.carbonCrisisDays >= CARBON_CRISIS.GAME_OVER_DAYS || state.gameOverReason === 'carbon_extreme',
   };
-  result.passed = result.days === 41
+  // 통과 총 일수는 최종시험 구간 일수의 합(settings.json FINAL_CLIMATE_PHASES)에서 파생한다. 리터럴로 두면 구간을
+  // 조정하는 순간 어긋나 시험이 영구 실패한다.
+  result.passed = result.days === stressTestTotalDays()
     && result.averageEssentialSupply >= STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT
     && result.minimumEssentialSupply >= STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT
     && result.maxConsecutiveBankruptcyDays < STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS

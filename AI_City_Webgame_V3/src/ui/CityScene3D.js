@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BOARD, CAMERA_UI, CITY_AMBIENT, CITY_AMBIENT_MOTION, CITY_ASSETS, CITY_BUILDING_ORIENTATION, CITY_CAMERA, CITY_MOTION, CITY_WORLD_OVERLAY, DIRECTION_COPY, DIRECTION_RULES, GREEN_VISUAL_LAYOUTS, HEX_TILE_VISUALS, LEVEL_VISUALS, THEME_SCHEMAS, UI_FEEDBACK, WORLD_DAY_LIGHTING, facilityColorFor } from '../core/Constants.js';
+import { BOARD, CAMERA_UI, CITY_AMBIENT, CITY_AMBIENT_MOTION, CITY_ASSETS, CITY_BUILDING_ORIENTATION, CITY_CAMERA, CITY_MOTION, CITY_WORLD_OVERLAY, CONSTRUCTION, DIRECTION_COPY, DIRECTION_RULES, GREEN_VISUAL_LAYOUTS, HEX_TILE_VISUALS, LEVEL_VISUALS, THEME_SCHEMAS, UI_FEEDBACK, VISUAL, WORLD_DAY_LIGHTING, facilityColorFor } from '../core/Constants.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { refreshIcons } from './Modal.js';
 import { assetLoader } from '../assets/AssetLoader.js';
@@ -23,40 +23,26 @@ export { GREEN_VISUAL_LAYOUTS };
 // 모든 레이어는 씬 수명 동안 유지된다. 상태 갱신은 instance matrix/color/count만 바꾸므로
 // 시설 선택 미리보기나 연속 배치 때 WebGL 버퍼를 생성·삭제하지 않는다.
 const MAX_CELLS = BOARD.EXPANDED_CELLS;
-const TILE_BASE_COLOR = 0x0d1f31;
+// 씬 연출 수치(색표·머티리얼·치수·높이)는 settings.json VISUAL.SCENE에 있다. 색은 Constants가 0x 정수로 바꿔 준다.
+const SCENE_VISUALS = VISUAL.SCENE;
 const FACILITY_TYPES = Object.keys(CITY_ASSETS);
+// 주거 칸마다 사람·차 한 쌍이 서고, 그 뒤에 새 풀(방문 연출 최대 마리 수)이 같은 InstancedMesh를 나눠 쓴다.
+const BIRD_POOL_SIZE = CITY_AMBIENT.BIRD_POOL_SIZE;
 const MAX_AMBIENT_AGENTS = (
   MAX_CELLS * CITY_AMBIENT.RESIDENT_AGENTS_PER_CELL
-  + 3
+  + BIRD_POOL_SIZE
 );
-const BIRD_POOL_SIZE = 3;
 // 방향 한 칸(45°)에 해당하는 yaw. rotation 인덱스에 곱해 쓴다.
 const DIRECTION_STEP_RADIANS = (DIRECTION_RULES.STEP_DEGREES * Math.PI) / 180;
 
-const TILE_COLORS = {
-  base: new THREE.Color(TILE_BASE_COLOR),
-  selected: new THREE.Color(0x123047),
-  unknown: new THREE.Color(0x152233),
-  problem: new THREE.Color(0x3a1520),
-  ok: new THREE.Color(0x16352c),
-  previewGood: new THREE.Color(0x18402f),
-  previewBad: new THREE.Color(0x3a1a20),
-  newLand: new THREE.Color(0x1a3a30),
-  inactive: new THREE.Color(0x101b24),
-  zoneSolar: new THREE.Color(0x3f4930),
-  zoneResidential: new THREE.Color(0x244455),
-  zoneWind: new THREE.Color(0x244b4d),
-  zoneIndustrial: new THREE.Color(0x463b35),
-};
+// 색표를 THREE.Color 객체로 복제한다 — base·selected는 테마가 바뀔 때 setHex로 덮어쓰므로 공유 상수를 직접 쓰지 않는다.
+function colorTable(table) {
+  return Object.fromEntries(Object.entries(table).map(([key, hex]) => [key, new THREE.Color(hex)]));
+}
 
-const MARKER_COLORS = {
-  tap: new THREE.Color(0xffffff),
-  selected: new THREE.Color(0x54e4ff),
-  good: new THREE.Color(0x71f5b4),
-  warn: new THREE.Color(0xffd166),
-  problem: new THREE.Color(0xff6b7a),
-  unknown: new THREE.Color(0x6e8199),
-};
+const TILE_COLORS = colorTable(SCENE_VISUALS.TILE_COLORS);
+
+const MARKER_COLORS = colorTable(SCENE_VISUALS.MARKER_COLORS);
 
 const _matrixObject = new THREE.Object3D();
 const _color = new THREE.Color();
@@ -68,8 +54,8 @@ const _overlayMetrics = { offsetX: 0, offsetY: 0, width: 0, height: 0, container
 const _ambientEffectByCell = new Map();
 
 // 공사 진행 배지와 건설 확정 O/X 위젯은 미리보기 모형 바로 위 같은 높이에 붙는다.
-const CONSTRUCTION_HUD_HEIGHT = 1.02;
-const BUILD_OX_WIDGET_HEIGHT = 1.02;
+const CONSTRUCTION_HUD_HEIGHT = CITY_WORLD_OVERLAY.CONSTRUCTION_HUD_HEIGHT;
+const BUILD_OX_WIDGET_HEIGHT = CITY_WORLD_OVERLAY.OX_WIDGET_HEIGHT;
 
 let renderer;
 let scene;
@@ -241,7 +227,9 @@ function finishInstances(mesh, count) {
 
 function pixelRatioCap() {
   const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches;
-  return coarsePointer || window.innerWidth <= 760 ? 1.25 : 1.5;
+  return coarsePointer || window.innerWidth <= VISUAL.MOBILE_MAX_WIDTH_PX
+    ? SCENE_VISUALS.PIXEL_RATIO_CAP.coarse
+    : SCENE_VISUALS.PIXEL_RATIO_CAP.fine;
 }
 
 function makeInstancedMesh(geometry, material, capacity) {
@@ -270,8 +258,8 @@ function buildRuntimeFacilityMaterial(type, level) {
   const runtimeMaterial = material.clone();
   if (runtimeMaterial.userData?.paletteBlackLift) {
     // 원본 팔레트의 창문·지붕·배관 디테일은 유지하되 순검정 영역만 살짝 들어 올린다.
-    runtimeMaterial.emissive.setHex(0x101820);
-    runtimeMaterial.emissiveIntensity = 0.18;
+    runtimeMaterial.emissive.setHex(SCENE_VISUALS.FACILITY_PALETTE_BLACK_LIFT.emissive);
+    runtimeMaterial.emissiveIntensity = SCENE_VISUALS.FACILITY_PALETTE_BLACK_LIFT.intensity;
   }
   runtimeMaterial.color.setHex(0xffffff);
   runtimeMaterial.userData.facilityPaletteMode = runtimeMaterial.map ? 'textured-tint' : 'solid-tint';
@@ -296,12 +284,9 @@ function getOrCreateFacilityLevelMesh(type, level) {
 
 function createRotorGeometry() {
   const vertices = [];
-  const innerRadius = 0.055;
-  const outerRadius = 0.29;
-  const innerHalfWidth = 0.036;
-  const outerHalfWidth = 0.015;
-  for (let blade = 0; blade < 3; blade++) {
-    const angle = (blade * Math.PI * 2) / 3;
+  const { blades, innerRadius, outerRadius, innerHalfWidth, outerHalfWidth } = SCENE_VISUALS.ROTOR;
+  for (let blade = 0; blade < blades; blade++) {
+    const angle = (blade * Math.PI * 2) / blades;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
     const px = -dy;
@@ -328,9 +313,7 @@ function createRotorGeometry() {
 
 function createCornerMarkerGeometry() {
   const vertices = [];
-  const outer = 0.38;
-  const inner = 0.23;
-  const thickness = 0.032;
+  const { outer, inner, thickness } = SCENE_VISUALS.CORNER_MARKER;
   const addQuad = (x1, y1, x2, y2) => {
     const minX = Math.min(x1, x2);
     const maxX = Math.max(x1, x2);
@@ -355,50 +338,38 @@ function createCornerMarkerGeometry() {
 }
 
 function createSceneLayers() {
-  tileMaterial = ownMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.05 }));
+  // 머티리얼 수치(색·거칠기·금속성·불투명도)는 VISUAL.SCENE.MATERIALS. 투명/깊이/양면 같은 구조 플래그만 여기 둔다.
+  tileMaterial = ownMaterial(new THREE.MeshStandardMaterial({ ...SCENE_VISUALS.MATERIALS.tile }));
   tileMesh = makeInstancedMesh(
     ownGeometry(new THREE.CylinderGeometry(
       BOARD.HEX_SIZE * HEX_TILE_VISUALS.cityCoverage,
       BOARD.HEX_SIZE * HEX_TILE_VISUALS.cityCoverage,
-      0.12,
-      6,
+      SCENE_VISUALS.TILE_GEOMETRY.thickness,
+      SCENE_VISUALS.TILE_GEOMETRY.segments,
     )),
     tileMaterial,
     MAX_CELLS,
   );
   tileMesh.name = 'city-tiles';
 
-  facilityMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.62,
-    metalness: 0.08,
-  }));
+  facilityMaterial = ownMaterial(new THREE.MeshStandardMaterial({ ...SCENE_VISUALS.MATERIALS.facility }));
   FACILITY_TYPES.forEach((type) => {
     const mesh = makeInstancedMesh(getFacilityGeometry(type), facilityMaterial, MAX_CELLS);
     mesh.name = `facility-${type}`;
     facilityMeshes.set(type, mesh);
   });
 
-  const greenDetailMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    roughness: 0.9,
-    metalness: 0,
-  }));
+  const greenDetailMaterial = ownMaterial(new THREE.MeshStandardMaterial({ ...SCENE_VISUALS.MATERIALS.greenDetail }));
   greenDetailMesh = makeInstancedMesh(
-    ownGeometry(new THREE.ConeGeometry(1, 1, 5, 1)),
+    ownGeometry(new THREE.ConeGeometry(1, 1, SCENE_VISUALS.GREEN_DETAIL_CONE_SEGMENTS, 1)),
     greenDetailMaterial,
     MAX_CELLS * GREEN_VISUAL_LAYOUTS[3].length,
   );
   greenDetailMesh.name = 'green-level-details';
 
   ghostMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0x71f5b4,
-    emissive: 0x71f5b4,
-    emissiveIntensity: 0.32,
-    roughness: 0.52,
-    metalness: 0.04,
+    ...SCENE_VISUALS.MATERIALS.ghost,
     transparent: true,
-    opacity: 0.42,
     depthWrite: false,
   }));
   ghostMesh = new THREE.Mesh(getFacilityGeometry(FACILITY_TYPES[0]), ghostMaterial);
@@ -408,13 +379,8 @@ function createSceneLayers() {
   scene.add(ghostMesh);
 
   planGhostMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0x173e35,
-    emissiveIntensity: 0.35,
-    roughness: 0.54,
-    metalness: 0.04,
+    ...SCENE_VISUALS.MATERIALS.planGhost,
     transparent: true,
-    opacity: 0.46,
     depthWrite: false,
   }));
   FACILITY_TYPES.forEach((type) => {
@@ -425,10 +391,9 @@ function createSceneLayers() {
   });
 
   stateRingMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    ...SCENE_VISUALS.MATERIALS.stateRing,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.88,
   }));
   stateRingMesh = makeInstancedMesh(
     ownGeometry(createCornerMarkerGeometry()),
@@ -437,11 +402,7 @@ function createSceneLayers() {
   );
   stateRingMesh.name = 'cell-state-rings';
 
-  const constructionFoundationMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0x607080,
-    roughness: 0.92,
-    metalness: 0.02,
-  }));
+  const constructionFoundationMaterial = ownMaterial(new THREE.MeshStandardMaterial({ ...SCENE_VISUALS.MATERIALS.constructionFoundation }));
   constructionFoundationMesh = makeInstancedMesh(
     ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
     constructionFoundationMaterial,
@@ -449,33 +410,25 @@ function createSceneLayers() {
   );
   constructionFoundationMesh.name = 'construction-foundations';
 
-  const constructionScaffoldMaterial = ownMaterial(new THREE.MeshStandardMaterial({
-    color: 0xffbd59,
-    emissive: 0x4a2d08,
-    emissiveIntensity: 0.18,
-    roughness: 0.58,
-    metalness: 0.28,
-  }));
+  const constructionScaffoldMaterial = ownMaterial(new THREE.MeshStandardMaterial({ ...SCENE_VISUALS.MATERIALS.constructionScaffold }));
   constructionScaffoldMesh = makeInstancedMesh(
     ownGeometry(new THREE.BoxGeometry(1, 1, 1)),
     constructionScaffoldMaterial,
-    MAX_CELLS * 6,
+    MAX_CELLS * SCENE_VISUALS.SCAFFOLD_PER_CELL,
   );
   constructionScaffoldMesh.name = 'construction-scaffolds';
 
   const rotorMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xd8f7ff,
+    ...SCENE_VISUALS.MATERIALS.rotor,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.86,
   }));
   windRotorMesh = makeInstancedMesh(ownGeometry(createRotorGeometry()), rotorMaterial, MAX_CELLS);
   windRotorMesh.name = 'wind-rotors';
 
   const ambientAgentMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    ...SCENE_VISUALS.MATERIALS.ambientAgent,
     transparent: true,
-    opacity: 0.92,
     depthWrite: false,
   }));
   ambientAgentMesh = makeInstancedMesh(
@@ -486,22 +439,21 @@ function createSceneLayers() {
   ambientAgentMesh.name = 'living-city-agents';
 
   const smokeMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    ...SCENE_VISUALS.MATERIALS.smoke,
     transparent: true,
     opacity: CITY_AMBIENT_MOTION.SMOKE_OPACITY,
     depthWrite: false,
   }));
   smokeEffectMesh = makeInstancedMesh(
-    ownGeometry(new THREE.SphereGeometry(1, 6, 4)),
+    ownGeometry(new THREE.SphereGeometry(1, ...SCENE_VISUALS.SMOKE_SPHERE_SEGMENTS)),
     smokeMaterial,
     CITY_AMBIENT_MOTION.MAX_SMOKE_INSTANCES,
   );
   smokeEffectMesh.name = 'facility-ambient-smoke';
 
   const statusMaterial = ownMaterial(new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    ...SCENE_VISUALS.MATERIALS.statusLight,
     transparent: true,
-    opacity: 0.88,
     depthWrite: false,
   }));
   statusLightMesh = makeInstancedMesh(
@@ -887,12 +839,12 @@ function updateWindRotorInstances(now = performance.now()) {
       windRotorMesh,
       instanceIndex,
       position.x,
-      0.78 * level.scale,
-      position.z + 0.015,
+      SCENE_VISUALS.ROTOR.height * level.scale,
+      position.z + SCENE_VISUALS.ROTOR.zOffset,
       level.scale,
-      cellIndex * 0.23 + animatedTurn,
+      cellIndex * SCENE_VISUALS.ROTOR.phasePerCell + animatedTurn,
     );
-    windRotorMesh.setColorAt(instanceIndex, _color.setHex(facilityColorFor('wind', config.level)).lerp(MARKER_COLORS.good, 0.35));
+    windRotorMesh.setColorAt(instanceIndex, _color.setHex(facilityColorFor('wind', config.level)).lerp(MARKER_COLORS.good, SCENE_VISUALS.ROTOR.colorBlend));
     instanceIndex++;
   }
   finishInstances(windRotorMesh, instanceIndex);
@@ -911,7 +863,7 @@ function updateStaticAmbientInstances() {
       ambientAgentMesh,
       agentCount,
       centerX + Math.cos(personAngle) * CITY_AMBIENT.PERSON_ORBIT_RADIUS,
-      0.19,
+      CITY_AMBIENT.PERSON_HEIGHT,
       centerZ + Math.sin(personAngle) * CITY_AMBIENT.PERSON_ORBIT_RADIUS,
       personScaleX,
       personScaleY,
@@ -927,7 +879,7 @@ function updateStaticAmbientInstances() {
       ambientAgentMesh,
       agentCount,
       centerX + Math.cos(carAngle) * CITY_AMBIENT.CAR_ORBIT_RADIUS,
-      0.16,
+      CITY_AMBIENT.CAR_HEIGHT,
       centerZ + Math.sin(carAngle) * CITY_AMBIENT.CAR_ORBIT_RADIUS,
       carScaleX,
       carScaleY,
@@ -984,7 +936,7 @@ function updateAmbientEffectInstances(now = performance.now()) {
     for (let light = 0; light < CITY_AMBIENT_MOTION.STATUS_LIGHTS_PER_EFFECT; light += 1) {
       const phase = progress * Math.PI * 2 + light * Math.PI;
       const radius = CITY_AMBIENT_MOTION.STATUS_ORBIT_RADIUS;
-      const pulse = 0.82 + Math.sin(phase * 2) * 0.18;
+      const pulse = CITY_AMBIENT_MOTION.STATUS_PULSE.base + Math.sin(phase * 2) * CITY_AMBIENT_MOTION.STATUS_PULSE.amplitude;
       setAmbientInstance(
         statusLightMesh,
         statusCount,
@@ -1017,9 +969,10 @@ function updateBirdVisit(now) {
       continue;
     }
     const lane = bird - (birdVisit.birdCount - 1) / 2;
-    const x = centerX - 0.7 + progress * 1.4;
-    const z = centerZ + lane * 0.18 + Math.sin(progress * Math.PI * 2 + bird) * 0.08;
-    const y = CITY_AMBIENT.BIRD_BASE_HEIGHT + Math.sin(progress * Math.PI) * 0.28 + bird * 0.04;
+    const path = CITY_AMBIENT.BIRD_PATH;
+    const x = centerX + path.startX + progress * path.spanX;
+    const z = centerZ + lane * path.laneSpacing + Math.sin(progress * Math.PI * 2 + bird) * path.weave;
+    const y = CITY_AMBIENT.BIRD_BASE_HEIGHT + Math.sin(progress * Math.PI) * path.arcHeight + bird * path.stackHeight;
     setAmbientInstance(ambientAgentMesh, instanceIndex, x, y, z, scaleX, scaleY, scaleZ, Math.PI / 2);
   }
   ambientAgentMesh.instanceMatrix.needsUpdate = true;
@@ -1027,9 +980,9 @@ function updateBirdVisit(now) {
   return true;
 }
 
-export function triggerBirdVisit(greenIndex, requestedBirdCount = 2, durationMs = 2000) {
+export function triggerBirdVisit(greenIndex, requestedBirdCount = CITY_AMBIENT.BIRD_MIN_COUNT, durationMs = CITY_AMBIENT.BIRD_VISIT_MS) {
   if (!greenIndices.includes(greenIndex)) return false;
-  birdCount = Math.max(2, Math.min(BIRD_POOL_SIZE, requestedBirdCount));
+  birdCount = Math.max(CITY_AMBIENT.BIRD_MIN_COUNT, Math.min(BIRD_POOL_SIZE, requestedBirdCount));
   birdVisit = { greenIndex, birdCount, durationMs, startedAt: performance.now() };
   updateBirdVisit(birdVisit.startedAt);
   needsRender = true;
@@ -1149,7 +1102,7 @@ function handleReducedMotion(event) {
 }
 
 function easeOutBack(progress) {
-  const c1 = 1.35;
+  const c1 = SCENE_VISUALS.EASE_OUT_BACK_OVERSHOOT;
   const c3 = c1 + 1;
   const p = progress - 1;
   return 1 + c3 * p * p * p + c1 * p * p;
@@ -1181,8 +1134,8 @@ function visualScaleAt(index, targetScale, now) {
 
 function visualYAt(index, now) {
   const motion = activeMotions.get(index);
-  if (!motion || motion.kind !== 'demolish') return 0.13;
-  return 0.13 - motionProgress(motion, now) * 0.22;
+  if (!motion || motion.kind !== 'demolish') return SCENE_VISUALS.FACILITY_Y;
+  return SCENE_VISUALS.FACILITY_Y - motionProgress(motion, now) * SCENE_VISUALS.DEMOLISH_DROP;
 }
 
 // 시설이 실제로 놓이는 방위각(yaw)이다. 두 값이 겹친다.
@@ -1192,7 +1145,7 @@ function visualYAt(index, now) {
 // three의 +Y 회전은 위에서 볼 때 반시계 방향이라, 시계 방향으로 돌리려면 부호를 뒤집는다.
 function facilityRotationY(type, cellIndex, rotation = 0) {
   const offset = CITY_BUILDING_ORIENTATION.offsets[type];
-  const base = offset == null ? 0 : ((cellIndex + offset) % 6) * CITY_BUILDING_ORIENTATION.step;
+  const base = offset == null ? 0 : ((cellIndex + offset) % CITY_BUILDING_ORIENTATION.steps) * CITY_BUILDING_ORIENTATION.step;
   const steps = Number.isFinite(Number(rotation)) ? Math.trunc(Number(rotation)) : 0;
   return base - steps * DIRECTION_STEP_RADIANS;
 }
@@ -1204,8 +1157,8 @@ function constructionStageForConfig(config) {
     ? Number(project.progress)
     : (Number(project.elapsedDays) || 0) / Math.max(1, Number(project.durationDays) || 1);
   const progress = Math.max(0, Math.min(1, ratio));
-  if (progress >= 0.7) return 'shell';
-  if (progress >= 0.3) return 'skeleton';
+  if (progress >= CONSTRUCTION.STAGE_THRESHOLDS.SHELL) return 'shell';
+  if (progress >= CONSTRUCTION.STAGE_THRESHOLDS.SKELETON) return 'skeleton';
   return 'foundation';
 }
 
@@ -1213,7 +1166,7 @@ function updateTileInstances(configs, coordinates) {
   const count = Math.min(coordinates.length, MAX_CELLS);
   for (let index = 0; index < count; index++) {
     const { x, z } = worldPosition(index, coordinates);
-    setBoxInstance(tileMesh, index, x, 0.06, z, 1, 1, 1);
+    setBoxInstance(tileMesh, index, x, SCENE_VISUALS.TILE_Y, z, 1, 1, 1);
     tileMesh.setColorAt(index, tileColorFor(configs[index] || {}));
   }
   finishInstances(tileMesh, count);
@@ -1250,7 +1203,7 @@ function updateFacilityInstances(configs, coordinates, now) {
       const config = visualConfigAt(configs, cellIndex);
       const level = LEVEL_VISUALS[config.level] || LEVEL_VISUALS[1];
       const { x, z } = worldPosition(cellIndex, coordinates);
-      const shellScale = config.project?.kind === 'build' ? 0.82 : 1;
+      const shellScale = config.project?.kind === 'build' ? SCENE_VISUALS.SHELL_SCALE : 1;
       const visualScale = visualScaleAt(cellIndex, level.scale * shellScale, now);
       const visualY = visualYAt(cellIndex, now);
       setInstance(mesh, instanceIndex, x, visualY, z, visualScale, 0, facilityRotationY(type, cellIndex, config.rotation));
@@ -1272,11 +1225,11 @@ function updateGreenDetailInstances(configs, coordinates, now) {
     if (config.project?.kind === 'build' && stage !== 'shell') return;
     const levelNumber = Math.max(1, Math.min(3, Number(config.level) || 1));
     const level = LEVEL_VISUALS[levelNumber] || LEVEL_VISUALS[1];
-    const shellScale = config.project?.kind === 'build' ? 0.82 : 1;
+    const shellScale = config.project?.kind === 'build' ? SCENE_VISUALS.SHELL_SCALE : 1;
     const visualScale = visualScaleAt(cellIndex, level.scale * shellScale, now);
     const visualY = visualYAt(cellIndex, now);
     const { x, z } = worldPosition(cellIndex, coordinates);
-    const cellRotation = (cellIndex * 0.73 + levelNumber * 0.31) % (Math.PI * 2);
+    const cellRotation = (cellIndex * SCENE_VISUALS.GREEN_ROTATION_SEED.perCell + levelNumber * SCENE_VISUALS.GREEN_ROTATION_SEED.perLevel) % (Math.PI * 2);
     GREEN_VISUAL_LAYOUTS[levelNumber].forEach((item) => {
       const offsetX = item.x * Math.cos(cellRotation) - item.z * Math.sin(cellRotation);
       const offsetZ = item.x * Math.sin(cellRotation) + item.z * Math.cos(cellRotation);
@@ -1294,11 +1247,7 @@ function updateGreenDetailInstances(configs, coordinates, now) {
       const baseColor = facilityColorFor('green', levelNumber);
       greenDetailMesh.setColorAt(
         instanceIndex,
-        _color.setHex(baseColor).offsetHSL(
-          item.kind === 'bush' ? -0.015 : 0.012,
-          0.04,
-          item.kind === 'bush' ? -0.07 : 0.04,
-        ),
+        _color.setHex(baseColor).offsetHSL(...(SCENE_VISUALS.GREEN_HSL_OFFSET[item.kind] || SCENE_VISUALS.GREEN_HSL_OFFSET.tree)),
       );
       instanceIndex += 1;
       greenDetailCountsByLevel[levelNumber] += 1;
@@ -1308,28 +1257,30 @@ function updateGreenDetailInstances(configs, coordinates, now) {
 }
 
 function updateConstructionInstances(configs, coordinates) {
+  const site = SCENE_VISUALS.CONSTRUCTION_SITE;
   let foundationCount = 0;
   let scaffoldCount = 0;
   configs.forEach((config, cellIndex) => {
     if (!config?.project) return;
     const stage = constructionStageForConfig(config);
     const { x, z } = worldPosition(cellIndex, coordinates);
-    const foundationHeight = config.project.kind === 'upgrade' ? 0.035 : 0.065;
-    setBoxInstance(constructionFoundationMesh, foundationCount, x, 0.14 + foundationHeight / 2, z, 0.58, foundationHeight, 0.5);
-    constructionFoundationMesh.setColorAt(foundationCount, _color.setHex(config.project.kind === 'upgrade' ? 0x557b8c : 0x66727a));
+    const projectKind = config.project.kind === 'upgrade' ? 'upgrade' : 'build';
+    const foundationHeight = site.foundationHeight[projectKind];
+    setBoxInstance(constructionFoundationMesh, foundationCount, x, site.foundationY + foundationHeight / 2, z, site.foundationWidth, foundationHeight, site.foundationDepth);
+    constructionFoundationMesh.setColorAt(foundationCount, _color.setHex(site.foundationColor[projectKind]));
     foundationCount += 1;
 
-    const height = stage === 'foundation' ? 0.13 : stage === 'skeleton' ? 0.55 : 0.78;
-    const half = 0.38;
+    const height = site.stageHeight[stage] ?? site.stageHeight.shell;
+    const half = site.postOffset;
     [[-half, -half], [half, -half], [-half, half], [half, half]].forEach(([dx, dz]) => {
-      setBoxInstance(constructionScaffoldMesh, scaffoldCount, x + dx, 0.17 + height / 2, z + dz, 0.025, height, 0.025);
-      constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(0xffbd59));
+      setBoxInstance(constructionScaffoldMesh, scaffoldCount, x + dx, site.postY + height / 2, z + dz, site.postSize, height, site.postSize);
+      constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(site.postColor));
       scaffoldCount += 1;
     });
     if (stage !== 'foundation') {
       [-half, half].forEach((dz) => {
-        setBoxInstance(constructionScaffoldMesh, scaffoldCount, x, 0.17 + height, z + dz, 0.41, 0.025, 0.025);
-        constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(0xffd27a));
+        setBoxInstance(constructionScaffoldMesh, scaffoldCount, x, site.postY + height, z + dz, site.beamLength, site.beamSize, site.beamSize);
+        constructionScaffoldMesh.setColorAt(scaffoldCount, _color.setHex(site.beamColor));
         scaffoldCount += 1;
       });
     }
@@ -1348,8 +1299,8 @@ function updateMarkerInstances(configs, coordinates, now) {
       ? MARKER_COLORS.tap
       : index === keyboardCursorIndex ? MARKER_COLORS.selected : markerColorFor(config);
     if (markerColor) {
-      const pulse = 1 + Math.sin((now / CITY_MOTION.SELECT_PULSE_MS) * Math.PI * 2) * 0.035;
-      setInstance(stateRingMesh, ringCount, x, 0.135, z, pulse, -Math.PI / 2);
+      const pulse = 1 + Math.sin((now / CITY_MOTION.SELECT_PULSE_MS) * Math.PI * 2) * SCENE_VISUALS.RING.pulseAmplitude;
+      setInstance(stateRingMesh, ringCount, x, SCENE_VISUALS.RING.y, z, pulse, -Math.PI / 2);
       stateRingMesh.setColorAt(ringCount, markerColor);
       ringCount++;
     }
@@ -1447,13 +1398,13 @@ export function initCityScene3D(container) {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, pixelRatioCap()));
 
   // 조명은 낮 한 가지로 고정한다. 색만 테마에 따라 applyWorldTheme이 바꾼다.
-  hemisphereLight = new THREE.HemisphereLight(0xc8dcff, 0x101722, WORLD_DAY_LIGHTING.HEMISPHERE_INTENSITY);
+  hemisphereLight = new THREE.HemisphereLight(SCENE_VISUALS.LIGHTS.hemisphereSky, SCENE_VISUALS.LIGHTS.hemisphereGround, WORLD_DAY_LIGHTING.HEMISPHERE_INTENSITY);
   scene.add(hemisphereLight);
   sunLight = new THREE.DirectionalLight(WORLD_DAY_LIGHTING.SUN_COLOR, WORLD_DAY_LIGHTING.SUN_INTENSITY);
-  sunLight.position.set(4, 8, 5);
+  sunLight.position.set(...SCENE_VISUALS.LIGHTS.sunPosition);
   scene.add(sunLight);
-  rimLight = new THREE.DirectionalLight(0x54e4ff, WORLD_DAY_LIGHTING.RIM_INTENSITY);
-  rimLight.position.set(-6, 4, -4);
+  rimLight = new THREE.DirectionalLight(SCENE_VISUALS.LIGHTS.rimColor, WORLD_DAY_LIGHTING.RIM_INTENSITY);
+  rimLight.position.set(...SCENE_VISUALS.LIGHTS.rimPosition);
   scene.add(rimLight);
 
   // 로딩 화면 문구/막대는 main.js가 단독으로 소유한다. 여기서는 진척만 알린다.
@@ -1467,7 +1418,7 @@ export function initCityScene3D(container) {
         text: '게임은 정상적으로 계속됩니다.',
       });
     }
-    const scheduleIdle = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 32));
+    const scheduleIdle = window.requestIdleCallback || ((callback) => window.setTimeout(callback, SCENE_VISUALS.IDLE_FALLBACK_MS));
     scheduleIdle(() => cityEnvironment?.loadIdle().finally(() => { needsRender = true; }));
   });
 
@@ -1619,7 +1570,7 @@ function syncBuildGhost() {
   ghostMesh.geometry = getFacilityGeometry(type);
   const { x, z } = worldPosition(index);
   const level = LEVEL_VISUALS[1];
-  ghostMesh.position.set(x, 0.13, z);
+  ghostMesh.position.set(x, SCENE_VISUALS.FACILITY_Y, z);
   ghostMesh.rotation.set(0, facilityRotationY(type, index, buildPreviewMode.rotation), 0);
   ghostMesh.scale.setScalar(level.scale);
   const color = config.placementAllowed === false ? MARKER_COLORS.problem : MARKER_COLORS.good;
@@ -1641,7 +1592,7 @@ function syncPlanGhosts() {
       if (!currentConfigs[index]?.empty || !currentCoords[index]) return;
       const { x, z } = worldPosition(index);
       const level = LEVEL_VISUALS[1];
-      setInstance(mesh, count, x, 0.13, z, level.scale, 0, facilityRotationY(type, index, rotation));
+      setInstance(mesh, count, x, SCENE_VISUALS.FACILITY_Y, z, level.scale, 0, facilityRotationY(type, index, rotation));
       mesh.setColorAt(count, invalid.has(index) ? MARKER_COLORS.problem : MARKER_COLORS.good);
       count++;
     });
@@ -1772,7 +1723,7 @@ export function projectCellToScreen(index) {
   if (!canvasEl || !camera || !currentCoords[index]) return null;
   const { x, z } = worldPosition(index);
   camera.updateMatrixWorld();
-  _projection.set(x, 0.04, z).project(camera);
+  _projection.set(x, SCENE_VISUALS.CELL_SCREEN_PROJECTION_Y, z).project(camera);
   const rect = canvasEl.getBoundingClientRect();
   return {
     x: rect.left + (_projection.x + 1) * rect.width / 2,

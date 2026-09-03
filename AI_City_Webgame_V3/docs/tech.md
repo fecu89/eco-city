@@ -36,23 +36,28 @@
 `find src -type f | sort` 기준이다.
 
 ```
+settings.json                    게임 설정 단일 출처: 규칙 수치·표(경제·전력·기후·퀘스트·연구·시설…)와 연출 수치(VISUAL).
+                                 빌드 시 포함되며 코드는 읽기만 한다 — docs/settings.md
 src/
   main.js                        오케스트레이터: 부트, 시스템 연결, render_game_to_text, advanceTime, 테스트 훅
   style.css                      전체 스타일(HUD·패널·모달·3D 오버레이·라이트/다크 테마)
 
   core/                          규칙과 데이터. 여기서는 systems/ui를 import하지 않는다
+    Settings.js                  settings.json을 import해 깊이 동결한 SETTINGS, 표 조회 settingsRow(), 검증 validateSettings()(테스트 전용)
     EventBus.js                  pub/sub 싱글턴 + Events 상수 78개(domain:action). 원시 문자열 발행은 0건
     GameState.js                 상태 싱글턴, SAVE_VERSION 10, serialize/restore, normalizeCell(방향 포함)
-    Constants.js                 모든 밸런스 수치(시설·경제·전력·기후·보고서·모션·에셋·테마)
-    QuestDefinitions.js          퀘스트 19개(1~10·19 직접 정의, 11~18은 기후 캠페인에서 합성), WEST_BRANCH_QUESTS
-    ClimateCampaignDefinitions.js 기후 이벤트 8종, 기후 퀘스트 11~18, 최종시험 8구간(FINAL_CLIMATE_PHASES)
-    EventDefinitions.js          기후 이벤트를 이벤트 덱/스트레스 구간으로 다시 내보내고 총 시험 일수를 계산
-    CampaignProgression.js       캠페인 구간 경계(CAMPAIGN_QUEST_INDEXES), Lv.3 강화 허가 퀘스트 표
-    ResearchDefinitions.js       연구 10종(기간·비용·선행조건·효과·분기)
-    ResearchQuizDefinitions.js   연구별 전용 퀴즈 4문항 × 10 = 40문항
-    ZoneDefinitions.js           동/서 확장 방향, 지역 특성, 확장 유지비, 태양광·풍력 우수 입지 라벨
-    OperationDefinitions.js      배터리 저장 전력 사용 정책(BATTERY_POLICIES)
+    Constants.js                 settings.json을 읽어 같은 이름으로 export. 문구·아이콘·색상·CSS·문구 함수·Math.PI 파생값만 직접 정의
+    QuestDefinitions.js          퀘스트 19개의 순서·문구(1~10·19 직접 정의, 11~18은 기후 캠페인에서 합성), WEST_BRANCH_QUESTS. 보상 수치는 settings.json QUESTS
+    ClimateCampaignDefinitions.js 기후 이벤트 8종·기후 퀘스트 11~18·최종시험 8구간의 id·문구·순서. 지속일·계수·목표는 settings.json CLIMATE_EVENTS/FINAL_CLIMATE_PHASES/QUESTS
+    EventDefinitions.js          기후 이벤트를 이벤트 덱/스트레스 구간으로 다시 내보내고 총 시험 일수를 계산(첫 덱 순서는 settings.json EVENT_DECK)
+    CampaignProgression.js       캠페인 구간 경계(CAMPAIGN_QUEST_INDEXES), Lv.3 강화 허가 퀘스트 표 — 값은 settings.json CAMPAIGN
+    ResearchDefinitions.js       연구 10종의 이름·아이콘·분기. 기간·비용·선행조건·효과는 settings.json RESEARCH
+    ResearchQuizDefinitions.js   연구별 전용 퀴즈 4문항 × 10 = 40문항(문구뿐이라 settings.json에 없다)
+    ZoneDefinitions.js           동/서 확장 방향·지역 특성 문구, 태양광·풍력 우수 입지 라벨. 유지비·배수·해금 시설은 settings.json ZONES
+    OperationDefinitions.js      배터리 저장 전력 사용 정책(BATTERY_POLICIES) 라벨. 예비율은 settings.json OPERATION_PROFILES
     ConstructionProject.js       공사/강화 프로젝트 순수 헬퍼(정규화·완공 판정) — core가 systems를 참조하지 않도록 분리
+    Environment.js               판 씨앗 기반 결정적 표본(seededDailyDraw)·묶음 번호(holdBlockIndex)·수요 변동 계수·방향 정규화 순수 계산
+    Weather.js                   날씨 순수 계산(저장하지 않음): 5일 묶음 마르코프 종류, 태양광 배율, 풍속 평활과 풍력 출력 곡선, 강제 날씨 덮어쓰기
     Money.js                     크레딧 반올림·표기(소수 둘째 자리, -0.00 방지)
     safeStorage.js               localStorage 접근을 전부 감싸는 방어 래퍼(차단된 브라우저에서 부팅이 멈추지 않게)
 
@@ -64,6 +69,8 @@ src/
     ZoneSystem.js                확장 방향 활성화(19→28→37칸), 지역 특성, 확장 선택 재요청 판정
     EnvironmentSystem.js         판마다 새로 뽑는 자연 조건(칸별 풍향·해안 조차)과 시설 방향 규칙
                                  (createEnvironment/isCoastalCell/directionFactor/directionOutputTable/tidalSiteInfo)
+    WeatherSystem.js             상태 기반 날씨 조회(weatherAt/weatherForecast). 진행 중인 기후 이벤트·최종시험 구간이 날씨를 고정하고
+                                 예보는 이벤트 일정표를 본다. CityModifierSystem이 태양광·풍력 supply에 곱한다
     PowerNetworkSystem.js        거리 손실·급전 우선순위·배터리 허브·저탄소 우선 배분
     EconomySystem.js             세금·수입·유지비·과밀·건강·기후복구 비용 정산
     FacilityOperationSystem.js   시설별 실제 가동률과 그에 비례하는 탄소·물 산출
@@ -71,7 +78,7 @@ src/
     WorkforceSystem.js           주거 노동인구와 시설 필요 인력, 전환 시 인력 검증
     ConstructionPlanSystem.js    건설 계획 검증(허가·인력·예비력·크레딧 원자적 검사)과 확정
     ConstructionProjectSystem.js 공사/강화 진행과 완공 처리(core 헬퍼를 다시 내보냄)
-    ClimateSystem.js             시각별 태양광·순환 풍력·세계 위상 계산
+    ClimateSystem.js             태양광 낮/밤 평균 배율(getDailySolarMultiplier)과 폭염 수요 배율만 남았다. 풍력은 WeatherSystem의 풍속을 따른다
     ClimateModifierSystem.js     기후 정의를 시설/도시 계수로 합성(물 한도·냉각 효과·고정 탄소 포함)
     ClimateQuestSystem.js        기후 퀘스트 11~18의 브리핑·연속일 판정·보상
     CityEventSystem.js           기후 이벤트 일정 생성(24일 예보·3일 휴지기)과 결과 요약
@@ -96,7 +103,7 @@ src/
     GridView.js                  보드 입력(칸 클릭·건설 확정 흐름)과 렌더 트리거
     WorldHud.js                  데스크톱 rail·모바일 하단 바, 패널 하나만 열기, 포커스 복원, 모달 우선순위
     HudView.js                   상단 상태줄(단계·크레딧·경보)
-    SimulationHudView.js         일일 정산 수치 패널(스크린리더 폭주를 막는 전용 라이브 영역 포함)
+    SimulationHudView.js         일일 정산 수치 패널(스크린리더 폭주를 막는 전용 라이브 영역 포함)과 오늘 날씨 칩(종류 아이콘·풍속·내일 예보 툴팁)
     DockView.js                  건설 독(시설 카드·잠금·허가·상세)
     QuestView.js                 현재 퀘스트 카드와 전체 퀘스트 지도, 보상 수령
     QuestPanelController.js      퀘스트 패널 드래그·고정·키보드 이동
@@ -105,7 +112,7 @@ src/
     ChartView.js                 도시 상태 레이더 차트(chart.js 지연 로딩, 틱 간격 보간)
     ForecastView.js              상단 기후 예보 스트립
     EventResultView.js           기후 이벤트 종료 결과 요약
-    StageModals.js               시설 상세·방향별 발전량·강화 예측·철거 확인·확장 선택·최종시험·성적표·도움말 모달
+    StageModals.js               시설 상세·방향별 발전량·강화 예측·철거 확인·확장 선택·최종시험·성적표·도움말·지표 원인·오늘의 날씨 모달
     Modal.js                     모달 셸, 우선순위 큐, lucide 아이콘 등록(PascalCase 키)
     OnboardingView.js            첫 접속 3장 스토리와 행동형 튜토리얼 하이라이트
     ResearchView.js              데이터센터 연구 목록·시작·취소
@@ -141,6 +148,7 @@ tests/
   helpers/playthrough.js  clickCell / buildPlanViaUi / openHudPanel / completeProjectsViaGameClock 등 진행 헬퍼
   e2e/*.spec.js           브라우저 회귀(HUD·퀘스트·연구·기후·건설·카메라·모바일·시각·성능)
   e2e/unit/*.spec.js      DOM 없이 src 모듈을 직접 import하는 순수 테스트(규칙·저장 마이그레이션·빌드 산출물)
+  e2e/unit/settings.spec.js  settings.json 계약: 형식 검증, 안 쓰는 섹션 없음, Constants/정의 파일과 값 일치, 문구 함수 불변
 ```
 
 - Playwright(`game-qa` 스킬 컨벤션). `window.render_game_to_text()`와 `window.advanceTime(ms)`를 노출한다.

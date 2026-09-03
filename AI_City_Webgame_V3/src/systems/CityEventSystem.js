@@ -10,7 +10,7 @@ import {
   facilityModifierForClimate,
 } from './ClimateModifierSystem.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
-import { WATER_RULES } from '../core/Constants.js';
+import { CARBON_CRISIS, EVENT_RULES, WATER_RULES } from '../core/Constants.js';
 
 function rotatedDeck(deck, seed) {
   const offset = Math.abs(Math.trunc(Number(seed) || 0)) % deck.length;
@@ -56,7 +56,7 @@ function ensureSchedule(state) {
     state.events.schedule = createEventSchedule(state.events.seed, state.elapsedGameDays);
   }
   const hasDrought = state.events.schedule.some(({ type }) => type === 'drought');
-  if (state.events.completed.length >= 2 && !hasDrought) {
+  if (state.events.completed.length >= EVENT_RULES.DROUGHT_INSERT_AFTER_COMPLETED && !hasDrought) {
     const lastEnd = Math.max(state.elapsedGameDays, ...state.events.schedule.map(({ endAt }) => endAt));
     state.events.schedule.push(...scheduleDeck(['drought'], state.events.seed, lastEnd + EVENT_GAP_DAYS, 1));
   }
@@ -105,11 +105,13 @@ function eventWaterLimit(state, event) {
 }
 
 function diagnosisFor(metrics) {
+  // 가장 점수가 큰 지표 하나를 사후 진단으로 고른다. 가중치는 settings.json EVENT_RULES.DIAGNOSIS_WEIGHTS.
+  const weights = EVENT_RULES.DIAGNOSIS_WEIGHTS;
   const candidates = [
-    { metric: 'essential', score: metrics.outageDays * 100 + (100 - metrics.minimumEssentialSupply), label: '필수시설 전력 공급' },
-    { metric: 'water', score: metrics.waterViolationDays * 20, label: '물 사용량' },
-    { metric: 'economy', score: Math.max(0, -metrics.netIncome) * 10, label: '운영 수익' },
-    { metric: 'carbon', score: metrics.carbonViolations * 10, label: '탄소 배출' },
+    { metric: 'essential', score: metrics.outageDays * weights.OUTAGE_DAY + (100 - metrics.minimumEssentialSupply), label: '필수시설 전력 공급' },
+    { metric: 'water', score: metrics.waterViolationDays * weights.WATER_VIOLATION_DAY, label: '물 사용량' },
+    { metric: 'economy', score: Math.max(0, -metrics.netIncome) * weights.NEGATIVE_INCOME, label: '운영 수익' },
+    { metric: 'carbon', score: metrics.carbonViolations * weights.CARBON_VIOLATION, label: '탄소 배출' },
   ];
   return candidates.sort((a, b) => b.score - a.score)[0];
 }
@@ -133,7 +135,7 @@ function completeActiveEvent(state, event) {
 function recordEventDay(state, event, summary) {
   const metrics = state.events.currentMetrics || freshMetrics(event);
   metrics.days += 1;
-  if ((summary.essentialSupplyPercent ?? 100) < 90) metrics.outageDays += 1;
+  if ((summary.essentialSupplyPercent ?? 100) < EVENT_RULES.OUTAGE_PERCENT) metrics.outageDays += 1;
   metrics.batteryEnergyUsed += Object.values(summary.batteryOperations || {})
     .reduce((sum, item) => sum + (Number(item.discharged) || 0), 0);
   metrics.minimumEssentialSupply = Math.min(metrics.minimumEssentialSupply, summary.essentialSupplyPercent ?? 100);
@@ -141,7 +143,7 @@ function recordEventDay(state, event, summary) {
   const dailyCarbon = Number(summary.dailyCarbon) || 0;
   metrics.carbonTotal += dailyCarbon;
   metrics.maxDailyCarbon = Math.max(metrics.maxDailyCarbon, dailyCarbon);
-  if (dailyCarbon > 10) metrics.carbonViolations += 1;
+  if (dailyCarbon > CARBON_CRISIS.SAFE_DAILY) metrics.carbonViolations += 1;
   const waterLimit = eventWaterLimit(state, event);
   if (waterLimit != null && (summary.dailyWater || 0) > waterLimit) metrics.waterViolationDays += 1;
   state.events.currentMetrics = metrics;

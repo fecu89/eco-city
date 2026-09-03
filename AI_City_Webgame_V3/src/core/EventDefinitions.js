@@ -3,12 +3,14 @@ import {
   CLIMATE_EVENT_DEFINITIONS,
   FINAL_CLIMATE_PHASES,
 } from './ClimateCampaignDefinitions.js';
+import { SETTINGS } from './Settings.js';
 
 // 예보 구간 상수는 Constants.js가 소유한다. 기존 임포트가 그대로 동작하도록 여기서 다시 내보낸다.
 export { EVENT_FORECAST_DAYS, EVENT_GAP_DAYS } from './Constants.js';
 
 export const CITY_EVENTS = CLIMATE_EVENT_DEFINITIONS;
-export const OPENING_EVENT_DECK = Object.freeze(['heatwave', 'monsoon', 'typhoon']);
+// 첫 세 기후 이벤트의 순서. settings.json EVENT_DECK.OPENING.
+export const OPENING_EVENT_DECK = SETTINGS.EVENT_DECK.OPENING;
 export const FULL_EVENT_DECK = Object.freeze(Object.keys(CITY_EVENTS));
 export const STRESS_PHASES = FINAL_CLIMATE_PHASES;
 

@@ -1,5 +1,5 @@
 import './style.css';
-import { BOARD_TAP_COPY, CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, LOADING_SCREEN, TIME } from './core/Constants.js';
+import { BOARD_TAP_COPY, CARBON_CRISIS, CITY_FAILURE_RULES, FACILITIES, FLOATING_PANEL_STORAGE, GRID_RESERVE_RULES, LEVEL_VISUALS, LOADING_SCREEN, TIME, UI_FEEDBACK } from './core/Constants.js';
 import { gameState } from './core/GameState.js';
 import { eventBus, Events } from './core/EventBus.js';
 
@@ -15,7 +15,8 @@ import { createHexCoordinates } from './systems/HexGridSystem.js';
 import { buildCityModifierContext } from './systems/CityModifierSystem.js';
 import { forecastConstruction, forecastUpgrade } from './systems/SimulationForecastSystem.js';
 import { expansionChoicePending } from './systems/ZoneSystem.js';
-import { createEnvironment, tidalRangeAt, windDirectionAt } from './systems/EnvironmentSystem.js';
+import { createEnvironment, demandVariationFactor, tidalRangeAt, windDirectionAt } from './systems/EnvironmentSystem.js';
+import { weatherAt, weatherForecast } from './systems/WeatherSystem.js';
 
 import { clearModalQueue, closeModal, getModalState, initModal, refreshIcons } from './ui/Modal.js';
 import { initToastView } from './ui/ToastView.js';
@@ -130,7 +131,6 @@ const els = {
   questStrip: $('#questStrip'),
   questStripLevel: $('#questStripLevel'),
   questStripTitle: $('#questStripTitle'),
-  questStripBar: $('#questStripBar'),
   srAnnouncer: $('#srAnnouncer'),
 
   mobileBar: document.querySelector('.mobile-bar'),
@@ -317,6 +317,7 @@ function constructionForecastForAssessment(assessment) {
   const projected = {
     ...finalEconomy,
     deliveredPower: finalSummary.deliveredPower || 0,
+    generationAvailable: finalSummary.generationAvailable ?? finalEconomy.generationAvailable ?? 0,
     demand: finalSummary.demand || 0,
     dailyCarbon: finalSummary.dailyCarbon || 0,
     dailyWater: finalSummary.dailyWater || 0,
@@ -522,7 +523,7 @@ function boot() {
     level: [els.questPanelLevel, els.questStripLevel],
     title: [els.questPanelTitle, els.questStripTitle],
     goal: els.questPanelGoal,
-    bar: [els.questPanelProgressBar, els.questStripBar],
+    bar: els.questPanelProgressBar,
     strip: els.questStrip,
     reward: els.questPanelReward,
     emergency: els.questPanelEmergencyBtn,
@@ -534,7 +535,7 @@ function boot() {
     refreshAll();
     if (change?.phase === 'claimed' && change.result?.campaignComplete) openReportModal();
   });
-  initSimulationHudView({ root: $('#simulationHud'), time: els.simTime, net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, battery: els.simBattery, water: els.simWater, labor: els.statusWorkforce, carbon: els.simCarbon, alert: els.simAlert, announcer: els.srAnnouncer });
+  initSimulationHudView({ root: $('#simulationHud'), time: els.simTime, weather: $('#simWeather'), net: els.simNet, carbonRate: els.simCarbonRate, power: els.simPower, battery: els.simBattery, water: els.simWater, labor: els.statusWorkforce, carbon: els.simCarbon, alert: els.simAlert, announcer: els.srAnnouncer });
   initForecastView(els.forecastStrip);
   initChartView(els.cityChart);
   initStageModals(refreshAll, { getUpgradeForecast: upgradeForecastForIndex });
@@ -548,7 +549,8 @@ function boot() {
       meta: '도시 시간은 계속 흐릅니다. 퀘스트 창에서 대비 조건을 확인하세요.',
       priority: true,
       kind: 'event-forecast-alert',
-      duration: 7000,
+      // 기후 예보 토스트는 퀘스트 알림과 같은 시간 동안 머문다.
+      duration: UI_FEEDBACK.QUEST_ALERT_MS,
     });
   });
   eventBus.on(Events.CITY_EVENT_STARTED, (cityEvent) => {
@@ -751,6 +753,9 @@ window.render_game_to_text = () => {
   const calendar = calendarAtElapsedDay(gameState.elapsedGameDays);
   const visualCalendar = calendarAtElapsedDay(gameState.elapsedGameDays + (simulationController?.getProgress() || 0));
   const tick = gameState.lastTickSummary;
+  // 오늘 날씨와 내일 예보. 태양광·풍력 배율은 CityModifierSystem이 공급에 곱하는 값과 같다.
+  const weather = weatherAt(gameState);
+  const [weatherTomorrow] = weatherForecast(gameState, 1);
   const payload = {
     coords: 'axial pointy-top hex grid; index 0 is center; radius 2=19 cells, radius 3=37 cells',
     mode: gameState.gameOver ? 'game_over' : 'playing',
@@ -831,6 +836,17 @@ window.render_game_to_text = () => {
     netCreditsPerDay: tick?.netCredits ?? 0,
     deliveredPower: tick?.deliveredPower ?? 0,
     demand: tick?.demand ?? 0,
+    // 오늘 하루의 소비 수요 변동 계수(1.0이 평년). 같은 도시인데 수지가 달라지는 이유다.
+    demandVariation: Math.round(demandVariationFactor(gameState, gameState.elapsedGameDays) * 1000) / 1000,
+    weather: {
+      kind: weather.kind,
+      label: weather.label,
+      solarFactor: weather.solarFactor,
+      windSpeedMs: weather.windSpeedMs,
+      windFactor: weather.windFactor,
+      forcedBy: weather.forcedBy,
+      tomorrow: { kind: weatherTomorrow.kind, label: weatherTomorrow.label, windSpeedMs: weatherTomorrow.windSpeedMs },
+    },
     lowCarbonPercent: tick?.lowCarbonPercent ?? 0,
     workforce: tick?.workforce ?? 0,
     jobs: tick?.jobs ?? 0,

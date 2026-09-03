@@ -64,5 +64,7 @@ test('ICON_NAMES lists the registry in the kebab-case form lucide resolves', () 
   expect(ICON_NAMES.filter((name) => !hasIcon(name))).toEqual([]);
   expect(ICON_NAMES).toContain('building-2');
   expect(ICON_NAMES).toContain('chart-no-axes-combined');
+  // 날씨 칩·날씨 창·시설 창이 WEATHER_RULES.DISPLAY의 아이콘 이름을 런타임에 data-lucide로 넣는다.
+  ['sun', 'cloud', 'cloud-rain', 'snowflake'].forEach((name) => expect(ICON_NAMES).toContain(name));
   expect(hasIcon('not-a-real-icon')).toBe(false);
 });

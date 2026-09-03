@@ -146,7 +146,8 @@ test('research quiz has a top-right close button that exits without consuming th
   await page.locator('[data-research-accelerate="solar2"]').click();
   const close = page.locator('.modal-head [aria-label="퀴즈 닫기"]');
   await expect(close).toBeVisible();
-  expect(await page.evaluate(() => window.__getSimulationState().pauseReasons)).toContain('quiz');
+  // 퀴즈를 푸는 동안에도 도시 시간과 연구는 흐른다.
+  expect(await page.evaluate(() => window.__getSimulationState().pauseReasons)).not.toContain('quiz');
 
   await close.click();
 
@@ -317,4 +318,26 @@ test('battery reserve policy is visible, locked by research, and persisted from 
     policy: window.__GAME_STATE__.grid[0].batteryPolicy,
     decisions: window.__GAME_STATE__.decisionCounts.batteryPolicyChanges,
   }))).toEqual({ policy: 'reserve30', decisions: 1 });
+});
+
+test('research keeps progressing while its acceleration quiz is open', async ({ gamePage: page }) => {
+  await page.evaluate(() => {
+    window.__setTimeScale(4);
+    const state = window.__GAME_STATE__;
+    state.questIndex = 8;
+    state.stage = 5;
+    state.credits = 40;
+    state.researchMenuUnlocked = true;
+    state.unlockedFacilities.add('thermal');
+    state.grid[0] = { type: 'data', level: 1, priority: 'normal', rotation: 0 };
+    state.grid[1] = { type: 'thermal', level: 1, priority: 'normal', rotation: 0 };
+    state.grid[2] = { type: 'thermal', level: 1, priority: 'normal', rotation: 0 };
+    state.research.jobs.solar2 = { id: 'solar2', dataCenterIndex: 0, elapsedEffectiveDays: 0, status: 'running', paidCost: 10 };
+    window.__refreshGameForTest();
+    window.__EVENT_BUS__.emit(window.__EVENTS__.RESEARCH_QUIZ_REQUESTED, { researchId: 'solar2', dataCenterIndex: 0 });
+  });
+  await expect(page.locator('#modalCard[data-modal-id="quiz"]')).toBeVisible();
+  expect(await page.evaluate(() => window.__getSimulationState().paused)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__GAME_STATE__.research.jobs.solar2?.elapsedEffectiveDays ?? -1), { timeout: 8000 }).toBeGreaterThan(0);
+  await expect(page.locator('#modalCard[data-modal-id="quiz"]')).toBeVisible();
 });

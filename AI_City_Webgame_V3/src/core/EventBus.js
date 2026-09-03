@@ -51,6 +51,7 @@ export const Events = {
   BUILD_ROTATE_REQUESTED: 'buildPlan:rotateRequested',
   BUILD_DIRECTION_INFO_REQUESTED: 'buildPlan:directionInfoRequested',
   BUILD_PLAN_CLEARED: 'buildPlan:cleared',
+  BUILD_PREVIEW_CANCEL_REQUESTED: 'buildPlan:previewCancelRequested',
   BUILD_PLAN_COMMIT_REQUESTED: 'buildPlan:commitRequested',
   BUILD_PLAN_COMMITTED: 'buildPlan:committed',
   CONSTRUCTION_STARTED: 'construction:started',
@@ -76,6 +77,7 @@ export const Events = {
 
   // UI
   TOAST_SHOW: 'toast:show',
+  TOAST_DISMISS: 'toast:dismiss',
   HUD_PANEL_CHANGED: 'hud:panelChanged',
   HUD_PANEL_OPEN_REQUESTED: 'hud:panelOpenRequested',
   HUD_PANEL_CLOSE_REQUESTED: 'hud:panelCloseRequested',

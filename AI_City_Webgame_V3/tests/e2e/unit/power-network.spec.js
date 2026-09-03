@@ -113,10 +113,12 @@ test('a neighboring hex battery provides a local hub route and preserves low-car
   expect(result.nextBatteries[0].lowCarbon).toBeLessThan(10);
 });
 
+// 보조전력은 레벨별 수요 표(FACILITY_DEMAND_BY_LEVEL.battery)를 그대로 따른다 —
+// 용량 20/35/50을 굴리는 데 드는 전력이 강화와 함께 실제로 늘어난다.
 for (const [level, expectedDemand] of [
   [1, 1],
-  [2, 1.24],
-  [3, 1.45],
+  [2, 1.5],
+  [3, 2],
 ]) {
   test(`battery Lv.${level} contributes ${expectedDemand}E auxiliary demand before storage operation`, () => {
     const coords = createHexCoordinates(2);

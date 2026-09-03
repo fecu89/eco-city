@@ -4,6 +4,7 @@ import { QUESTS, QUEST_COUNT, questForState } from '../core/QuestDefinitions.js'
 import { gameState } from '../core/GameState.js';
 import { RESEARCH } from '../core/ResearchDefinitions.js';
 import { EVENT_FORECAST_DAYS } from '../core/EventDefinitions.js';
+import { EXPANSION_CELLS_PER_SIDE } from '../core/ZoneDefinitions.js';
 import { rewardText } from './questText.js';
 
 function showQuestRewardAlert(quest, result) {
@@ -21,8 +22,9 @@ function showQuestRewardAlert(quest, result) {
       : '최종 운영 성적표가 열렸습니다.',
     priority: true,
     kind: 'quest-alert quest-reward-alert',
-    action: nextQuest ? 'quest' : null,
-    actionLabel: nextQuest ? '새 퀘스트 열기' : '',
+    // 보상 토스트는 정보만 담는다. 퀘스트 패널이 이미 다음 퀘스트를 보여주므로 버튼은 중복이다.
+    action: null,
+    actionLabel: '',
     duration: UI_FEEDBACK.QUEST_ALERT_MS,
   });
 }
@@ -70,6 +72,8 @@ export function initFeedbackBridge() {
   });
 
   eventBus.on(Events.QUEST_CLAIMED, ({ quest, result }) => {
+    // "완료 조건 달성" 알림은 보상을 받은 순간 할 일이 끝났다 — 남겨 두면 확인을 두 번 시킨다.
+    eventBus.emit(Events.TOAST_DISMISS, { kind: 'quest-alert' });
     showQuestRewardAlert(quest, result);
     eventBus.emit(Events.AUDIO_SFX, { name: 'click' });
   });
@@ -80,7 +84,7 @@ export function initFeedbackBridge() {
   });
 
   eventBus.on(Events.BOARD_EXPANDED, ({ settled, addedIndices = [] }) => {
-    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '도시 부지 확장', text: `새 대지 ${addedIndices.length || 9}칸 확보` });
+    if (!settled) eventBus.emit(Events.TOAST_SHOW, { title: '도시 부지 확장', text: `새 대지 ${addedIndices.length || EXPANSION_CELLS_PER_SIDE}칸 확보` });
   });
 
   eventBus.on(Events.RESEARCH_COMPLETED, ({ researchId }) => {

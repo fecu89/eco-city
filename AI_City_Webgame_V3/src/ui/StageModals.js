@@ -1,10 +1,12 @@
 import anime from 'animejs';
-import { CARBON_CRISIS, CITY_FAILURE_RULES, DIRECTION_COPY, DIRECTION_RULES, FACILITIES, FACILITY_DIRECTIONS, RESEARCH_RULES, STRESS_TEST_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
+import { CAMPAIGN_PACING, CARBON_CRISIS, CITY_FAILURE_RULES, DEMAND_VARIATION, DEMOLITION_REFUND_RATIO, DIRECTION_COPY, DIRECTION_RULES, FACILITIES, FACILITY_DIRECTIONS, RESEARCH_RULES, STRESS_TEST_RULES, WEATHER_RULES, WORKFORCE_LEVELS } from '../core/Constants.js';
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { setModal, closeModal, getModalState, MODAL_PRIORITY, $modal, $$modal } from './Modal.js';
 import { escapeHtml, formatCredits, round1 } from './format.js';
 import { prefersReducedMotion } from './motionPreference.js';
+// 성적표 등급 아이콘 연출 수치(VISUAL.REPORT_RANK_ANIMATION)만 쓴다.
+import { VISUAL } from '../core/Constants.js';
 import {
   cellStats,
   demolitionRefund,
@@ -21,12 +23,12 @@ import {
 } from '../systems/BoardSystem.js';
 import { handleResearchFacilityRemoved } from '../systems/ResearchSystem.js';
 import { bindResearchPanel, refreshResearchPanelLive, researchPanelMarkup } from './ResearchView.js';
-import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { CAMPAIGN_QUEST_INDEXES, CLIMATE_QUEST_COUNT } from '../core/CampaignProgression.js';
 import * as Report from '../systems/ReportSystem.js';
 import { validateDemolitionPermit } from '../systems/FacilityPermitSystem.js';
 import { OPERATIONAL_PAUSE_IDS } from '../systems/CityFailureSystem.js';
 import { BATTERY_POLICIES } from '../core/OperationDefinitions.js';
-import { EXPANSION_SIDES, ZONE_TRAITS } from '../core/ZoneDefinitions.js';
+import { EXPANSION_CELLS_PER_SIDE, EXPANSION_SIDES, EXPANSION_UPKEEP, ZONE_TRAITS } from '../core/ZoneDefinitions.js';
 import { CITY_EVENTS, EVENT_FORECAST_DAYS, STRESS_PHASES, stressTestTotalDays } from '../core/EventDefinitions.js';
 import { startStressTest } from '../systems/StressTestSystem.js';
 import {
@@ -42,11 +44,14 @@ import {
   projectProgress,
   projectRefund,
   projectStage,
+  isOperationalCell,
 } from '../systems/ConstructionProjectSystem.js';
 import { generationAvailabilityMultiplier } from '../systems/PowerNetworkSystem.js';
+import { weatherAt, weatherForecast } from '../systems/WeatherSystem.js';
 import { setPlannedFacilityRotation } from '../systems/ConstructionPlanSystem.js';
 import {
   defaultRotationFor,
+  demandVariationFactor,
   directionFactor,
   directionOutputTable,
   normalizeRotation,
@@ -72,10 +77,7 @@ function facilityBalanceText(economy) {
 
 function facilityPowerText(cell, stats, power) {
   if (stats.supply > 0) {
-    const multiplier = generationAvailabilityMultiplier(cell.type, {
-      dayIndex: gameState.elapsedGameDays,
-      tickIndex: gameState.tickIndex,
-    });
+    const multiplier = generationAvailabilityMultiplier(cell.type);
     return `+${round1(stats.supply * multiplier)}E/일`;
   }
   if (stats.demand > 0) {
@@ -106,14 +108,14 @@ export function openExpansionChoiceModal() {
   }).join('');
   setModal(`
     <div class="modal-head"><div><span class="eyebrow">CITY EXPANSION</span><h2>첫 확장 방향을 선택하세요</h2></div></div>
-    <p class="expansion-choice-intro">선택한 9칸과 해당 재생에너지가 먼저 열립니다. ${CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST}번째 퀘스트 데이터센터 현대화를 마치면 반대편 9칸도 개방됩니다.</p>
+    <p class="expansion-choice-intro">선택한 ${EXPANSION_CELLS_PER_SIDE}칸과 해당 재생에너지가 먼저 열립니다. ${CAMPAIGN_QUEST_INDEXES.SECOND_EXPANSION_QUEST}번째 퀘스트 데이터센터 현대화를 마치면 반대편 ${EXPANSION_CELLS_PER_SIDE}칸도 개방됩니다.</p>
     <div class="expansion-choice-grid">
       ${Object.values(EXPANSION_SIDES).map((side) => `<button type="button" class="expansion-choice-card" data-expansion-side="${side.id}">
         <span class="expansion-direction">${side.id === 'east' ? 'EAST · 동부' : 'WEST · 서부'}</span>
         <strong>${escapeHtml(side.label)}</strong>
         <p>${escapeHtml(side.description)}</p>
         <ul>${traitMarkup(side.id)}</ul>
-        <b>9칸 개방 · ${escapeHtml(FACILITIES[side.facility].name)} 해금 · 유지비 +1.00 💰/일</b>
+        <b>${EXPANSION_CELLS_PER_SIDE}칸 개방 · ${escapeHtml(FACILITIES[side.facility].name)} 해금 · 유지비 +${formatCredits(EXPANSION_UPKEEP[1])}/일</b>
       </button>`).join('')}
     </div>
   `, { id: 'expansion-choice', pausesSimulation: true, dismissible: false, priority: MODAL_PRIORITY.IMPORTANT });
@@ -125,7 +127,7 @@ export function openExpansionChoiceModal() {
     refreshAll();
     eventBus.emit(Events.TOAST_SHOW, {
       title: `${EXPANSION_SIDES[result.side].label} 완료`,
-      text: `새 대지 9칸 · ${FACILITIES[result.unlockedFacility].name} 해금 · 도시 유지비 +1.00 💰/일`,
+      text: `새 대지 ${EXPANSION_CELLS_PER_SIDE}칸 · ${FACILITIES[result.unlockedFacility].name} 해금 · 도시 유지비 +${formatCredits(EXPANSION_UPKEEP[1])}/일`,
       priority: true,
     });
   }));
@@ -221,19 +223,19 @@ export function refreshStageConstructionProgress(tickProgress = 0) {
 
 export function openHelpModal() {
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY · 15~30 MIN</span><h2>기후 생존 도시 · 4개 챕터</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
+    <div class="modal-head"><div><span class="eyebrow">HOW TO PLAY · ${CAMPAIGN_PACING.humanMinutes.min}~${CAMPAIGN_PACING.humanMinutes.max} MIN</span><h2>기후 생존 도시 · 4개 챕터</h2></div><button class="icon-btn close-modal"><i data-lucide="x"></i></button></div>
     <div class="help-grid">
       <article><span>01</span><h3>건설 계획</h3><p>건설 창에서 여러 시설을 원하는 칸에 반투명 계획으로 올린 뒤, 하단의 건설 확정을 눌러 한꺼번에 착공합니다. 미리보기의 X로 계획 전체를 취소할 수 있습니다.</p></article>
       <article><span>02</span><h3>운영</h3><p>1배속에서 1초마다 1일이 흐르며 수입·전력·탄소·물이 정산됩니다. 화면에는 날짜만 표시됩니다.</p></article>
       <article><span>03</span><h3>전력망</h3><p>거리가 멀수록 송전 손실이 커지고 저장장치는 중심과 인접한 6방향의 손실을 줄입니다.</p></article>
-      <article><span>04</span><h3>기후 퀘스트</h3><p>6개 기초 퀘스트 뒤에는 폭염·장마·태풍·한파 등 8개 기후에 각각 ${EVENT_FORECAST_DAYS}일 동안 대비합니다.</p></article>
+      <article><span>04</span><h3>기후 퀘스트</h3><p>${CAMPAIGN_QUEST_INDEXES.FOUNDATION_END}개 기초 퀘스트 뒤에는 폭염·장마·태풍·한파 등 ${CLIMATE_QUEST_COUNT}개 기후에 각각 ${EVENT_FORECAST_DAYS}일 동안 대비합니다.</p></article>
       <article><span>05</span><h3>기후 대응</h3><p>기상이변 퀘스트를 시작하면 ${EVENT_FORECAST_DAYS}일 대비 기간이 바로 흐르며 자동으로 일시정지하지 않습니다. 일일 탄소 ${CARBON_CRISIS.SAFE_DAILY}을 넘긴 채 ${CARBON_CRISIS.GAME_OVER_DAYS}일이 지나면 도시가 중단됩니다.</p></article>
-      <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 50%입니다.</p></article>
+      <article><span>06</span><h3>철거</h3><p>철거 환급은 누적 건설·강화 비용의 ${Math.round(DEMOLITION_REFUND_RATIO * 100)}%입니다.</p></article>
     </div>
-    <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → 8개 한국형 기후 대응 → ${stressTestTotalDays()}일 복합기후 시험 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
+    <div class="callout"><strong>작전 흐름</strong><p>기초 도시 → 첫 확장 → ${CLIMATE_QUEST_COUNT}개 한국형 기후 대응 → ${stressTestTotalDays()}일 복합기후 시험 → 성적표 순서로 진행합니다. 퀴즈는 연구 가속과 최종 보너스이며 승리 조건이 아닙니다.</p></div>
     <div class="callout"><strong>시설 허가</strong><p>퀘스트마다 시설별 최대 수가 정해집니다. 핵발전은 처음에는 화력발전 1기가 필요하지만, 폭염 경보 퀘스트 완료 후에는 에너지저장 시설이 예비력을 대신합니다.</p></div>
     <div class="callout"><strong>인구와 필요 인력</strong><p>주거지는 전체 인구를 늘리고, 발전소·공장·데이터센터 같은 운영 시설은 인력을 사용합니다. 계획 전체의 필요 인력이 인구를 넘으면 건설을 확정할 수 없습니다.</p></div>
-    <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_DAYS.CAPSTONE / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 4문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
+    <div class="callout"><strong>연구와 퀴즈</strong><p>데이터센터마다 서로 다른 연구를 동시에 진행할 수 있습니다. 연구는 1×에서 최대 ${RESEARCH_RULES.DURATION_DAYS.CAPSTONE / RESEARCH_RULES.GAME_DAYS_PER_REAL_MINUTE}분이며, 각 연구의 전용 퀴즈 ${RESEARCH_RULES.QUIZ_QUESTION_COUNT}문제를 모두 맞히면 해당 연구의 남은 시간을 전부 단축할 수 있습니다.</p></div>
     <div class="callout"><strong>게임 모델 안내</strong><p>설정에서 낮·노을·밤 조명을 고정할 수 있습니다. 수치는 실제 실측값이 아닌 기후·에너지 시스템 학습용 상대값입니다. 조력발전은 바다와 맞닿은 해안 칸에만 지을 수 있고, 그 칸의 조수간만의 차가 클수록 출력이 큽니다.</p></div>
     <div class="callout"><strong>시설 방향</strong><p>태양광과 풍력은 건설할 때 45° 8방위 중 하나를 고릅니다. 태양광은 남향이 가장 좋고, 풍력은 칸마다 다른 바람이 부는 쪽을 향해야 합니다. 방향은 완공한 뒤에는 바꿀 수 없습니다.</p></div>
   `);
@@ -263,6 +265,14 @@ function groupedFacilityValues(values, key) {
     .map(([type, value]) => `${FACILITIES[type]?.name || type} ${round1(value)}`);
 }
 
+// 날씨가 발전량을 흔드는 시설. CityModifierSystem이 supply에 곱하는 배율과 같은 종류다.
+const WEATHER_FACILITY_TYPES = Object.freeze(['solar', 'wind']);
+
+// 전력 원인 창의 날씨 줄은 실제로 발전 중인 시설이 있을 때만 붙는다(공사 중은 제외).
+function cityHasFacility(type) {
+  return gameState.grid.some((cell) => cell?.type === type && isOperationalCell(cell));
+}
+
 function metricCauseData(metric) {
   const summary = gameState.lastTickSummary || {};
   const pressure = activePressure();
@@ -276,11 +286,31 @@ function metricCauseData(metric) {
     battery: '배터리 부족 원인',
     carbon: 'CO₂ 초과 원인',
     water: '물 사용 초과 원인',
+    weather: WEATHER_RULES.TITLE,
   };
-  const data = { title: titles[metric] || '도시 지표 원인', current: '', causes: [], action: '' };
+  const data = {
+    id: 'hud-metric-causes',
+    title: titles[metric] || '도시 지표 원인',
+    eyebrow: 'LIVE DIAGNOSIS',
+    currentLabel: '직전 정산',
+    closeLabel: '원인 창 닫기',
+    actionTitle: '대응 선택지',
+    current: '',
+    causes: [],
+    action: '',
+  };
 
   if (metric === 'power') {
     data.current = margin < 0 ? `전력 부족 ${round1(Math.abs(margin))}E` : `전력 여유 +${margin}E`;
+    // 소비 시설 수요는 날마다 조금씩 흔들린다. 어제와 같은 도시인데 수지가 달라진 이유가
+    // 여기 있으므로, 0%인 날도 "오늘은 평년 수준"이라고 밝혀 준다.
+    data.causes.push(DEMAND_VARIATION.CAUSE_LABEL(demandVariationFactor(gameState, gameState.elapsedGameDays)));
+    // 오늘 날씨는 태양광·풍력 공급에 곱해진다. 그 시설이 있는 도시에만 밝히고, 기후 이벤트·최종시험이
+    // 날씨를 고정했으면 출처도 적는다.
+    const weather = weatherAt(gameState);
+    if (cityHasFacility('solar')) data.causes.push(WEATHER_RULES.SOLAR_CAUSE_LABEL(weather));
+    if (cityHasFacility('wind')) data.causes.push(WEATHER_RULES.WIND_CAUSE_LABEL(weather));
+    if (weather.forcedBy) data.causes.push(WEATHER_RULES.FORCED_LABEL(weather));
     if (activeResearchCount) data.causes.push(`집중 연구 +${round1(activeResearchCount * RESEARCH_RULES.EXTRA_DEMAND)}E`);
     // 진행 중인 재난은 정의에서 직접 읽는다. 예전에는 이벤트 id마다 문구를 하드코딩했는데,
     // 은퇴한 id(lowWind·lowWindNight·nightPeak)만 남고 현재 덱 8종 중 폭염 하나만 설명돼
@@ -314,6 +344,23 @@ function metricCauseData(metric) {
     groupedFacilityValues(summary.facilityEnvironment, 'water').forEach((label) => data.causes.push(`${label}/일`));
     if (pressure?.type === 'drought') data.causes.push('가뭄 예보 · 물 사용량을 예보 직전 수준 이하로 유지해야 합니다');
     data.action = '데이터센터·발전소 가까이에 순환냉각 시설을 배치하고 물 소비가 큰 시설의 강화를 미루세요.';
+  } else if (metric === 'weather') {
+    // 날씨 창. 태양광·풍력이 없어도 열린다 — 짓기 전에 오늘 날씨를 볼 수 있어야 한다.
+    const weather = weatherAt(gameState);
+    const [tomorrow] = weatherForecast(gameState, 1);
+    data.id = 'hud-weather';
+    data.eyebrow = WEATHER_RULES.EYEBROW;
+    data.currentLabel = WEATHER_RULES.TODAY_LABEL;
+    data.closeLabel = WEATHER_RULES.CLOSE_LABEL;
+    data.actionTitle = WEATHER_RULES.ACTION_TITLE;
+    data.current = WEATHER_RULES.TODAY_KIND_LABEL(weather);
+    data.causes.push(
+      WEATHER_RULES.SOLAR_LABEL(weather),
+      WEATHER_RULES.WIND_LABEL(weather),
+      WEATHER_RULES.TIDAL_NOTE,
+      WEATHER_RULES.TOMORROW_LABEL(tomorrow),
+    );
+    data.action = WEATHER_RULES.ACTION(WEATHER_RULES.HOLD_DAYS);
   }
   if (!data.causes.length) data.causes.push('직전 정산에서 추가 원인이 기록되지 않았습니다. 다음 일일 정산 후 다시 확인하세요.');
   return data;
@@ -322,12 +369,12 @@ function metricCauseData(metric) {
 export function openHudMetricCausesModal(metric) {
   const data = metricCauseData(metric);
   setModal(`
-    <div class="modal-head"><div><span class="eyebrow">LIVE DIAGNOSIS</span><h2>${escapeHtml(data.title)}</h2></div><button class="icon-btn close-modal" aria-label="원인 창 닫기"><i data-lucide="x"></i></button></div>
-    <section class="metric-cause-current"><span>직전 정산</span><strong>${escapeHtml(data.current)}</strong></section>
+    <div class="modal-head"><div><span class="eyebrow">${escapeHtml(data.eyebrow)}</span><h2>${escapeHtml(data.title)}</h2></div><button class="icon-btn close-modal" aria-label="${escapeHtml(data.closeLabel)}"><i data-lucide="x"></i></button></div>
+    <section class="metric-cause-current"><span>${escapeHtml(data.currentLabel)}</span><strong>${escapeHtml(data.current)}</strong></section>
     <ol class="metric-cause-list">${data.causes.map((cause) => `<li><i data-lucide="scan-search" aria-hidden="true"></i><span>${escapeHtml(cause)}</span></li>`).join('')}</ol>
-    <div class="callout metric-cause-action"><strong>대응 선택지</strong><p>${escapeHtml(data.action)}</p></div>
+    <div class="callout metric-cause-action"><strong>${escapeHtml(data.actionTitle)}</strong><p>${escapeHtml(data.action)}</p></div>
     <div class="modal-actions"><button class="btn primary close-modal" type="button">확인</button></div>
-  `, { id: 'hud-metric-causes', pausesSimulation: false });
+  `, { id: data.id, pausesSimulation: false });
   $$modal('.close-modal').forEach((button) => button.addEventListener('click', closeModal));
 }
 
@@ -347,6 +394,16 @@ function siteNoteMarkup(index, cell) {
   const tidal = cell.type === 'tidal' ? tidalSiteInfo(gameState, index) : null;
   if (!tidal) return '';
   return `<p class="facility-site-note" id="facilitySiteNote"><i data-lucide="waves" aria-hidden="true"></i><span>${escapeHtml(tidal.label)}</span></p>`;
+}
+
+// 오늘 날씨가 이 시설의 발전량에 곱해지는 배율. 위 "현재 발전"에는 이미 반영돼 있으므로
+// 왜 그 값인지 한 줄로 밝힌다(태양광은 종류, 풍력은 풍속). 조력은 날씨와 무관해 줄이 없다.
+function weatherNoteMarkup(cell) {
+  if (!WEATHER_FACILITY_TYPES.includes(cell.type)) return '';
+  const weather = weatherAt(gameState);
+  const text = cell.type === 'solar' ? WEATHER_RULES.SOLAR_CAUSE_LABEL(weather) : WEATHER_RULES.WIND_CAUSE_LABEL(weather);
+  const forced = WEATHER_RULES.FORCED_LABEL(weather);
+  return `<p class="facility-site-note" id="facilityWeatherNote"><i data-lucide="${weather.icon}" aria-hidden="true"></i><span>${escapeHtml(forced ? `${text} · ${forced}` : text)}</span></p>`;
 }
 
 export function openFacilityInspectorModal(index) {
@@ -416,7 +473,7 @@ export function openFacilityInspectorModal(index) {
       <div><span>${workforceLabel}</span><strong>${workforceText}</strong></div>
     </div>
     <p class="facility-settlement-note">도시 전체 순수익 <strong id="facilityCityNet">${signedCreditRate(live?.netCredits || 0)}</strong> · 다른 시설 운영비와 환경·확장 비용까지 포함</p>
-    ${siteNoteMarkup(index, cell)}
+    ${siteNoteMarkup(index, cell)}${weatherNoteMarkup(cell)}
     <div class="spatial-tags">${positive}${warnings}</div>
     <div class="callout"><strong>공간 규칙</strong><p>${facility.desc}</p></div>
     ${batteryPolicyMarkup}
@@ -440,7 +497,7 @@ export function openFacilityInspectorModal(index) {
         <button class="btn secondary" type="button" data-console-close>닫기</button>
         <div>
           <button class="btn secondary" id="demolishBtn" ${gameState.isEditable ? '' : 'disabled'}><i data-lucide="trash-2"></i> 철거 +${formatCredits(refund)}</button>
-          <button class="btn primary ${upgradeValidation.ok ? '' : 'condition-check'}" id="upgradeBtn" title="${escapeHtml(upgradeRequirement)}"><i data-lucide="chevrons-up"></i> ${canLevel ? `Lv.${cell.level + 1} · ${formatCredits(nextCost)}` : cell.level < facility.maxLevel ? '강화 조건 확인' : '최대 레벨'}</button>
+          <button class="btn primary ${upgradeValidation.ok ? '' : 'condition-check'}" id="upgradeBtn" title="${escapeHtml(upgradeRequirement)}"><i data-lucide="chevrons-up"></i> ${upgradeValidation.ok ? `Lv.${cell.level + 1} · ${formatCredits(nextCost)}` : cell.level < facility.maxLevel ? '강화 조건 확인' : '최대 레벨'}</button>
         </div>
       </footer>
     </div>
@@ -563,11 +620,13 @@ const PROJECT_STAGE_LABELS = Object.freeze({
 
 function projectOperationDescription(cell) {
   if (cell.project.kind === 'build') return '공사 중에는 수입·발전·소비·운영비·인력·인접 효과가 모두 0입니다.';
+  // 강화 중 제한 가동 비율은 프로필(settings.json CONSTRUCTION.UPGRADE_PROFILE)에서 읽어 문구에 넣는다.
   const profile = operationProfileForCell(cell);
-  if (cell.type === 'residential') return '기존 인구·수입·전력·물 성능의 80%로 운영하며, 운영비는 100% 유지됩니다.';
-  if (cell.type === 'battery') return '저장량과 기존 용량은 유지되며 충·방전 출력이 50%로 제한됩니다.';
-  if (cell.type === 'data') return '전력 70% · 수입 60%로 가동하며 연구는 공사 완료까지 중단됩니다. 운영비와 인력은 100% 유지됩니다.';
-  return `기존 레벨 성능의 ${Math.round(profile.supply * 100)}%로 가동하며, 운영비와 인력은 100% 유지됩니다.`;
+  const percent = (value) => Math.round(value * 100);
+  if (cell.type === 'residential') return `기존 인구·수입·전력·물 성능의 ${percent(profile.income)}%로 운영하며, 운영비는 100% 유지됩니다.`;
+  if (cell.type === 'battery') return `저장량과 기존 용량은 유지되며 충·방전 출력이 ${percent(profile.batteryThroughput)}%로 제한됩니다.`;
+  if (cell.type === 'data') return `전력 ${percent(profile.demand)}% · 수입 ${percent(profile.income)}%로 가동하며 연구는 공사 완료까지 중단됩니다. 운영비와 인력은 100% 유지됩니다.`;
+  return `기존 레벨 성능의 ${percent(profile.supply)}%로 가동하며, 운영비와 인력은 100% 유지됩니다.`;
 }
 
 function openConstructionProjectModal(index) {
@@ -728,7 +787,8 @@ export function openReportModal() {
     <div class="modal-actions"><button class="btn secondary" id="exportBtn"><i data-lucide="download"></i> 결과 저장</button>${quizComplete ? '' : '<button class="btn secondary" id="finalBonusQuizBtn">개념 퀴즈 · 최대 +10</button>'}<button class="btn primary" id="closeFinalBtn">도시 계속 보기</button></div>
   `, { id: 'final-report', pausesSimulation: true });
   if (!prefersReducedMotion()) {
-    anime({ targets: '.final-rank .rank-icon', scale: [0.4, 1], rotate: [-15, 0], duration: 500, easing: 'easeOutElastic(1, .6)' });
+    const rank = VISUAL.REPORT_RANK_ANIMATION;
+    anime({ targets: '.final-rank .rank-icon', scale: [rank.SCALE_FROM, 1], rotate: [rank.ROTATE_FROM_DEG, 0], duration: rank.DURATION_MS, easing: rank.EASING });
   }
   $modal('#closeFinalBtn').addEventListener('click', closeModal);
   $modal('#exportBtn').addEventListener('click', exportResultFile);
@@ -744,7 +804,7 @@ export function openStressTestModal(onStarted = null) {
     <div class="stress-phase-list">
       ${STRESS_PHASES.map((phase, index) => `<article><span>${index + 1}</span><i data-lucide="${phase.icon}"></i><strong>${phase.label}</strong><b>${phase.durationDays}일</b>${phase.preparation ? `<small>${escapeHtml(phase.preparation)}</small>` : ''}</article>`).join('')}
     </div>
-    <div class="callout"><strong>테스트 중에도 가능한 행동</strong><p>전력 우선순위·배터리 정책·연구·강화·긴급 건설을 계속 사용할 수 있습니다. 단, 신규 건설비는 20% 증가합니다.</p></div>
+    <div class="callout"><strong>테스트 중에도 가능한 행동</strong><p>전력 우선순위·배터리 정책·연구·강화·긴급 건설을 계속 사용할 수 있습니다. 단, 신규 건설비는 ${Math.round((STRESS_TEST_RULES.CONSTRUCTION_COST_MULTIPLIER - 1) * 100)}% 증가합니다.</p></div>
     <div class="callout"><strong>8개 통과 조건</strong><p>평균 공급 ${STRESS_TEST_RULES.PASS_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 최저 공급 ${STRESS_TEST_RULES.MINIMUM_ESSENTIAL_SUPPLY_PERCENT}% 이상 · 연속 적자 ${STRESS_TEST_RULES.BANKRUPTCY_FAILURE_DAYS}일 미만 · 종료 크레딧 0 이상 · 물 초과 ${STRESS_TEST_RULES.MAX_WATER_VIOLATION_DAYS}일 이하 · 복구 ${STRESS_TEST_RULES.RECOVERY_DEADLINE_DAYS}일 이내 · 조력 ${STRESS_TEST_RULES.MIN_TIDAL_DELIVERY}E 이상 · CO₂ 평균 ${STRESS_TEST_RULES.MAX_AVERAGE_CARBON}/일 이하(${STRESS_TEST_RULES.MIN_SAFE_CARBON_DAYS}일 안전, ${STRESS_TEST_RULES.HIGH_CARBON_RATE} 초과 최대 ${STRESS_TEST_RULES.MAX_HIGH_CARBON_DAYS}일)</p></div>
     <div class="callout"><strong>물 한도 기준</strong><p>물 한도는 고정값이 아니라 <b>시험 시작 시 도시가 쓰던 사용량</b>입니다. 건조 위기 구간에는 냉각 부담이 커지는데도 그 사용량을 넘기면 안 됩니다. 순환냉각 연결과 물 소비 시설 정리로 늘어난 물을 다시 눌러야 합니다.</p></div>
     ${previous && !previous.passed ? `<div class="demolition-warning"><strong>이전 시도 진단</strong><p>${escapeHtml(previous.diagnosis?.label || '도시 운영을 보완한 뒤 다시 시도하세요.')}</p></div>` : ''}

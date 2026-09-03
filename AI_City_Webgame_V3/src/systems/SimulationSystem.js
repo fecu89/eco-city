@@ -1,4 +1,4 @@
-import { DAILY_CARBON_TARGETS, GRID_RESERVE_RULES, TIME } from '../core/Constants.js';
+import { DAILY_CARBON_TARGETS, FACILITY_GROUPS, GRID_RESERVE_RULES, POWER_RULES, TIME } from '../core/Constants.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
 import { createHexCoordinates } from './HexGridSystem.js';
 import { calendarAtElapsedDay } from './CalendarSystem.js';
@@ -12,7 +12,7 @@ import { advanceConstructionProjects, isOperationalCell } from './ConstructionPr
 import { advanceClimateQuest } from './ClimateQuestSystem.js';
 
 const round1 = (value) => Math.round(value * 10) / 10;
-const GENERATION_TYPES = new Set(['thermal', 'nuclear', 'solar', 'wind', 'tidal']);
+const GENERATION_TYPES = new Set(FACILITY_GROUPS.GENERATION);
 
 // 기초 6단계는 전환 목표(12), 준비 10단계까지는 10, 기후전부터는 안전 기준 8이다.
 export function dailyCarbonTargetForQuest(questIndex) {
@@ -109,13 +109,13 @@ export function createDaySettler({
       : 100;
     const essentialIndices = state.grid
       .map((cell, index) => (isOperationalCell(cell)
-        && (cell.priority === 'essential' || ['residential', 'cooling'].includes(cell.type)) ? index : null))
+        && (cell.priority === 'essential' || FACILITY_GROUPS.ESSENTIAL_DEFAULT.includes(cell.type)) ? index : null))
       .filter((index) => index != null);
     // 필수시설이 하나도 없는 도시는 정전이 아니라 "공급할 필수 부하가 없는" 상태다.
     const essentialSupplyPercent = essentialIndices.length
       ? essentialIndices.reduce((sum, index) => sum + (power.facilityPower[index]?.ratio ?? 0), 0) / essentialIndices.length * 100
       : 100;
-    const essentialOutage = essentialIndices.some((index) => (power.facilityPower[index]?.ratio ?? 0) < 0.9);
+    const essentialOutage = essentialIndices.some((index) => (power.facilityPower[index]?.ratio ?? 0) < POWER_RULES.OUTAGE_RATIO);
     summary.transmissionEfficiency = round1(transmissionEfficiency);
     summary.essentialSupplyPercent = round1(essentialSupplyPercent);
     summary.generationDeliveredByType = power.routes.reduce((totals, route) => {
@@ -157,7 +157,7 @@ export function createDaySettler({
     state.simulationTotals.deliveredEnergy = (state.simulationTotals.deliveredEnergy || 0) + power.delivered;
     state.simulationTotals.renewableDeliveredEnergy = (state.simulationTotals.renewableDeliveredEnergy || 0)
       + power.routes.reduce((sum, route) => (
-        ['solar', 'wind', 'tidal'].includes(state.grid[route.from]?.type) ? sum + route.delivered : sum
+        FACILITY_GROUPS.RENEWABLE.includes(state.grid[route.from]?.type) ? sum + route.delivered : sum
       ), 0);
     state.simulationTotals.nuclearDeliveredEnergy = (state.simulationTotals.nuclearDeliveredEnergy || 0)
       + power.routes.reduce((sum, route) => state.grid[route.from]?.type === 'nuclear' ? sum + route.delivered : sum, 0);

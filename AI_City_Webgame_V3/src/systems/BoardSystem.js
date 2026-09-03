@@ -2,8 +2,12 @@ import {
   BOARD,
   DEMOLITION_REFUND_RATIO,
   FACILITIES,
+  FACILITY_GROUPS,
   GRID_EXPANSION_SETTLE_MS,
+  PARTNER_RULES,
   SCORING,
+  SPATIAL_LABELS,
+  SPATIAL_RULES,
   STAGES,
   UPGRADE_COST_RATIOS,
 } from '../core/Constants.js';
@@ -12,7 +16,7 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { roundCredits } from '../core/Money.js';
 import { formatCredits } from '../core/Money.js';
 import { QUESTS, questForState } from '../core/QuestDefinitions.js';
-import { RESEARCH } from '../core/ResearchDefinitions.js';
+import { RESEARCH, TECH_RESEARCH_BY_FACILITY } from '../core/ResearchDefinitions.js';
 import { EXPANSION_SIDES } from '../core/ZoneDefinitions.js';
 import {
   CAMPAIGN_QUEST_INDEXES,
@@ -45,7 +49,7 @@ import {
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const round1 = (v) => Math.round(v * 10) / 10;
-const BATTERY_CONSUMER_TYPES = Object.freeze(['residential', 'factory', 'data', 'cooling']);
+const BATTERY_CONSUMER_TYPES = FACILITY_GROUPS.BATTERY_CONSUMERS;
 
 function researchJobForDataCenter(state, index) {
   return Object.values(state.research?.jobs || {}).find((job) => job.dataCenterIndex === index) || null;
@@ -80,42 +84,31 @@ export function getCellSpatial(grid, index, coords = getBoardCoordinates()) {
   const positive = [];
   const warnings = [];
   const t = cell.type;
-  if (t === 'factory') (hasNeighbor(grid, index, coords, ['thermal', 'nuclear', 'solar', 'wind', 'tidal']) ? positive : warnings).push('발전소 인접');
-  if (t === 'data') (hasNeighbor(grid, index, coords, ['cooling']) ? positive : warnings).push('순환냉각 인접');
-  if (t === 'residential' && hasNeighbor(grid, index, coords, ['green'])) positive.push('녹지 생활권');
-  if (['solar', 'wind'].includes(t)) {
+  // 저장 허브 두 규칙은 "소비지와 맞닿은 배터리"라는 두 칸 건너 판정이라 표(SPATIAL_RULES)에 담지 못한다.
+  // 태양광·풍력·배터리에는 표 규칙이 없으므로 여기서 먼저 판정해도 출력 순서는 예전과 같다.
+  if (FACILITY_GROUPS.VARIABLE_RENEWABLE.includes(t)) {
     const connectedHub = neighborIndices(index, coords)
       .some((batteryIndex) => grid[batteryIndex]?.type === 'battery' && batteryHasConsumerNeighbor(grid, batteryIndex, coords));
-    (connectedHub ? positive : warnings).push('소비지 저장 허브 연결');
+    (connectedHub ? positive : warnings).push(SPATIAL_LABELS.renewable_hub);
   }
-  if (t === 'battery' && batteryHasConsumerNeighbor(grid, index, coords)) positive.push('소비지 저장 허브');
-  if (t === 'nuclear' && hasNeighbor(grid, index, coords, ['cooling'])) positive.push('냉각 보조');
-  if (t === 'cooling' && hasNeighbor(grid, index, coords, ['data', 'nuclear'])) positive.push('냉각 수요 연결');
-  if (['factory', 'thermal'].includes(t) && hasNeighbor(grid, index, coords, ['residential'])) warnings.push('주거지 오염 갈등');
-  // 원전·데이터센터의 생활권 갈등과 오염 시설·녹지 충돌을 공간 비용으로 반영한다.
-  if (t === 'nuclear' && hasNeighbor(grid, index, coords, ['residential'])) warnings.push('원전 인접 불안');
-  if (t === 'data' && hasNeighbor(grid, index, coords, ['residential'])) warnings.push('소음·발열 민원');
-  if (['thermal', 'factory'].includes(t) && hasNeighbor(grid, index, coords, ['green'])) warnings.push('녹지 훼손 갈등');
-  // 반대쪽 시설(주거지/녹지)에서도 같은 갈등이 보이도록 대칭으로 표시한다 (점수 계산은 한쪽에서만 1회 적용).
-  if (t === 'residential' && hasNeighbor(grid, index, coords, ['factory', 'thermal', 'nuclear', 'data'])) warnings.push('오염·불안 시설 인접');
-  if (t === 'green' && hasNeighbor(grid, index, coords, ['thermal', 'factory'])) warnings.push('오염 시설 인접');
+  if (t === 'battery' && batteryHasConsumerNeighbor(grid, index, coords)) positive.push(SPATIAL_LABELS.battery_hub);
+  // 나머지 시너지/갈등(원전·데이터센터의 생활권 갈등, 오염 시설·녹지 충돌 등)은 settings.json SPATIAL_RULES 표를
+  // 순서대로 평가한다(문구는 SPATIAL_LABELS). 반대쪽 시설(주거지/녹지)에서도 같은 갈등이 보이도록 표가 대칭 규칙을
+  // 갖는다 (점수 계산은 한쪽에서만 1회 적용).
+  SPATIAL_RULES.forEach((rule) => {
+    if (!rule.self.includes(t)) return;
+    const matched = hasNeighbor(grid, index, coords, rule.neighbors);
+    const label = SPATIAL_LABELS[rule.id];
+    if (rule.mode === 'either') (matched ? positive : warnings).push(label);
+    else if (matched) (rule.mode === 'positive' ? positive : warnings).push(label);
+  });
   return { positive, warnings };
 }
 
 // 3단계 대시보드/독(dock)에서 "이 시설을 놓으면 어디가 좋고 어디가 나쁜지" 미리보기에 쓰는 단순화된 관계표.
 // getCellSpatial()의 라벨 있는 판정과 별개로, 빈 칸 하이라이트용 good/bad 판정만 담당한다.
-export const PARTNER_RULES = {
-  factory: { good: ['thermal', 'nuclear', 'solar', 'wind', 'tidal'], bad: ['residential'] },
-  thermal: { good: ['factory'], bad: ['residential', 'green'] },
-  nuclear: { good: ['cooling', 'factory'], bad: ['residential'] },
-  data: { good: ['cooling'], bad: ['residential'] },
-  residential: { good: ['green'], bad: ['factory', 'thermal', 'nuclear', 'data'] },
-  solar: { good: ['battery'], bad: [] },
-  wind: { good: ['battery'], bad: [] },
-  battery: { good: BATTERY_CONSUMER_TYPES, bad: [] },
-  cooling: { good: ['data', 'nuclear'], bad: [] },
-  green: { good: ['residential'], bad: ['thermal', 'factory'] },
-};
+// 값은 settings.json PARTNER_RULES에 있고, 기존 import 경로를 유지하려고 여기서 다시 내보낸다.
+export { PARTNER_RULES };
 
 // 독에서 시설을 선택했을 때, 빈 칸 중 어디가 인접 보너스(good)/갈등(bad)을 받는지 계산한다.
 export function placementPreview(facilityKey, grid, coords = getBoardCoordinates(), state = gameState) {
@@ -133,7 +126,7 @@ export function placementPreview(facilityKey, grid, coords = getBoardCoordinates
     const ns = neighborIndices(i, coords);
     const hasGood = ns.some((n) => {
       if (!grid[n] || !rule.good.includes(grid[n].type)) return false;
-      if (['solar', 'wind'].includes(facilityKey) && grid[n].type === 'battery') {
+      if (FACILITY_GROUPS.VARIABLE_RENEWABLE.includes(facilityKey) && grid[n].type === 'battery') {
         return batteryHasConsumerNeighbor(grid, n, coords);
       }
       return true;
@@ -164,13 +157,13 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
     if (!cell) return;
     const s = cellStats(cell, facilityModifierAt(modifierContext, i));
     dev += s.dev; demand += s.demand; supply += s.supply;
-    if (['solar', 'wind', 'tidal'].includes(cell.type)) renewableSupply += s.supply;
+    if (FACILITY_GROUPS.RENEWABLE.includes(cell.type)) renewableSupply += s.supply;
     if (cell.type === 'data') dataCount++;
     if (cell.type === 'thermal') thermalCount++;
 
     const ns = neighborIndices(i, coords);
     if (cell.type === 'factory') {
-      if (ns.some((n) => grid[n] && ['thermal', 'nuclear', 'solar', 'wind', 'tidal'].includes(grid[n].type))) {
+      if (ns.some((n) => grid[n] && FACILITY_GROUPS.GENERATION.includes(grid[n].type))) {
         const b = SCORING.SYNERGY.FACTORY_NEXT_TO_POWER_PER_LEVEL * cell.level;
         dev += b; synergyScore += b; synergyLinks++;
       }
@@ -192,7 +185,7 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
     if (cell.type === 'nuclear' && ns.some((n) => grid[n]?.type === 'cooling')) {
       synergyLinks++; synergyScore += SCORING.SYNERGY.NUCLEAR_NEXT_TO_COOLING;
     }
-    if (['factory', 'thermal'].includes(cell.type)) {
+    if (FACILITY_GROUPS.HEAVY_POLLUTERS.includes(cell.type)) {
       ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= SCORING.CONFLICT_DEV_PENALTY.HEAVY_NEXT_TO_RESIDENTIAL; } });
     }
     // 원전 인접 주거지: 안전 불안이라는 사회적 갈등 — 발전점수 손실이 더 크다.
@@ -204,20 +197,20 @@ export function calcMetrics(grid, coords = getBoardCoordinates(), modifierContex
       ns.forEach((n) => { if (grid[n]?.type === 'residential') { conflictPairs++; dev -= SCORING.CONFLICT_DEV_PENALTY.DATA_NEXT_TO_RESIDENTIAL; } });
     }
     // 오염 시설이 녹지를 훼손 — 탄소 부담이 늘어난 것처럼 취급.
-    if (['thermal', 'factory'].includes(cell.type)) {
+    if (FACILITY_GROUPS.HEAVY_POLLUTERS.includes(cell.type)) {
       ns.forEach((n) => { if (grid[n]?.type === 'green') conflictPairs++; });
     }
   });
 
   if (consumerHubBatteries.size) {
     grid.forEach((cell, index) => {
-      if (['solar', 'wind'].includes(cell?.type)) linkedRenewables.add(index);
+      if (FACILITY_GROUPS.VARIABLE_RENEWABLE.includes(cell?.type)) linkedRenewables.add(index);
     });
   }
 
   let renewablePenalty = 0;
   grid.forEach((cell, i) => {
-    if (!cell || !['solar', 'wind'].includes(cell.type)) return;
+    if (!cell || !FACILITY_GROUPS.VARIABLE_RENEWABLE.includes(cell.type)) return;
     const s = cellStats(cell);
     renewablePenalty += s.supply * (linkedRenewables.has(i)
       ? SCORING.RENEWABLE_PENALTY_RATIO.LINKED
@@ -394,7 +387,7 @@ export function validateUpgrade(state, index) {
       facility,
     };
   }
-  if (['solar', 'wind', 'battery', 'green'].includes(cell.type)
+  if (FACILITY_GROUPS.TECH_GATED.includes(cell.type)
     && nextLevel > (state.research?.techLevels?.[cell.type] || 0)) {
     return { ok: false, reason: 'technology_required', requiredLevel: nextLevel, facility };
   }
@@ -424,11 +417,7 @@ export function upgradeRequirementMessage(state, validation) {
   if (validation.reason === 'technology_required') {
     const cell = state.grid.find((item) => item?.type === validation.facility && item) || null;
     const type = cell?.type || Object.entries(FACILITIES).find(([, facility]) => facility === validation.facility)?.[0];
-    const researchId = validation.requiredLevel >= 3 ? {
-      solar: 'solar3', wind: 'wind3', battery: 'battery3', green: 'green3',
-    }[type] : {
-      solar: 'solar2', wind: 'wind2', battery: 'battery2', green: 'green2',
-    }[type];
+    const researchId = TECH_RESEARCH_BY_FACILITY[type]?.[validation.requiredLevel >= 3 ? 3 : 2];
     const name = RESEARCH[researchId]?.name || '해당 기술';
     return `${name} 연구를 완료해야 ${validation.facility.name} Lv.${validation.requiredLevel} 강화가 가능합니다.`;
   }

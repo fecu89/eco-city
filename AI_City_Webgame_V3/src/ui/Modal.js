@@ -8,6 +8,7 @@ import {
   ChartNoAxesCombined,
   Cloud,
   CloudFog,
+  CloudRain,
   CloudRainWind,
   CloudSun,
   Coins,
@@ -61,6 +62,7 @@ import {
 } from 'lucide';
 import anime from 'animejs';
 import { eventBus, Events } from '../core/EventBus.js';
+import { MODAL_PRIORITY, VISUAL } from '../core/Constants.js';
 import { prefersReducedMotion } from './motionPreference.js';
 
 // data-lucide="..." 속성으로 쓰는 아이콘만 명시적으로 등록 — 전체 아이콘셋 대신 트리쉐이킹.
@@ -78,6 +80,8 @@ const ICONS = {
   ChartNoAxesCombined,
   Cloud,
   CloudFog,
+  // 날씨 칩·날씨 창·시설 창의 오늘 날씨(sun·cloud·cloud-rain·snowflake). WEATHER_RULES.DISPLAY와 맞춘다.
+  CloudRain,
   CloudRainWind,
   CloudSun,
   Coins,
@@ -152,11 +156,12 @@ export function hasIcon(name) {
 
 export const ICON_NAMES = Object.freeze(Object.keys(ICONS).map(toKebabCase));
 
-// 모달 우선순위. 숫자를 호출부에 직접 쓰지 않는다.
+// 모달 우선순위. 숫자를 호출부에 직접 쓰지 않는다. 열거 값은 settings.json MODAL_PRIORITY(Constants.js)에 있고,
+// 기존 import 경로('./Modal.js')를 유지하려고 여기서 다시 내보낸다.
 // CRITICAL: 도시가 멈춘 상태(게임오버·운영중단·최종시험 결과)
 // IMPORTANT: 진행을 막는 선택(확장 방향 등)
 // NORMAL: 플레이어가 직접 연 창
-export const MODAL_PRIORITY = Object.freeze({ NORMAL: 0, IMPORTANT: 1, CRITICAL: 2 });
+export { MODAL_PRIORITY };
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -290,7 +295,8 @@ function showEntry(entry, html) {
     cardEl.style.opacity = '1';
     cardEl.style.transform = 'none';
   } else {
-    anime({ targets: cardEl, scale: [0.96, 1], opacity: [0, 1], duration: 220, easing: 'easeOutCubic' });
+    // 등장 연출 수치는 settings.json VISUAL.MODAL.
+    anime({ targets: cardEl, scale: [VISUAL.MODAL.ENTER_SCALE, 1], opacity: [0, 1], duration: VISUAL.MODAL.ENTER_MS, easing: VISUAL.MODAL.ENTER_EASING });
   }
   focusFirstInCard();
 }

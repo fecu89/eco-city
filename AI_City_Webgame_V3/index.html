@@ -39,8 +39,10 @@
 
         <div class="simulation-hud" id="simulationHud">
           <span class="sim-date"><b id="simTime">2040-01-01</b><small>일자</small></span>
+          <!-- 날씨 칩 본문·툴팁·아이콘은 SimulationHudView가 WEATHER_RULES 문구로 채운다. 누르면 오늘의 날씨 창이 열린다. -->
+          <button type="button" class="sim-metric" data-metric="weather" aria-label="오늘 날씨" title="오늘 날씨" aria-haspopup="dialog"><i class="sim-metric-icon" data-lucide="sun" aria-hidden="true"></i><b id="simWeather"></b></button>
           <button type="button" class="sim-metric sim-credit" data-metric="credit" aria-label="크레딧" title="크레딧"><i class="sim-metric-icon" data-lucide="coins" aria-hidden="true"></i><span><b id="credits">10.00</b><em id="simNet">±0.00/일</em></span></button>
-          <button type="button" class="sim-metric" data-metric="power" aria-label="전력 여유" title="전력 여유"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">±0 E</b></button>
+          <button type="button" class="sim-metric" data-metric="power" aria-label="전력 공급 가능량과 수요" title="전력 공급 가능량 / 수요"><i class="sim-metric-icon" data-lucide="zap" aria-hidden="true"></i><b id="simPower">±0 E</b></button>
           <button type="button" class="sim-metric" data-metric="battery" aria-label="배터리 저장량" title="배터리 저장량"><i class="sim-metric-icon" data-lucide="battery-charging" aria-hidden="true"></i><b id="simBattery">0 E</b></button>
           <button type="button" class="sim-metric" data-metric="carbon" aria-label="이산화탄소" title="일일 이산화탄소"><small class="sim-metric-icon" aria-hidden="true">CO₂</small><b id="simCarbonRate">0/일</b></button>
           <button type="button" class="sim-metric" data-metric="water" aria-label="물" title="일일 물"><i class="sim-metric-icon" data-lucide="droplets" aria-hidden="true"></i><b id="simWater">0/일</b></button>
@@ -57,7 +59,6 @@
       <button type="button" class="quest-strip" id="questStrip" aria-label="현재 퀘스트 열기" hidden>
         <i data-lucide="map" aria-hidden="true"></i>
         <span class="quest-strip-copy"><small id="questStripLevel"></small><b id="questStripTitle"></b></span>
-        <span class="quest-strip-progress" aria-hidden="true"><span id="questStripBar"></span></span>
       </button>
       <div class="forecast-strip" id="forecastStrip" hidden>
         <i data-lucide="cloud-sun" aria-hidden="true"></i>

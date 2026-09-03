@@ -1,8 +1,12 @@
 import { gameState } from '../core/GameState.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { closeModal, MODAL_PRIORITY, $modal, setModal } from './Modal.js';
+import { BOARD, CAMPAIGN_PACING, GAME, QUEST_REQUIREMENTS } from '../core/Constants.js';
+import { CAMPAIGN_QUEST_INDEXES } from '../core/CampaignProgression.js';
+import { formatCredits } from './format.js';
 
-export const ONBOARDING_VERSION = 3;
+// 스토리 버전. 저장의 onboardingVersionSeen보다 크면 스토리를 다시 보여 준다. 값은 settings.json GAME.ONBOARDING_VERSION.
+export const ONBOARDING_VERSION = GAME.ONBOARDING_VERSION;
 
 const STORY_PAGES = Object.freeze([
   Object.freeze({
@@ -14,17 +18,17 @@ const STORY_PAGES = Object.freeze([
   }),
   Object.freeze({
     chapter: '도시 운영 명령',
-    date: '가용 예산 10.00 💰',
+    date: `가용 예산 ${formatCredits(GAME.INITIAL_CREDITS)}`,
     title: '당신은 새 도시 운영자',
     copy: '남은 고지대 섬에서 주거지부터 복구하고 전력과 일자리를 연결하세요. 1배속에서는 1초마다 게임 속 1일의 수입·유지비·전력·탄소가 정산됩니다. 안내 뒤에는 하단 퀘스트 메뉴에서 현재 목표와 보상을 확인할 수 있습니다.',
-    accent: '주거 2개 → 전력 → 일자리 · 섬 도시',
+    accent: `주거 ${QUEST_REQUIREMENTS.FIRST_RESIDENTIAL_COUNT}개 → 전력 → 일자리 · 섬 도시`,
   }),
   Object.freeze({
     chapter: '생존 목표',
-    date: '예상 작전 시간 15~30분',
+    date: `예상 작전 시간 ${CAMPAIGN_PACING.humanMinutes.min}~${CAMPAIGN_PACING.humanMinutes.max}분`,
     title: '생존에서 전환으로',
-    copy: '바다에 둘러싸인 이 섬은 최대 37칸뿐입니다. 6개 기초 퀘스트를 마치면 확장 방향과 선택 목표를 직접 정합니다. 예보를 보고 시설 모드·저장 정책·연구를 조절한 뒤 마지막 도시 스트레스 테스트를 통과하세요.',
-    accent: '6개 기초 퀘스트 → 선택 목표 → 기후 이벤트 → 최종 시험',
+    copy: `바다에 둘러싸인 이 섬은 최대 ${BOARD.MAX_CELLS}칸뿐입니다. ${CAMPAIGN_QUEST_INDEXES.FOUNDATION_END}개 기초 퀘스트를 마치면 확장 방향과 선택 목표를 직접 정합니다. 예보를 보고 시설 모드·저장 정책·연구를 조절한 뒤 마지막 도시 스트레스 테스트를 통과하세요.`,
+    accent: `${CAMPAIGN_QUEST_INDEXES.FOUNDATION_END}개 기초 퀘스트 → 선택 목표 → 기후 이벤트 → 최종 시험`,
   }),
 ]);
 

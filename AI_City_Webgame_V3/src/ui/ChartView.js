@@ -1,6 +1,8 @@
 import { gameState } from '../core/GameState.js';
-import { CHART_MOTION, TIME } from '../core/Constants.js';
+import { CHART_MOTION, CHART_RULES, TIME } from '../core/Constants.js';
 import { prefersReducedMotion } from './motionPreference.js';
+// 레이더 차트 선 굵기·점 크기·색(Chart.js에 그대로 넘기는 CSS 색 문자열)·글자 크기는 settings.json VISUAL.CHART_STYLE.
+import { VISUAL } from '../core/Constants.js';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -46,9 +48,10 @@ export function chartValues(state = gameState) {
   return [
     clamp(m.dev, 0, 100),
     clamp(reliability, 0, 100),
-    clamp(100 - carbon * 4, 0, 100),
-    clamp(100 - water * 4, 0, 100),
-    clamp(m.synergyLinks * 20, 0, 100),
+    // 탄소·물·시너지 링크를 0~100 축으로 환산하는 계수는 settings.json CHART_RULES.AXIS_SCALES.
+    clamp(100 - carbon * CHART_RULES.AXIS_SCALES.CARBON, 0, 100),
+    clamp(100 - water * CHART_RULES.AXIS_SCALES.WATER, 0, 100),
+    clamp(m.synergyLinks * CHART_RULES.AXIS_SCALES.SYNERGY_LINK, 0, 100),
   ];
 }
 
@@ -77,6 +80,7 @@ export function updateChart() {
   const labels = ['발전', '전력안정', '저탄소', '물관리', '공간연결'];
 
   if (!chart) {
+    const style = VISUAL.CHART_STYLE;
     chart = new Chart(canvasEl, {
       type: 'radar',
       data: {
@@ -84,11 +88,11 @@ export function updateChart() {
         datasets: [
           {
             data: values,
-            borderWidth: 2,
-            pointRadius: 2,
-            backgroundColor: 'rgba(84,228,255,.10)',
-            borderColor: 'rgba(84,228,255,.85)',
-            pointBackgroundColor: 'rgba(113,245,180,1)',
+            borderWidth: style.BORDER_WIDTH,
+            pointRadius: style.POINT_RADIUS,
+            backgroundColor: style.BACKGROUND_COLOR,
+            borderColor: style.BORDER_COLOR,
+            pointBackgroundColor: style.POINT_COLOR,
           },
         ],
       },
@@ -101,9 +105,9 @@ export function updateChart() {
             min: 0,
             max: 100,
             ticks: { display: false },
-            grid: { color: 'rgba(255,255,255,.08)' },
-            angleLines: { color: 'rgba(255,255,255,.08)' },
-            pointLabels: { color: '#a8bdd0', font: { size: 11 } },
+            grid: { color: style.GRID_COLOR },
+            angleLines: { color: style.ANGLE_LINE_COLOR },
+            pointLabels: { color: style.LABEL_COLOR, font: { size: style.LABEL_FONT_SIZE } },
           },
         },
         plugins: { legend: { display: false } },

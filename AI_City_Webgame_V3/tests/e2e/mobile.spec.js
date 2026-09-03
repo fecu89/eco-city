@@ -29,22 +29,44 @@ test.describe('mobile city controls', () => {
     await page.evaluate(() => {
       window.__setTimeScale(0);
       window.__GAME_STATE__.lastSettlementDelta = -0.15;
-      window.__GAME_STATE__.lastTickSummary = { dailyCarbon: 4.2, dailyWater: 1.8, deliveredPower: 7, demand: 6, batteryStored: 3.5, lowCarbonPercent: 70, capacity: 5, used: 4 };
+      window.__GAME_STATE__.lastTickSummary = { dailyCarbon: 4.2, dailyWater: 1.8, generationAvailable: 9, deliveredPower: 7, demand: 6, batteryStored: 3.5, lowCarbonPercent: 70, capacity: 5, used: 4 };
       window.__refreshGameForTest();
     });
 
     await expect(page.locator('#simNet')).toHaveText('-0.15/일');
-    await expect(page.locator('#simPower')).toHaveText('+1');
+    await expect(page.locator('#simPower')).toHaveText('9/6');
     await expect(page.locator('#simBattery')).toHaveText('3.5');
     await expect(page.locator('#simCarbonRate')).toHaveText('4.2/일');
     await expect(page.locator('#simCarbonRate')).toBeVisible();
     await expect(page.locator('#simWater')).toHaveText('1.8/일');
     await expect(page.locator('#statusWorkforce')).toHaveText('사용 인력 4 / 전체 인구 5');
+    // 날씨 칩이 일자 아래에 붙으면서 첫 지표가 됐다(아이콘만 보이고 본문은 툴팁·날씨 창이 맡는다).
     await expect(page.locator('#simulationHud [data-metric]').evaluateAll((nodes) => nodes.map((node) => node.dataset.metric)))
-      .resolves.toEqual(['credit', 'power', 'battery', 'carbon', 'water']);
+      .resolves.toEqual(['weather', 'credit', 'power', 'battery', 'carbon', 'water']);
+    const weatherChip = page.locator('#simulationHud [data-metric="weather"]');
+    await expect(weatherChip.locator('svg[data-lucide]')).toBeVisible();
+    await expect(page.locator('#simWeather')).toBeHidden();
+    await expect(weatherChip).toHaveAttribute('title', /오늘 .+ · 태양광 \d+% · 풍속 [\d.]+ m\/s · 풍력 \d+% \/ 내일 /);
     const box = await page.locator('#simulationHud').boundingBox();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
+    // 일자/날씨 묶음이 CO₂ 칩을 밀어내지 않는다 — 여섯 칩이 모두 상단 바 한 줄 안에 있다.
+    const dateBox = await page.locator('#simulationHud .sim-date').boundingBox();
+    const weatherBox = await weatherChip.boundingBox();
+    const carbonBox = await page.locator('#simulationHud [data-metric="carbon"]').boundingBox();
+    expect(Math.abs(dateBox.x - weatherBox.x)).toBeLessThanOrEqual(1);
+    expect(weatherBox.y).toBeGreaterThanOrEqual(dateBox.y + dateBox.height - 1);
+    expect(carbonBox.x + carbonBox.width).toBeLessThanOrEqual(box.x + box.width + 1);
+  });
+
+  test('tapping the mobile weather chip opens the weather sheet with solar, wind, and tomorrow lines', async ({ gamePage: page }) => {
+    await page.evaluate(() => window.__setTimeScale(0));
+    await page.locator('#simulationHud [data-metric="weather"]').tap();
+    await expect(page.locator('#modal')).toBeVisible();
+    await expect(page.locator('#modalCard')).toContainText('오늘의 날씨');
+    await expect(page.locator('#modalCard')).toContainText('태양광');
+    await expect(page.locator('#modalCard')).toContainText('풍속');
+    await expect(page.locator('#modalCard')).toContainText('내일');
   });
 
   test('bottom bar exposes four touch targets and opens one bounded sheet', async ({ gamePage: page }) => {
@@ -72,7 +94,7 @@ test.describe('mobile city controls', () => {
   });
 
   // 손가락으로 누르는 화면에서는 어떤 버튼도 44×44보다 작으면 안 된다(WCAG 2.5.5 기준).
-  // 한 줄 상단 바에서 시간 조절은 보조 조작이라 36px, 전력/저장 지표는 한 칸을 상하로 나눠 쓴다(둘을 합쳐 44px).
+  // 한 줄 상단 바에서 시간 조절은 보조 조작이라 36px, 전력/저장 지표와 일자/날씨는 한 칸을 상하로 나눠 쓴다(둘을 합쳐 44px).
   // 그 밖의 터치 조작은 44px 이상이어야 한다.
   test('touch controls keep their hit areas on a coarse pointer', async ({ gamePage: page }) => {
     expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
@@ -81,7 +103,7 @@ test.describe('mobile city controls', () => {
     for (const [selector, minimum] of [
       ['.quest-panel-tools .icon-btn', 44],
       ['#timeControls button', 36],
-      ['#simulationHud > button:not([data-metric="power"]):not([data-metric="battery"])', 44],
+      ['#simulationHud > button:not([data-metric="power"]):not([data-metric="battery"]):not([data-metric="weather"])', 44],
     ]) {
       const targets = await page.locator(selector).evaluateAll((nodes) => nodes
         .filter((node) => node.checkVisibility())
@@ -95,6 +117,10 @@ test.describe('mobile city controls', () => {
     const stacked = await page.locator('#simulationHud [data-metric="power"], #simulationHud [data-metric="battery"]').evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height)));
     expect(stacked).toHaveLength(2);
     expect(stacked[0] + stacked[1]).toBeGreaterThanOrEqual(42);
+    // 일자/날씨 묶음도 같은 규칙이다 — 날씨 칩은 눌러서 날씨 창을 여는 터치 대상이다.
+    const dateStack = await page.locator('#simulationHud .sim-date, #simulationHud [data-metric="weather"]').evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height)));
+    expect(dateStack).toHaveLength(2);
+    expect(dateStack[0] + dateStack[1]).toBeGreaterThanOrEqual(42);
   });
 
   test('mobile build cards repeat only identity and cost while one shared area explains the selection', async ({ gamePage: page }) => {
@@ -240,4 +266,32 @@ test('a quest strip under the top bar shows the current quest and opens the ques
   await expect(strip).toBeHidden();
   await page.locator('#questPanel [data-hud-close]').tap();
   await expect(strip).toBeVisible();
+});
+
+// 진행률은 제목 옆의 작은 막대가 아니라 카드 자체의 채움으로 보여야 한다.
+// 주거지 1/2 상태에서 카드가 절반 차고, 다음 갱신도 200ms 전환을 사용한다.
+test('the mobile quest card fills its own background to match quest progress', async ({ gamePage: page }) => {
+  const strip = page.locator('#questStrip');
+  await expect(strip).toBeVisible();
+  await expect(strip.locator('.quest-strip-progress')).toHaveCount(0);
+
+  await page.evaluate(() => {
+    window.__GAME_STATE__.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
+    window.__refreshGameForTest();
+  });
+  await page.waitForTimeout(240);
+
+  const visual = await strip.evaluate((node) => {
+    const bounds = node.getBoundingClientRect();
+    const fill = getComputedStyle(node, '::before');
+    return {
+      fraction: parseFloat(fill.width) / bounds.width,
+      transitionDuration: fill.transitionDuration,
+      label: node.getAttribute('aria-label'),
+    };
+  });
+  expect(visual.fraction).toBeGreaterThan(0.45);
+  expect(visual.fraction).toBeLessThan(0.55);
+  expect(visual.transitionDuration).toBe('0.2s');
+  expect(visual.label).toContain('진행률 50%');
 });

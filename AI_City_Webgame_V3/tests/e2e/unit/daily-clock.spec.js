@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { generationAvailabilityMultiplier } from '../../../src/systems/PowerNetworkSystem.js';
 import { GameState } from '../../../src/core/GameState.js';
 import { RESEARCH } from '../../../src/core/ResearchDefinitions.js';
 import { calendarAtElapsedDay, intervalForTimeScale } from '../../../src/systems/CalendarSystem.js';
-import { getDailySolarMultiplier, getWindMultiplier } from '../../../src/systems/ClimateSystem.js';
+import { getDailySolarMultiplier } from '../../../src/systems/ClimateSystem.js';
 import { createBuildProject } from '../../../src/systems/ConstructionProjectSystem.js';
 import { createDaySettler } from '../../../src/systems/SimulationSystem.js';
 
@@ -44,7 +45,8 @@ test('one tick represents one calendar day while real intervals stay unchanged',
 
 test('solar uses the previous curve daily average and lighting cannot change it', () => {
   expect(getDailySolarMultiplier()).toBeCloseTo(11 / 24, 8);
-  expect([0, 1, 2, 3].map(getWindMultiplier)).toEqual([0.6, 0.9, 1.1, 0.75]);
+  // 풍력은 더 이상 4일 고정 패턴이 아니라 날씨 풍속을 따른다(weather.spec.js).
+  expect(generationAvailabilityMultiplier('wind')).toBe(1);
 });
 
 test('duration numbers keep the same real completion time', () => {

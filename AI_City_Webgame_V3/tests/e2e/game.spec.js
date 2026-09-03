@@ -118,9 +118,11 @@ test.describe('construction and inspection', () => {
   });
 
   test('facility inspector separates actual facility balance from the whole-city balance', async ({ gamePage: page }) => {
-    await page.evaluate(() => {
+    const live = await page.evaluate(() => {
       const state = window.__GAME_STATE__;
       window.__setTimeScale(0);
+      // 하루 수요 변동은 판의 씨앗에서 나온다. 씨앗을 고정해 같은 하루를 재현한다.
+      window.__setEnvironmentSeed(20400134);
       state.questIndex = 5;
       state.grid = Array(19).fill(null);
       state.grid[0] = { type: 'residential', level: 1, priority: 'essential' };
@@ -128,12 +130,21 @@ test.describe('construction and inspection', () => {
       window.__settleSimulationDay();
       window.__refreshGameForTest();
       window.__clickCell(0);
+      return state.lastTickSummary.facilityPower[0];
     });
+
+    // 주거지 Lv.1 수요 2E 위에 그날의 도시 수요 변동(±8% 이내)만 얹힌다.
+    expect(live.demand).toBeGreaterThanOrEqual(2 * 0.92);
+    expect(live.demand).toBeLessThanOrEqual(2 * 1.08);
+    expect(live.ratio).toBe(1);
 
     await expect(page.locator('.facility-inspector-grid')).toContainText('주거 세금');
     await expect(page.locator('#facilityLiveBalance')).toContainText('/일');
     await expect(page.locator('#facilityCityNet')).toContainText('/일');
-    await expect(page.locator('#facilityLivePower')).toContainText('2/2E');
+    // 창은 정산이 낸 수치를 다시 계산하지 않고 그대로 보여 준다.
+    const round1 = (value) => Math.round(value * 10) / 10;
+    await expect(page.locator('#facilityLivePower'))
+      .toContainText(`${round1(live.delivered)}/${round1(live.demand)}E · 100%`);
 
     await page.locator('.modal-card .close-modal').click();
     await page.evaluate(() => window.__clickCell(18));

@@ -1,5 +1,7 @@
 // 점수 가중치·강화 배수·철거 환급률을 Constants로 옮기는 리팩터가 값에 영향을 주지 않는지 고정한다.
-// 아래 기대값은 리팩터 직전 코드에서 그대로 캡처한 것이다.
+// 아래 기대값은 리팩터 직전 코드에서 그대로 캡처한 것이다. 소비 시설의 레벨별 수요·물을
+// 표(FACILITY_DEMAND_BY_LEVEL·FACILITY_WATER_BY_LEVEL)로 옮긴 밸런스 조정만이 이 값들을
+// 한 번 갱신했다 — 주거지 Lv.2 2.48→4E·1.16→1.6물, 공장 Lv.2 4.96→6E.
 import { test, expect } from '@playwright/test';
 import { calcMetrics, demolitionRefund, investedCost, upgradeCost } from '../../../src/systems/BoardSystem.js';
 import { createHexCoordinates } from '../../../src/systems/HexGridSystem.js';
@@ -25,12 +27,12 @@ test('혼합 5시설 도시의 점수는 리팩터 전과 같다', () => {
 
   expect(calcMetrics(grid, coords)).toEqual({
     dev: 48,
-    demand: 15.4,
+    demand: 18,
     supply: 13,
     reliableSupply: 13,
-    balance: -2.4,
+    balance: -5,
     carbon: 9.3,
-    water: 9.3,
+    water: 9.8,
     heatCluster: 0,
     renewableSupply: 0,
     dataCount: 1,
@@ -38,8 +40,8 @@ test('혼합 5시설 도시의 점수는 리팩터 전과 같다', () => {
     synergyScore: 32,
     synergyLinks: 2,
     conflictPairs: 4,
-    sustainability: 36,
-    reliability: 61,
+    sustainability: 20,
+    reliability: 53,
   });
 });
 

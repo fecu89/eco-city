@@ -101,14 +101,16 @@ export function operationProfileForCell(cell) {
   if (project.kind !== 'upgrade') return IDENTITY_OPERATION_PROFILE;
 
   const ratio = CONSTRUCTION.UPGRADE_RATIOS[project.fromLevel] ?? 1;
+  // 강화 중 제한 가동 프로필(주거·데이터센터·배터리)은 settings.json CONSTRUCTION.UPGRADE_PROFILE에 있다.
+  const profile = CONSTRUCTION.UPGRADE_PROFILE[cell.type];
   if (cell.type === 'residential') {
-    return { ...IDENTITY_OPERATION_PROFILE, dev: 0.8, supply: 0.8, demand: 0.8, income: 0.8, carbon: 0.8, water: 0.8, researchSpeed: 0.8, workforce: 0.8, functionality: 0.8 };
+    return { ...IDENTITY_OPERATION_PROFILE, ...profile };
   }
   if (cell.type === 'data') {
-    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, supply: ratio, demand: 0.7, income: 0.6, carbon: 0.7, water: 0.7, researchSpeed: 0, functionality: 0.7 };
+    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, supply: ratio, ...profile };
   }
   if (cell.type === 'battery') {
-    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, batteryThroughput: 0.5 };
+    return { ...IDENTITY_OPERATION_PROFILE, dev: ratio, ...profile };
   }
   return {
     ...IDENTITY_OPERATION_PROFILE,
@@ -133,8 +135,8 @@ export function projectProgress(project, fractionalDay = 0) {
 export function projectStage(project) {
   const progress = projectProgress(project);
   if (progress >= 1) return 'complete';
-  if (progress >= 0.7) return 'shell';
-  if (progress >= 0.3) return 'skeleton';
+  if (progress >= CONSTRUCTION.STAGE_THRESHOLDS.SHELL) return 'shell';
+  if (progress >= CONSTRUCTION.STAGE_THRESHOLDS.SKELETON) return 'skeleton';
   return 'foundation';
 }
 
@@ -144,8 +146,9 @@ export function projectRefund(project) {
   if (elapsed >= duration) return null;
   const paidCost = roundCredits(Math.max(0, Number(project?.paidCost) || 0));
   let ratio = CONSTRUCTION.REFUND_RATIOS.LATE;
-  if (elapsed * 4 < duration) ratio = CONSTRUCTION.REFUND_RATIOS.EARLY;
-  else if (elapsed * 4 < duration * 3) ratio = CONSTRUCTION.REFUND_RATIOS.MID;
+  // 진행률 경계(EARLY_BELOW 25% · MID_BELOW 75%) 앞이면 환급률이 높다. elapsed·duration은 정수라 비교가 정확하다.
+  if (elapsed < duration * CONSTRUCTION.REFUND_BOUNDARIES.EARLY_BELOW) ratio = CONSTRUCTION.REFUND_RATIOS.EARLY;
+  else if (elapsed < duration * CONSTRUCTION.REFUND_BOUNDARIES.MID_BELOW) ratio = CONSTRUCTION.REFUND_RATIOS.MID;
   return roundCredits(paidCost * ratio);
 }
 

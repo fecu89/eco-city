@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { CITY_FALLBACK_PARTS } from '../core/Constants.js';
+import { CITY_FALLBACK_PARTS, VISUAL } from '../core/Constants.js';
 
+// 단위 도형(반지름 0.5·높이 1)을 CITY_FALLBACK_PARTS의 scale로 늘려 쓴다. 분할 수와 taper 윗반지름은
+// settings.json VISUAL.FALLBACK_PRIMITIVES.
+const PRIMITIVES = VISUAL.FALLBACK_PRIMITIVES;
 const sourceGeometries = {
   box: new THREE.BoxGeometry(1, 1, 1),
-  cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, 10),
-  cone: new THREE.ConeGeometry(0.5, 1, 4),
-  coneRound: new THREE.ConeGeometry(0.5, 1, 8),
-  sphere: new THREE.SphereGeometry(0.5, 10, 7),
-  taper: new THREE.CylinderGeometry(0.34, 0.5, 1, 12),
+  cylinder: new THREE.CylinderGeometry(0.5, 0.5, 1, PRIMITIVES.CYLINDER_SEGMENTS),
+  cone: new THREE.ConeGeometry(0.5, 1, PRIMITIVES.CONE_SEGMENTS),
+  coneRound: new THREE.ConeGeometry(0.5, 1, PRIMITIVES.CONE_ROUND_SEGMENTS),
+  sphere: new THREE.SphereGeometry(0.5, ...PRIMITIVES.SPHERE_SEGMENTS),
+  taper: new THREE.CylinderGeometry(PRIMITIVES.TAPER_TOP_RADIUS, 0.5, 1, PRIMITIVES.TAPER_SEGMENTS),
 };
 
 const cache = new Map();
