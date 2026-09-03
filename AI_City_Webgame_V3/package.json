@@ -12,6 +12,7 @@
     "audit:assets": "npm run assets:audit",
     "dev": "vite",
     "build": "vite build",
+    "build:lab": "vite build --base=./",
     "preview": "vite preview",
     "test": "npx playwright test",
     "test:headed": "npx playwright test --headed",

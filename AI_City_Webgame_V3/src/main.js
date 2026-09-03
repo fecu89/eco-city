@@ -479,10 +479,14 @@ function bindEvents() {
 
 }
 
-// 로딩 화면은 실제 3D 에셋 진척만 보여준다(문구를 쓰는 곳은 여기 하나뿐이다).
+// 로딩 화면은 3D 에셋 진척과 저장 데이터 로딩(storageReadyPromise, iframe 임베드에서는
+// 부모 프레임과의 postMessage 왕복이 걸릴 수 있다) 둘 다 끝나야 닫힌다. 하나만 기다리면
+// 저장 데이터가 늦게 도착해 로딩 화면이 사라진 뒤 도시가 뒤바뀌는 게 보인다.
 // 3D 씬이 로드를 시작하기 전에 구독해야 첫 진척 이벤트를 놓치지 않으므로 boot 맨 앞에서 부른다.
-function trackLoadingProgress() {
+function trackLoadingProgress(storageReadyPromise) {
   let finished = false;
+  let assetsSettled = false;
+  let storageSettled = false;
   const finish = () => {
     if (finished) return;
     finished = true;
@@ -490,18 +494,24 @@ function trackLoadingProgress() {
     els.loadingText.textContent = 'CLIMATE CITY 준비 완료';
     setTimeout(() => els.loading.classList.add('done'), LOADING_SCREEN.DONE_DELAY_MS);
   };
+  const maybeFinish = () => {
+    if (assetsSettled && storageSettled) finish();
+  };
   eventBus.on(Events.ASSETS_PROGRESS, ({ loaded, total }) => {
     if (finished || !total) return;
     els.loadingBar.style.width = `${Math.round((loaded / total) * 100)}%`;
     els.loadingText.textContent = `3D 도시 모델 ${loaded}/${total}`;
   });
-  eventBus.on(Events.ASSETS_READY, finish);
-  eventBus.on(Events.ASSETS_FAILED, finish);
+  eventBus.on(Events.ASSETS_READY, () => { assetsSettled = true; maybeFinish(); });
+  eventBus.on(Events.ASSETS_FAILED, () => { assetsSettled = true; maybeFinish(); });
+  storageReadyPromise.finally(() => { storageSettled = true; maybeFinish(); });
   setTimeout(finish, LOADING_SCREEN.MAX_WAIT_MS);
 }
 
-function boot() {
-  trackLoadingProgress();
+async function boot() {
+  // 자산 로딩과 동시에 시작해야 postMessage 왕복(iframe 임베드)이 로딩 화면 시간에 얹힌다.
+  const savedGamePromise = loadSavedGame();
+  trackLoadingProgress(savedGamePromise);
   initModal(els.modal, els.modalCard);
   initThemeManager(els.themeBtn, refreshIcons);
   initToastView(els.toastStack);
@@ -610,7 +620,7 @@ function boot() {
   }));
   initThreeBackground(els.threeBg);
 
-  loadSavedGame();
+  await savedGamePromise;
   resumeTimeScale = gameState.timeScale || TIME.DEFAULT_SCALE;
 
   simulationController = createSimulationController({ settle: settleSimulationDay, getIntervalMs: intervalForTimeScale });

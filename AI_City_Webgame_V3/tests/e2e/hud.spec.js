@@ -2,6 +2,15 @@ import { test, expect } from '../fixtures/game-test.js';
 import { clickCell, completeProjectsViaGameClock } from '../helpers/playthrough.js';
 
 test.describe('fullscreen world HUD', () => {
+  test('top bar uses the city logo SVG instead of the temporary text mark', async ({ gamePage: page }) => {
+    const logo = page.locator('.world-status .brand-mark img');
+
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveAttribute('src', /logo\.svg(?:\?.*)?$/);
+    await expect(logo).toHaveAttribute('alt', '기후 생존 도시');
+    await expect(page.locator('.world-status .brand-mark')).not.toHaveText('40');
+  });
+
   test('top HUD prioritizes credit flow, power margin, battery, carbon, and water while workforce stays in city status', async ({ gamePage: page }) => {
     await page.evaluate(() => {
       window.__setTimeScale(0);

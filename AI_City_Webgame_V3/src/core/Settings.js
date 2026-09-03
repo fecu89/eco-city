@@ -4,6 +4,15 @@
 // (docs/settings.md). 문구·아이콘·색상·CSS·함수처럼 JSON에 둘 수 없는 것만 JS에 남아 있다.
 import settings from '../../settings.json' with { type: 'json' };
 
+// Vite의 BASE_URL을 한 곳에서 적용한다. Lab 빌드는 BASE_URL이 "./"이므로
+// 정적 파일이 /lab-content/{slug}/ 밖의 블로그 루트로 빠져나가지 않는다.
+export function resolvePublicPath(filePath, baseUrl = import.meta.env?.BASE_URL || '/') {
+  const base = String(baseUrl || './');
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const normalizedPath = String(filePath).replace(/^(?:\.\/|\/)+/, '');
+  return `${normalizedBase}${normalizedPath}`;
+}
+
 // settings.json에 반드시 있어야 하는 최상위 섹션. Constants.js·정의 파일이 읽는 키와 1:1이다.
 // 섹션을 더하거나 빼면 이 목록과 tests/e2e/unit/settings.spec.js도 함께 고친다.
 export const REQUIRED_SECTIONS = Object.freeze([

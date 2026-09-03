@@ -1,3 +1,5 @@
+import { resolvePublicPath } from '../core/Settings.js';
+
 const OFFICIAL = Object.freeze({
   hexagon: { creator: 'Kenney', pack: 'Hexagon Kit', officialUrl: 'https://kenney.nl/assets/hexagon-kit' },
   roads: { creator: 'Kenney', pack: 'City Kit Roads', officialUrl: 'https://kenney.nl/assets/city-kit-roads' },
@@ -16,7 +18,7 @@ function external(id, path, source, options = {}) {
   return Object.freeze({
     kind: 'glb',
     id,
-    path,
+    path: resolvePublicPath(path),
     creator: OFFICIAL[source].creator,
     pack: OFFICIAL[source].pack,
     officialUrl: OFFICIAL[source].officialUrl,

@@ -31,12 +31,19 @@ import { BATTERY_POLICIES } from '../../../src/core/OperationDefinitions.js';
 import { EXPANSION_SIDES, EXPANSION_UPKEEP } from '../../../src/core/ZoneDefinitions.js';
 import { CAMPAIGN_QUEST_INDEXES } from '../../../src/core/CampaignProgression.js';
 import { OPENING_EVENT_DECK } from '../../../src/core/EventDefinitions.js';
+import * as settingsModule from '../../../src/core/Settings.js';
 
 // 게임 규칙 수치는 프로젝트 루트 settings.json 한 파일에 모이고, Constants.js와 정의 파일은 그 값을
 // 같은 이름으로 다시 내보낸다(docs/settings.md). 이 테스트는 그 계약을 고정한다.
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const settingsPath = path.join(projectRoot, 'settings.json');
 const coreDir = path.join(projectRoot, 'src/core');
+
+test('public asset paths stay inside the nested Lab runtime directory', () => {
+  expect(settingsModule.resolvePublicPath?.('/assets/model.glb', './')).toBe('./assets/model.glb');
+  expect(settingsModule.resolvePublicPath?.('/assets/eco-city.mp3', '/lab-content/eco-city/'))
+    .toBe('/lab-content/eco-city/assets/eco-city.mp3');
+});
 
 test('(a) validateSettings(SETTINGS)는 문제를 하나도 돌려주지 않는다', () => {
   expect(validateSettings(SETTINGS)).toEqual([]);

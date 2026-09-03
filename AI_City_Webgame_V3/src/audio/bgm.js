@@ -1,11 +1,13 @@
 import { AUDIO } from '../core/Constants.js';
+import { resolvePublicPath } from '../core/Settings.js';
 
 let track = null;
 let playing = false;
+const bgmUrl = resolvePublicPath(AUDIO.BGM_URL);
 
 function getTrack() {
   if (track) return track;
-  track = new Audio(AUDIO.BGM_URL);
+  track = new Audio(bgmUrl);
   track.loop = true;
   track.preload = 'none';
   track.volume = AUDIO.BGM_GAIN;
@@ -35,7 +37,7 @@ export function getAmbientPlaybackState() {
   return {
     playing,
     backend: 'streamed-file',
-    url: AUDIO.BGM_URL,
+    url: bgmUrl,
     oscillatorCount: 0,
   };
 }

@@ -6,7 +6,7 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { axialToWorld, createHexCoordinates, expandHexGrid, hexDistance } from './HexGridSystem.js';
 import { createEnvironment, normalizeRotation } from '../core/Environment.js';
 import { refreshMetrics } from './BoardSystem.js';
-import { readStorage, removeStorage, writeStorage } from '../core/safeStorage.js';
+import { readStorageAsync, removeStorageAsync, writeStorageAsync } from '../core/safeStorage.js';
 import { CAMPAIGN_QUEST_INDEXES, PREPARATION_QUEST_IDS } from '../core/CampaignProgression.js';
 import { QUESTS } from '../core/QuestDefinitions.js';
 import { EXPANSION_SIDES } from '../core/ZoneDefinitions.js';
@@ -33,7 +33,7 @@ function notifyStorageBlocked() {
   });
 }
 
-function persist() {
+async function persist() {
   let payload;
   try {
     payload = JSON.stringify(gameState.serialize());
@@ -41,8 +41,8 @@ function persist() {
     console.warn(`${SAVE_MESSAGES.AUTOSAVE_FAILED_LOG}:`, err);
     return;
   }
-  // writeStorage는 예외를 삼키고 false만 돌려준다. 반환값을 버리면 실패가 그대로 묻힌다.
-  if (!writeStorage(GAME.AUTOSAVE_KEY, payload)) notifyStorageBlocked();
+  // writeStorageAsync는 예외를 삼키고 false만 돌려준다. 반환값을 버리면 실패가 그대로 묻힌다.
+  if (!(await writeStorageAsync(GAME.AUTOSAVE_KEY, payload))) notifyStorageBlocked();
 }
 
 function scheduleSave() {
@@ -103,15 +103,15 @@ export function initSaveSystem() {
   window.addEventListener('pagehide', flushSave);
 }
 
-export function loadSavedGame() {
+export async function loadSavedGame() {
   try {
-    const raw = readStorage(GAME.AUTOSAVE_KEY);
+    const raw = await readStorageAsync(GAME.AUTOSAVE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
     // 더 새로운 버전으로 저장된 판은 되돌릴 수 없다. 새 도시로 시작하되 원본을 덮어쓰지 않고
     // 백업 키에 남겨, 예전 버전을 열었다가 진행 상황을 잃는 일이 없게 한다.
     if (Number(parsed?.v) > SAVE_VERSION) {
-      writeStorage(NEWER_SAVE_KEY, raw);
+      await writeStorageAsync(NEWER_SAVE_KEY, raw);
       gameState.reset();
       return false;
     }
@@ -765,5 +765,5 @@ export function migrateV1Save(data) {
 }
 
 export function clearSavedGame() {
-  removeStorage(GAME.AUTOSAVE_KEY);
+  removeStorageAsync(GAME.AUTOSAVE_KEY);
 }
